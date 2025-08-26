@@ -725,29 +725,11 @@ with st.form("analysis_form"):
 # Conversation transcript
 if st.session_state["history"]:
     st.write("### Conversation")
-    conv_text = []
     for msg in st.session_state["history"]:
         if msg["role"] == "user":
-            line = f"You:\n{msg['content']}"
+            st.markdown(f"**You:**\n\n{msg['content']}")
         elif msg["role"] == "assistant":
-            line = f"Veritas:\n{msg['content']}"
-        conv_text.append(line)
-        st.markdown(line)
-
-    # Combine into one string
-    full_conversation = "\n\n".join(conv_text)
-
-    # Copy button (direct clipboard)
-    copy_js = f"""
-    <script>
-    function copyText() {{
-        navigator.clipboard.writeText({full_conversation!r});
-        alert("Conversation copied to clipboard!");
-    }}
-    </script>
-    <button onclick="copyText()">Copy conversation</button>
-    """
-    st.markdown(copy_js, unsafe_allow_html=True)
+            st.markdown(f"**Veritas:**\n\n{msg['content']}")
 
 # Download last reply as PDF
 def build_pdf_bytes(content: str) -> bytes:
@@ -900,6 +882,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
