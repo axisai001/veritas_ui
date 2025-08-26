@@ -790,19 +790,13 @@ with col1:
             transcript.append(prefix + m["content"])
         full_conversation = "\n\n".join(transcript)
 
-        # New Copy conversation button (styled same as others)
-        if st.button("Copy conversation"):
-            components.html(
-                f"""
-                <script>
-                const text = {json.dumps(full_conversation)};
-                navigator.clipboard.writeText(text).then(() => {{
-                    alert("Conversation copied to clipboard!");
-                }});
-                </script>
-                """,
-                height=0,
-            )
+        # Button that copies to clipboard
+        components.html(
+            f"""
+            ... (the HTML/JS code from my last message) ...
+            """,
+            height=80,
+        )
 with col2:
     if st.button("Clear conversation"):
         st.session_state["history"] = []
@@ -900,6 +894,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
