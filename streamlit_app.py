@@ -457,7 +457,7 @@ def show_login():
                 st.session_state["login_id"] = (login_id or "").strip()
                 log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
                 st.success("Logged in.")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 log_auth_event("login_failed", False, login_id=(login_id or "").strip(), credential_label="APP_PASSWORD", attempted_secret=pwd)
                 st.error("Incorrect password")
@@ -493,7 +493,7 @@ with st.sidebar:
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
         for k in ("authed","history","last_reply","is_admin","login_id"):
             st.session_state.pop(k, None)
-        st.experimental_rerun()
+        st.rerun()
 
 # Branding (admin)
 if st.session_state["is_admin"]:
@@ -772,3 +772,4 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
