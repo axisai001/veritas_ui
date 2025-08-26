@@ -784,71 +784,27 @@ import json
 
 with col1:
     if st.session_state["history"]:
-        # Build the transcript text
+        # Build transcript text
         transcript = []
         for m in st.session_state["history"]:
             prefix = "User: " if m["role"] == "user" else "Assistant: "
             transcript.append(prefix + m["content"])
         full_conversation = "\n\n".join(transcript)
 
-        # Render a self-contained HTML button that copies to clipboard
-        components.html(
-            f"""
-<style>
-  /* Match Streamlit's default (white/outlined) button look */
-  .copy-btn {{
-    cursor: pointer;
-    background: transparent;
-    color: inherit;
-    border: 1px solid rgba(49,51,63,0.2);
-    padding: 0.5rem 0.75rem;
-    border-radius: 0.5rem;
-    font-size: 0.9rem;
-    line-height: 1.2;
-    font-family: inherit;
-  }}
-  .copy-btn:hover {{
-    background: rgba(49,51,63,0.05);
-  }}
-  .copied-note {{
-    font-size: 12px;
-    opacity: .75;
-    margin-top: 6px;
-  }}
-</style>
-
-<button id="copyBtn" class="copy-btn">Copy conversation</button>
-<div id="note" class="copied-note" style="display:none;">Copied ✓</div>
-
-<script>
-  const text = {json.dumps(full_conversation)};
-  const btn = document.getElementById("copyBtn");
-  const note = document.getElementById("note");
-
-  btn.addEventListener("click", async () => {{
-    try {{
-      await navigator.clipboard.writeText(text);
-      note.style.display = "block";
-      setTimeout(() => note.style.display = "none", 1200);
-    }} catch (e) {{
-      // Fallback for older browsers
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.position = "fixed";
-      ta.style.opacity = "0";
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      try {{ document.execCommand("copy"); }} catch (_) {{}}
-      ta.remove();
-      note.style.display = "block";
-      setTimeout(() => note.style.display = "none", 1200);
-    }}
-  }});
-</script>
-            """,
-            height=80,  # room for the "Copied ✓" note
-        )
+        # Native Streamlit button (visually identical to others)
+        if st.button("Copy conversation"):
+            # Inject a small JS snippet to perform the copy
+            components.html(
+                f"""
+                <script>
+                const text = {json.dumps(full_conversation)};
+                navigator.clipboard.writeText(text).then(() => {{
+                    alert("Conversation copied to clipboard!");
+                }});
+                </script>
+                """,
+                height=0,
+            )
 with col2:
     if st.button("Clear conversation"):
         st.session_state["history"] = []
@@ -946,6 +902,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
