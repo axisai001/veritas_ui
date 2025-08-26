@@ -398,7 +398,8 @@ _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 
 # ================= Streamlit UI =================
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
-st.info(f"Boot OK • Model: {MODEL} • Key loaded: {'yes' if os.environ.get('OPENAI_API_KEY') else 'no'}")
+if st.session_state.get("is_admin", False):
+    st.info(f"Boot OK • Model: {MODEL} • Key loaded: {'yes' if os.environ.get('OPENAI_API_KEY') else 'no'}")
 
 # Top header with logo + tagline
 col_logo, col_title = st.columns([1, 6])
@@ -772,4 +773,5 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
