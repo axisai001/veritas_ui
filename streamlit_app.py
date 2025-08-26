@@ -7,6 +7,8 @@ import time
 import json
 import hashlib
 import secrets
+import streamlit.components.v1 as components
+import json  # you already import this, but make sure it’s present
 from typing import Optional
 from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
@@ -785,17 +787,45 @@ with col1:
             transcript.append(prefix + m["content"])
         full_conversation = "\n\n".join(transcript)
 
-        # Direct copy button
-        copy_js = f"""
-        <script>
-        function copyText() {{
-            navigator.clipboard.writeText({full_conversation!r});
-            alert("Conversation copied to clipboard!");
-        }}
-        </script>
-        <button onclick="copyText()">Copy conversation</button>
-        """
-        st.markdown(copy_js, unsafe_allow_html=True)
+        # Direct copy button (Streamlit component with working JS)
+        components.html(
+            f"""
+<div style="display:flex;gap:8px;">
+  <button id="copyBtn"
+          style="
+            cursor:pointer;
+            background:#f59e0b;      /* match your orange */
+            color:#1b1610;
+            padding:10px 14px;
+            border:none;
+            border-radius:12px;
+            font-family: inherit;
+            font-size: 16px;">
+    Copy conversation
+  </button>
+</div>
+<script>
+const text = {json.dumps(full_conversation)};
+const btn = document.getElementById("copyBtn");
+btn.addEventListener("click", async () => {{
+  try {{
+    await navigator.clipboard.writeText(text);
+    alert("Conversation copied to clipboard!");
+  }} catch (e) {{
+    // Fallback for older browsers
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+    alert("Conversation copied to clipboard!");
+  }}
+}});
+</script>
+            """,
+            height=60,
+        )
 with col2:
     if st.button("Clear conversation"):
         st.session_state["history"] = []
@@ -893,6 +923,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
