@@ -18,6 +18,19 @@ import streamlit as st
 from openai import OpenAI
 import httpx
 
+st.markdown(
+    """
+    <style>
+    div.stButton > button {
+        padding: 0.25rem 0.75rem;
+        font-size: 0.875rem;
+        border-radius: 0.5rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # ---------- Optional parsers for uploads ----------
 try:
     from pypdf import PdfReader
@@ -948,6 +961,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
