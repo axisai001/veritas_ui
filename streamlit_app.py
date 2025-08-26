@@ -782,7 +782,6 @@ col1, col2, col3 = st.columns(3)
 import streamlit.components.v1 as components
 import json
 
-# inside your existing `with col1:` block
 with col1:
     if st.session_state["history"]:
         # Build transcript text
@@ -949,6 +948,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
