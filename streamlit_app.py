@@ -779,12 +779,23 @@ st.divider()
 col1, col2, col3 = st.columns(3)
 with col1:
     if st.session_state["history"]:
-        if st.button("Show conversation for copy"):
-            transcript = []
-            for m in st.session_state["history"]:
-                prefix = "User: " if m["role"] == "user" else "Assistant: "
-                transcript.append(prefix + m["content"])
-            st.code("\n\n".join(transcript), language="text")
+        transcript = []
+        for m in st.session_state["history"]:
+            prefix = "User: " if m["role"] == "user" else "Assistant: "
+            transcript.append(prefix + m["content"])
+        full_conversation = "\n\n".join(transcript)
+
+        # Direct copy button
+        copy_js = f"""
+        <script>
+        function copyText() {{
+            navigator.clipboard.writeText({full_conversation!r});
+            alert("Conversation copied to clipboard!");
+        }}
+        </script>
+        <button onclick="copyText()">Copy conversation</button>
+        """
+        st.markdown(copy_js, unsafe_allow_html=True)
 with col2:
     if st.button("Clear conversation"):
         st.session_state["history"] = []
@@ -882,6 +893,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
