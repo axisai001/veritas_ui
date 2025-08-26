@@ -403,11 +403,23 @@ if st.session_state.get("is_admin", False):
 
 # Top header with logo + tagline
 col_logo, col_title = st.columns([1, 6])
+from pathlib import Path
+
 with col_logo:
+    logo_path = None
     if CURRENT_LOGO_FILENAME:
-        logo_path = os.path.join(UPLOAD_FOLDER, CURRENT_LOGO_FILENAME)
-        if os.path.exists(logo_path):
-            st.image(logo_path, use_container_width=True)
+        candidate = Path(UPLOAD_FOLDER) / CURRENT_LOGO_FILENAME
+        if candidate.is_file():
+            logo_path = candidate
+
+    if logo_path:
+        try:
+            st.image(logo_path.read_bytes(), use_container_width=True)
+        except Exception:
+            # Optional: silently ignore; or show only for admins
+            # if st.session_state.get("is_admin"): st.caption("Logo failed to render.")
+            pass
+
 with col_title:
     st.title("Veritas — Pilot Test")
     if CURRENT_TAGLINE:
@@ -773,5 +785,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
