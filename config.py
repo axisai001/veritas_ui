@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 try:
-    import streamlit as st  # Only available in Streamlit runtime
+    import streamlit as st
 except Exception:
     st = None
 
@@ -54,13 +54,13 @@ def load_settings() -> Settings:
 
     settings = Settings(
         openai_api_key=key,
-        openai_model=get("OPENAI_MODEL", "gpt-4o-mini") or "gpt-4o-mini",
+        openai_model=(get("OPENAI_MODEL", "gpt-4o-mini") or "gpt-4o-mini"),
         app_password=get("APP_PASSWORD") or None,
         log_level=(get("LOG_LEVEL", "INFO") or "INFO").upper(),
         rate_limit_per_min=int(get("RATE_LIMIT_PER_MIN", "10") or "10"),
         auth_log_ttl_days=int(get("AUTH_LOG_TTL_DAYS", "365") or "365"),
         sentry_dsn=get("SENTRY_DSN") or None,
-        env=get("ENV", "production") or "production",
+        env=(get("ENV", "production") or "production"),
         allowed_origins=get("ALLOWED_ORIGINS") or None,
     )
     _configure_root_logging(settings.log_level)
@@ -114,15 +114,12 @@ def get_logger(name: str = "app", tracking_id: Optional[str] = None) -> logging.
             logger.addFilter(_Inject())
     return logger
 
-def _now() -> float:
-    return time.time()
-
 def check_rate_limit(label: str, limit_per_min: int) -> bool:
     if st is None:
         return False
     key = f"rl_{label}"
     window = 60.0
-    t = _now()
+    t = time.time()
     bucket = [ts for ts in st.session_state.get(key, []) if (t - ts) < window]
     if len(bucket) >= max(1, int(limit_per_min)):
         st.session_state[key] = bucket
