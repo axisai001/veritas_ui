@@ -18,13 +18,14 @@ import streamlit as st
 from openai import OpenAI
 import httpx
 
+# 🔧 Global CSS override so all Streamlit buttons match Copy Conversation button size
 st.markdown(
     """
     <style>
     div.stButton > button {
-        padding: 0.25rem 0.75rem;
-        font-size: 0.875rem;
-        border-radius: 0.5rem;
+        padding: 0.25rem 0.75rem;   /* smaller padding to match copy button */
+        font-size: 0.875rem;        /* ~14px font size */
+        border-radius: 0.5rem;      /* rounded corners */
     }
     </style>
     """,
@@ -961,6 +962,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
