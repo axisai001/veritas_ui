@@ -779,6 +779,9 @@ def build_pdf_bytes(content: str) -> bytes:
 
 st.divider()
 col1, col2, col3 = st.columns(3)
+import streamlit.components.v1 as components
+import json
+
 with col1:
     if st.session_state["history"]:
         transcript = []
@@ -787,45 +790,19 @@ with col1:
             transcript.append(prefix + m["content"])
         full_conversation = "\n\n".join(transcript)
 
-        # Direct copy button (Streamlit component with working JS)
-        components.html(
-            f"""
-<div style="display:flex;gap:8px;">
-  <button id="copyBtn"
-          style="
-            cursor:pointer;
-            background:#f59e0b;      /* match your orange */
-            color:#1b1610;
-            padding:10px 14px;
-            border:none;
-            border-radius:12px;
-            font-family: inherit;
-            font-size: 16px;">
-    Copy conversation
-  </button>
-</div>
-<script>
-const text = {json.dumps(full_conversation)};
-const btn = document.getElementById("copyBtn");
-btn.addEventListener("click", async () => {{
-  try {{
-    await navigator.clipboard.writeText(text);
-    alert("Conversation copied to clipboard!");
-  }} catch (e) {{
-    // Fallback for older browsers
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
-    alert("Conversation copied to clipboard!");
-  }}
-}});
-</script>
-            """,
-            height=60,
-        )
+        # New Copy conversation button (styled same as others)
+        if st.button("Copy conversation"):
+            components.html(
+                f"""
+                <script>
+                const text = {json.dumps(full_conversation)};
+                navigator.clipboard.writeText(text).then(() => {{
+                    alert("Conversation copied to clipboard!");
+                }});
+                </script>
+                """,
+                height=0,
+            )
 with col2:
     if st.button("Clear conversation"):
         st.session_state["history"] = []
@@ -923,6 +900,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
