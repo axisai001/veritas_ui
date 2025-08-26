@@ -327,4 +327,7 @@ def log_error_event(kind: str, route: str, http_status: int, detail: str):
         print("Error log failure:", repr(e))
         return None
 
-def netw
+def network_error():
+    # Display only minimal message to user
+    st.error("network error")
+
