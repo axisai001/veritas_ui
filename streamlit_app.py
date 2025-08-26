@@ -552,12 +552,10 @@ if st.session_state["is_admin"]:
     colA, colB = st.columns(2)
     with colA:
         if st.button("Save tagline"):
-            global CURRENT_TAGLINE
             CURRENT_TAGLINE = (new_tag or "").strip()
             st.success("Tagline saved (reload to see in header).")
     with colB:
         if st.button("Remove logo"):
-            global CURRENT_LOGO_FILENAME
             if CURRENT_LOGO_FILENAME:
                 try:
                     os.remove(os.path.join(UPLOAD_FOLDER, CURRENT_LOGO_FILENAME))
@@ -802,3 +800,4 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
