@@ -698,19 +698,27 @@ def _summarize_user_input(typed_text: str, file_chars: int, file_pages: int) -> 
 # ===== Chat / Analysis UI =====
 st.subheader("Bias Analysis")
 
+# --- CLEAR FLAG: run this BEFORE rendering the text area ---
+if st.session_state.get("_clear_text_box", False):
+    # reset flag and clear the widget state before the widget is created
+    st.session_state["_clear_text_box"] = False
+    st.session_state["user_input_box"] = ""
+
 with st.form("analysis_form"):
     # Controlled text area (so we can clear it reliably)
     user_text = st.text_area(
         "Paste or type text to analyze",
         height=180,
         key="user_input_box",
-        value=st.session_state["user_input_box"]
+        value=st.session_state.get("user_input_box", "")
     )
+
     doc = st.file_uploader(
         f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
         type=list(DOC_ALLOWED_EXTENSIONS),
         accept_multiple_files=False
     )
+
     submitted = st.form_submit_button("Analyze")
 
     if submitted:
@@ -718,11 +726,11 @@ with st.form("analysis_form"):
             network_error()
             st.stop()
 
-        # Track file-derived text length and (approx) pages for UI summary
+        # --- your existing extraction + final_input building remains unchanged ---
+        extracted = ""
         file_chars = 0
         approx_pages = 0
 
-        extracted = ""
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
             if size_mb > MAX_UPLOAD_MB:
@@ -732,7 +740,6 @@ with st.form("analysis_form"):
                 with st.spinner("Extracting…"):
                     raw = doc.getvalue()
                     if (doc.name or "").lower().endswith(".pdf") and PdfReader is not None:
-                        # Rough page estimate for PDF (for UI only)
                         try:
                             reader = PdfReader(io.BytesIO(raw))
                             approx_pages = len(reader.pages)
@@ -763,16 +770,23 @@ with st.form("analysis_form"):
             "file_chars": file_chars,
             "file_pages": approx_pages,
         }
-        masked_user_line = _summarize_user_input(
-            typed_text=user_text or "",
-            file_chars=file_chars,
-            file_pages=approx_pages
-        )
 
-        # Store masked “user message” for the UI transcript only
+        def _summarize_user_input(typed_text: str, file_chars: int, file_pages: int) -> str:
+            parts = []
+            if typed_text:
+                parts.append(f"[User text hidden — {len(typed_text)} characters]")
+            if file_chars > 0:
+                if file_pages > 0:
+                    parts.append(f"[File text hidden — ~{file_pages} pages]")
+                else:
+                    parts.append(f"[File text hidden — {file_chars} characters]")
+            if not parts:
+                parts.append("[No content submitted]")
+            return " ".join(parts)
+
+        masked_user_line = _summarize_user_input(user_text or "", file_chars, approx_pages)
         st.session_state["history"].append({"role": "user", "content": masked_user_line})
 
-        # Build messages for the model (real content is sent; UI remains masked)
         messages = [
             {"role": "system", "content": IDENTITY_PROMPT},
             {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
@@ -789,7 +803,6 @@ with st.form("analysis_form"):
                 )
                 model_reply = resp.choices[0].message.content or ""
         except Exception as e:
-            # Rollback the masked user line if the request failed
             if st.session_state["history"] and st.session_state["history"][-1]["role"] == "user":
                 st.session_state["history"].pop()
             log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
@@ -805,14 +818,12 @@ with st.form("analysis_form"):
         st.session_state["last_reply"] = decorated_reply
 
         try:
-            # Log the true conversation content safely (assistant output + masked user line + true input length)
-            # We keep the stored 'messages' we actually sent to the model.
             log_analysis(public_report_id, internal_report_id, messages, decorated_reply)
         except Exception as e:
             log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
-        # ----- CLEAR the input box now and rerun to show cleared field -----
-        st.session_state["user_input_box"] = ""
+        # ✅ request a clear on the next run
+        st.session_state["_clear_text_box"] = True
         st.rerun()
 
 # Conversation transcript (never show raw user text)
@@ -1040,6 +1051,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
