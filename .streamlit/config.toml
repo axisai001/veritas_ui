@@ -1,7 +1,7 @@
 [theme]
-base="light"
-primaryColor="#CD7F32"             # Bronze Orange (buttons/accents)
-backgroundColor="#0E4D64"          # Bronze Blue (main background)
-secondaryBackgroundColor="#145374" # Lighter bronze blue (sidebar/panels)
-textColor="#FFFFFF"                # White text for contrast
+base="dark"                                # dark base makes the neon colors pop
+primaryColor="#FF8C32"                     # Bronze-Orange (buttons, sliders, accents)
+backgroundColor="#042A2B"                  # Deep teal/blue background
+secondaryBackgroundColor="#064663"         # Lighter teal-blue (sidebar/panels)
+textColor="#FFFFFF"                        # White text
 font="sans serif"
