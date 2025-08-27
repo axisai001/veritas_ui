@@ -207,7 +207,7 @@ domestic situations, financial status, or schedule flexibility.
 ∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
 reinforce stereotypes. 
  
- 
+
 Bias Detection Rules 
 1.Context Check for Legal/Program/Framework Names​ 
 Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
@@ -310,6 +310,11 @@ Revision Guidance
 ∙Replace exclusionary terms with inclusive equivalents. 
 ∙Avoid prestige or demographic restrictions unless academically necessary. 
 ∙Suggestions must be clear, actionable, and directly tied to flagged issues.
+
+IMPORTANT OUTPUT RULES
+- Only output the structured Bias Detection Report.
+- Do NOT repeat, summarize, quote, or restate the original input text in any form.
+- Treat the input as reference data and produce only the report.
 """.strip()
 
 # ================= Utilities =================
@@ -515,6 +520,7 @@ st.markdown(
     h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         font-family: 'Inter', sans-serif !important;
         font-weight: 600 !important;
+        text-align: center; /* center main header too */
     }
 
     /* Sidebar text */
@@ -672,7 +678,7 @@ with st.sidebar:
         st.rerun()
 
 # Branding (admin)
-if st.session_state["is_admin"]:
+if st.session_state["is_admin"]):
     st.divider()
     st.subheader("Branding (Admin)")
     new_tag = st.text_input("Slogan / tagline", value=CURRENT_TAGLINE, help="Leave blank to hide.")
@@ -754,11 +760,27 @@ with st.form("analysis_form"):
             st.error("Please enter some text or upload a document.")
             st.stop()
 
-        st.session_state["history"].append({"role":"user","content":final_input})
+        # --- Report-only handling ---
+        # Store a placeholder in transcript (never raw text)
+        st.session_state["history"].append({
+            "role": "user",
+            "content": f"(User submitted {len(final_input)} characters for analysis.)"
+        })
+
+        # Build a wrapped user message and send ONLY that to the model this turn
+        wrapped_user = (
+            "Analyze the following academic text and return ONLY the Bias Detection Report. "
+            "Do NOT repeat or quote the input text.\n\n"
+            "<<<BEGIN TEXT>>>\n"
+            f"{final_input}\n"
+            "<<<END TEXT>>>"
+        )
+
         messages = [
             {"role": "system", "content": IDENTITY_PROMPT},
             {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-        ] + st.session_state["history"]
+            {"role": "user", "content": wrapped_user},
+        ]
 
         try:
             with st.spinner("Analyzing…"):
@@ -771,9 +793,17 @@ with st.form("analysis_form"):
                 model_reply = resp.choices[0].message.content or ""
         except Exception as e:
             log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
-            st.session_state["history"].pop()
+            # Remove the last (placeholder) user entry on failure
+            if st.session_state["history"] and st.session_state["history"][-1]["role"] == "user":
+                st.session_state["history"].pop()
             network_error()
             st.stop()
+
+        # --- Safety net: strip any accidental echo from model output ---
+        anchor = "Bias Detected:"
+        if anchor in model_reply:
+            model_reply = model_reply[model_reply.index(anchor):]
+        model_reply = model_reply.split("<<<BEGIN TEXT>>>")[0].strip()
 
         public_report_id = _gen_public_report_id()
         internal_report_id = _gen_internal_report_id()
@@ -784,6 +814,7 @@ with st.form("analysis_form"):
         st.session_state["last_reply"] = decorated_reply
 
         try:
+            # Log the snapshot—including placeholder, not raw text
             log_analysis(public_report_id, internal_report_id, st.session_state["history"], decorated_reply)
         except Exception as e:
             log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
@@ -846,18 +877,17 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.session_state["history"]:
-        # Build transcript text
+        # Build transcript text (already placeholder-safe)
         transcript = []
         for m in st.session_state["history"]:
             prefix = "User: " if m["role"] == "user" else "Assistant: "
             transcript.append(prefix + m["content"])
         full_conversation = "\n\n".join(transcript)
 
-        # Persistent HTML button that matches Streamlit's white button style
+        # Persistent HTML button for copying the transcript
         components.html(
             f"""
 <style>
-  /* Match Streamlit-like button styling */
   .copy-btn {{
     display: inline-block;
     cursor: pointer;
@@ -894,7 +924,6 @@ with col1:
       note.style.display = "block";
       setTimeout(() => note.style.display = "none", 1200);
     }} catch (e) {{
-      // Fallback for older browsers/permissions
       const ta = document.createElement("textarea");
       ta.value = text;
       ta.style.position = "fixed";
@@ -910,7 +939,7 @@ with col1:
   }});
 </script>
             """,
-            height=80,  # room for the Copied ✓ note
+            height=80,
         )
 
 with col2:
@@ -1010,11 +1039,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
-
-
-
-
 
 
 
