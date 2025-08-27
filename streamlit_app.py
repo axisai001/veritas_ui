@@ -721,13 +721,91 @@ st.divider()
 st.subheader("Bias Analysis")
 
 with st.form("analysis_form"):
-    user_text = st.text_area("Paste or type text to analyze", height=180, value="")
+    # Give widgets keys so we can clear them via session_state
+    user_text = st.text_area(
+        "Paste or type text to analyze",
+        height=180,
+        value="",
+        key="user_input_box",
+    )
     doc = st.file_uploader(
         f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
         type=list(DOC_ALLOWED_EXTENSIONS),
-        accept_multiple_files=False
+        accept_multiple_files=False,
+        key="doc_uploader",
     )
+
     submitted = st.form_submit_button("Analyze")
+
+    if submitted:
+        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+            network_error()
+            st.stop()
+
+        extracted = ""
+        if doc is not None:
+            size_mb = doc.size / (1024 * 1024)
+            if size_mb > MAX_UPLOAD_MB:
+                st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB.")
+                st.stop()
+            try:
+                with st.spinner("Extracting…"):
+                    extracted = extract_text_from_file(doc.getvalue(), doc.name)
+                    extracted = (extracted or "").strip()
+                    if not extracted:
+                        st.error("No extractable text found.")
+                        st.stop()
+            except Exception as e:
+                log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
+                network_error()
+                st.stop()
+
+        final_input = (user_text or "").strip()
+        if extracted:
+            final_input = (final_input + ("\n\n" if final_input else "") + extracted).strip()
+
+        if not final_input:
+            st.error("Please enter some text or upload a document.")
+            st.stop()
+
+        # ✅ Clear the widgets right after we’ve captured the input
+        st.session_state["user_input_box"] = ""      # clears the text area
+        st.session_state["doc_uploader"] = None      # best-effort clear of uploader (may not reset in all cases)
+
+        # Continue with your normal chat flow
+        st.session_state["history"].append({"role": "user", "content": final_input})
+        messages = [
+            {"role": "system", "content": IDENTITY_PROMPT},
+            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+        ] + st.session_state["history"]
+
+        try:
+            with st.spinner("Analyzing…"):
+                client = OpenAI(api_key=settings.openai_api_key)
+                resp = client.chat.completions.create(
+                    model=MODEL,
+                    temperature=TEMPERATURE,
+                    messages=messages,
+                )
+                model_reply = resp.choices[0].message.content or ""
+        except Exception as e:
+            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
+            st.session_state["history"].pop()
+            network_error()
+            st.stop()
+
+        public_report_id = _gen_public_report_id()
+        internal_report_id = _gen_internal_report_id()
+        header = f"📄 Report ID: {public_report_id}"
+        decorated_reply = f"{header}\n\n{model_reply}".strip()
+
+        st.session_state["history"].append({"role": "assistant", "content": decorated_reply})
+        st.session_state["last_reply"] = decorated_reply
+
+        try:
+            log_analysis(public_report_id, internal_report_id, st.session_state["history"], decorated_reply)
+        except Exception as e:
+            log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
     if submitted:
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
@@ -1039,6 +1117,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
