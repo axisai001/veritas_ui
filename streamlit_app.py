@@ -703,14 +703,20 @@ if st.session_state.get("_clear_text_box", False):
     # reset flag and clear the widget state before the widget is created
     st.session_state["_clear_text_box"] = False
     st.session_state["user_input_box"] = ""
+    
+# --- Clear flag & defaults for user input box ---
+st.session_state.setdefault("user_input_box", "")
+if st.session_state.get("_clear_text_box", False):
+    # Clear on next run
+    st.session_state["_clear_text_box"] = False
+    st.session_state["user_input_box"] = ""
 
 with st.form("analysis_form"):
-    # Controlled text area (so we can clear it reliably)
-    user_text = st.text_area(
+    # Controlled text area (NO value=, only key)
+    st.text_area(
         "Paste or type text to analyze",
         height=180,
         key="user_input_box",
-        value=st.session_state.get("user_input_box", "")
     )
 
     doc = st.file_uploader(
@@ -726,7 +732,9 @@ with st.form("analysis_form"):
             network_error()
             st.stop()
 
-        # --- your existing extraction + final_input building remains unchanged ---
+        # ✅ Read the text that user typed from session_state
+        user_text = st.session_state.get("user_input_box", "").strip()
+
         extracted = ""
         file_chars = 0
         approx_pages = 0
@@ -748,7 +756,7 @@ with st.form("analysis_form"):
                     extracted = extract_text_from_file(raw, doc.name)
                     extracted = (extracted or "").strip()
                     file_chars = len(extracted)
-                    if not extracted and not user_text.strip():
+                    if not extracted and not user_text:
                         st.error("No extractable text found.")
                         st.stop()
             except Exception as e:
@@ -756,7 +764,7 @@ with st.form("analysis_form"):
                 network_error()
                 st.stop()
 
-        final_input = (user_text or "").strip()
+        final_input = user_text
         if extracted:
             final_input = (final_input + ("\n\n" if final_input else "") + extracted).strip()
 
@@ -764,9 +772,9 @@ with st.form("analysis_form"):
             st.error("Please enter some text or upload a document.")
             st.stop()
 
-        # ----- mask user's text in UI/exports -----
+        # Masked summary for history
         st.session_state["_last_user_lengths"] = {
-            "typed": len(user_text or ""),
+            "typed": len(user_text),
             "file_chars": file_chars,
             "file_pages": approx_pages,
         }
@@ -784,7 +792,7 @@ with st.form("analysis_form"):
                 parts.append("[No content submitted]")
             return " ".join(parts)
 
-        masked_user_line = _summarize_user_input(user_text or "", file_chars, approx_pages)
+        masked_user_line = _summarize_user_input(user_text, file_chars, approx_pages)
         st.session_state["history"].append({"role": "user", "content": masked_user_line})
 
         messages = [
@@ -814,7 +822,7 @@ with st.form("analysis_form"):
         header = f"📄 Report ID: {public_report_id}"
         decorated_reply = f"{header}\n\n{model_reply}".strip()
 
-        st.session_state["history"].append({"role":"assistant","content":decorated_reply})
+        st.session_state["history"].append({"role": "assistant", "content": decorated_reply})
         st.session_state["last_reply"] = decorated_reply
 
         try:
@@ -822,7 +830,7 @@ with st.form("analysis_form"):
         except Exception as e:
             log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
-        # ✅ request a clear on the next run
+        # ✅ clear the input box next run
         st.session_state["_clear_text_box"] = True
         st.rerun()
 
@@ -1051,6 +1059,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
