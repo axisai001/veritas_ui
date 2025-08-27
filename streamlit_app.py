@@ -522,20 +522,40 @@ st.markdown(
         font-family: 'Raleway', sans-serif !important;
     }
 
-    /* Bronze-orange button styling (with your size tweaks) */
+    /* --- Bronze-orange buttons --- */
     div.stButton > button,
-    div.stDownloadButton > button {
-        background-color: #FF8C32 !important;
-        color: #111418 !important;
+    div.stDownloadButton > button,
+    button[kind="primary"], button[kind="secondary"],
+    [data-testid="baseButton-secondary"], [data-testid="baseButton-primary"],
+    .stForm [type=submit] {
+        background-color: #FF8C32 !important;   /* bronze-orange */
+        color: #111418 !important;              /* dark text */
         border: 1px solid #FF8C32 !important;
-        padding: 0.25rem 0.75rem !important;  /* keeps compact size */
-        font-size: 0.875rem !important;       /* keeps small font */
+        box-shadow: none !important;
+
+        padding: 0.25rem 0.75rem !important;
+        font-size: 0.875rem !important;
         border-radius: 0.5rem !important;
     }
 
-    /* Hover effect */
+    /* Hover state */
     div.stButton > button:hover,
-    div.stDownloadButton > button:hover {
+    div.stDownloadButton > button:hover,
+    button[kind="primary"]:hover, button[kind="secondary"]:hover,
+    [data-testid="baseButton-secondary"]:hover, [data-testid="baseButton-primary"]:hover,
+    .stForm [type=submit]:hover {
+        background-color: #E97C25 !important;
+        border-color: #E97C25 !important;
+    }
+
+    /* File uploader "Browse files" button */
+    [data-testid="stFileUploader"] section div div span button {
+        background-color: #FF8C32 !important;
+        color: #111418 !important;
+        border: 1px solid #FF8C32 !important;
+        border-radius: 0.5rem !important;
+    }
+    [data-testid="stFileUploader"] section div div span button:hover {
         background-color: #E97C25 !important;
         border-color: #E97C25 !important;
     }
@@ -990,6 +1010,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
