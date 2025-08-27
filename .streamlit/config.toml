@@ -1,7 +1,7 @@
 [theme]
-base="dark"                                # dark base makes the neon colors pop
-primaryColor="#FF8C32"                     # Bronze-Orange (buttons, sliders, accents)
-backgroundColor="#042A2B"                  # Deep teal/blue background
-secondaryBackgroundColor="#064663"         # Lighter teal-blue (sidebar/panels)
+base="dark"                                # dark mode makes neon pop
+primaryColor="#FF8C32"                     # Bronze-Orange (full button fill & accents)
+backgroundColor="#042A2B"                  # Deep teal-blue background
+secondaryBackgroundColor="#064663"         # Lighter teal-blue for sidebar/panels
 textColor="#FFFFFF"                        # White text
 font="sans serif"
