@@ -7,30 +7,16 @@ import time
 import json
 import hashlib
 import secrets
-import streamlit.components.v1 as components
-import json  # you already import this, but make sure it’s present
 from typing import Optional
 from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from collections import deque
+from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 import httpx
-
-# 🔧 Global CSS override so all Streamlit buttons match Copy Conversation button size
-st.markdown(
-    """
-    <style>
-    div.stButton > button {
-        padding: 0.25rem 0.75rem;   /* smaller padding to match copy button */
-        font-size: 0.875rem;        /* ~14px font size */
-        border-radius: 0.5rem;      /* rounded corners */
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
 
 # ---------- Optional parsers for uploads ----------
 try:
@@ -195,7 +181,7 @@ DEFAULT_SYSTEM_PROMPT = """
 You are a language and bias detection expert trained to analyze academic documents for both 
 subtle and overt bias. Review the following academic content — including written language and 
 any accompanying charts, graphs, or images — to identify elements that may be exclusionary, 
-biased, or create barriers for individuals from underrepresented or marginalized groups.​
+biased, or create barriers for individuals from underrepresented or marginalized groups.​ 
 In addition, provide contextual definitions and framework awareness to improve user literacy 
 and reduce false positives. 
  
@@ -223,31 +209,31 @@ reinforce stereotypes.
  
  
 Bias Detection Rules 
-1.Context Check for Legal/Program/Framework Names​
+1.Context Check for Legal/Program/Framework Names​ 
 Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
 “Book of Matthew”) unless context shows discriminatory or exclusionary framing. 
 Maintain a whitelist of common compliance/legal/religious/program titles. 
-2.Framework Awareness​
+2.Framework Awareness​ 
 If flagged bias appears in a legal, religious, or defined-framework text, explicitly note: 
 “This operates within [Framework X]. Interpret accordingly.” 
-3.Multi-Pass Detection​
+3.Multi-Pass Detection​ 
 After initial bias identification, re-check text for secondary or overlapping bias types. If 
 multiple categories apply, bias score must reflect combined severity. 
-4.False Positive Reduction​
+4.False Positive Reduction​ 
 Avoid flagging mild cultural references, standard course descriptions, or neutral 
 institutional references unless paired with exclusionary framing. 
-5.Terminology Neutralization​
+5.Terminology Neutralization​ 
 Always explain terms like bias, lens, perspective in context to avoid appearing 
 accusatory. Frame as descriptive, not judgmental. 
-6.Objective vs. Subjective Distinction​
+6.Objective vs. Subjective Distinction​ 
 Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
 and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
 errors. 
-7.Contextual Definition Layer​
+7.Contextual Definition Layer​ 
 For each flagged word/phrase, provide: 
 oContextual meaning (in this sentence) 
 oGeneral meaning (dictionary/neutral usage) 
-8.Fact-Checking and Accurate Attribution​
+8.Fact-Checking and Accurate Attribution​ 
 When listing or referencing individuals, schools of thought, or intellectual traditions, the 
 model must fact-check groupings and associations to ensure accuracy. 
 oDo not misclassify individuals into categories they do not belong to. 
@@ -510,13 +496,28 @@ _prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 
 # ================= Streamlit UI =================
+# 1) MUST be the first Streamlit call:
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
+
+# 2) Then global CSS so all st.buttons share sizing (including "Copy conversation")
+st.markdown(
+    """
+    <style>
+    div.stButton > button {
+        padding: 0.25rem 0.75rem;   /* smaller padding to match copy button */
+        font-size: 0.875rem;        /* ~14px font size */
+        border-radius: 0.5rem;      /* rounded corners */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 if st.session_state.get("is_admin", False):
     st.info(f"Boot OK • Model: {MODEL} • Key loaded: {'yes' if os.environ.get('OPENAI_API_KEY') else 'no'}")
 
 # Top header with logo + tagline
 col_logo, col_title = st.columns([1, 6])
-from pathlib import Path
 
 with col_logo:
     logo_path = None
@@ -529,8 +530,6 @@ with col_logo:
         try:
             st.image(logo_path.read_bytes(), use_container_width=True)
         except Exception:
-            # Optional: silently ignore; or show only for admins
-            # if st.session_state.get("is_admin"): st.caption("Logo failed to render.")
             pass
 
 with col_title:
@@ -604,7 +603,7 @@ with st.sidebar:
     st.write(f"Report time zone: **{PILOT_TZ_NAME}**")
     if st.button("Lock Admin"):
         st.session_state["is_admin"] = False
-        st.experimental_rerun()
+        st.rerun()
 
     with st.expander("Admin unlock"):
         key = st.text_input("Enter admin key", type="password")
@@ -793,8 +792,6 @@ def build_pdf_bytes(content: str) -> bytes:
 
 st.divider()
 col1, col2, col3 = st.columns(3)
-import streamlit.components.v1 as components
-import json
 
 with col1:
     if st.session_state["history"]:
@@ -809,16 +806,16 @@ with col1:
         components.html(
             f"""
 <style>
-  /* Try to match Streamlit's default st.button styling */
+  /* Match Streamlit-like button styling */
   .copy-btn {{
     display: inline-block;
     cursor: pointer;
     background: transparent;
     color: inherit;
     border: 1px solid rgba(49, 51, 63, 0.2);
-    padding: 0.25rem 0.75rem;   /* same-ish padding */
-    border-radius: 0.5rem;      /* 8px */
-    font-size: 0.875rem;        /* ~14px */
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
     line-height: 1.6;
     font-family: inherit;
   }}
@@ -962,13 +959,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
-
-
-
-
-
-
 
 
 
