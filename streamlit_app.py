@@ -184,7 +184,7 @@ any accompanying charts, graphs, or images — to identify elements that may be 
 biased, or create barriers for individuals from underrepresented or marginalized groups.​ 
 In addition, provide contextual definitions and framework awareness to improve user literacy 
 and reduce false positives. 
- 
+
 Bias Categories (with academic context) 
 ∙Gendered language: Words or phrases that assume or privilege a specific gender identity 
 (e.g., “chairman,” “he”). 
@@ -206,7 +206,6 @@ barriers.
 domestic situations, financial status, or schedule flexibility. 
 ∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
 reinforce stereotypes. 
- 
 
 Bias Detection Rules 
 1.Context Check for Legal/Program/Framework Names​ 
@@ -260,7 +259,7 @@ Score: 0.00
 ⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
 initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
 0.00 
- 
+
 Severity Score Mapping (Fixed) 
 Bias Detection Logic 
 ∙If no bias is present: 
@@ -278,7 +277,7 @@ Strict Thresholds — No Exceptions
 ∙🔴 High Bias → 0.70 – 1.00 
 ∙If Bias Detected = No → Score must = 0.00. 
 ∙If Score > 0.00 → Bias Detected must = Yes. 
- 
+
 AXIS-AI Bias Evaluation Reference 
 ∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
 justified. 
@@ -286,7 +285,7 @@ justified.
 barriers or reinforce stereotypes. 
 ∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
 inclusion, or accessibility. 
- 
+
 Output Format (Strict) 
 1.Bias Detected: Yes/No 
 2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
@@ -304,17 +303,12 @@ cultural framework, note it here
 its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
 was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
 is present for this reason. 
- 
+
 Revision Guidance 
 ∙Maintain academic tone and intent. 
 ∙Replace exclusionary terms with inclusive equivalents. 
 ∙Avoid prestige or demographic restrictions unless academically necessary. 
 ∙Suggestions must be clear, actionable, and directly tied to flagged issues.
-
-IMPORTANT OUTPUT RULES
-- Only output the structured Bias Detection Report.
-- Do NOT repeat, summarize, quote, or restate the original input text in any form.
-- Treat the input as reference data and produce only the report.
 """.strip()
 
 # ================= Utilities =================
@@ -504,63 +498,36 @@ _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 # 1) MUST be the first Streamlit call:
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
-# 2) Global font + button CSS
+# 2) Global font + button CSS (Inter headers, bronze-orange buttons)
 st.markdown(
     """
     <style>
-    /* Import Google Fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Raleway:wght@400&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Raleway:wght@400&display=swap');
 
-    /* Body text */
-    html, body, [class*="css"] {
-        font-family: 'Raleway', sans-serif !important;
-    }
-
-    /* Headers */
+    html, body, [class*="css"] { font-family: 'Raleway', sans-serif !important; }
     h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
         font-family: 'Inter', sans-serif !important;
-        font-weight: 600 !important;
-        text-align: center; /* center main header too */
+        font-weight: 700 !important;
+        text-align: center;  /* center the main header */
     }
+    section[data-testid="stSidebar"] * { font-family: 'Raleway', sans-serif !important; }
 
-    /* Sidebar text */
-    section[data-testid="stSidebar"] * {
-        font-family: 'Raleway', sans-serif !important;
-    }
-
-    /* --- Bronze-orange buttons --- */
+    /* Bronze-orange buttons (incl. form submit + download + uploader button) */
     div.stButton > button,
     div.stDownloadButton > button,
-    button[kind="primary"], button[kind="secondary"],
-    [data-testid="baseButton-secondary"], [data-testid="baseButton-primary"],
-    .stForm [type=submit] {
-        background-color: #FF8C32 !important;   /* bronze-orange */
-        color: #111418 !important;              /* dark text */
-        border: 1px solid #FF8C32 !important;
-        box-shadow: none !important;
-
-        padding: 0.25rem 0.75rem !important;
-        font-size: 0.875rem !important;
-        border-radius: 0.5rem !important;
-    }
-
-    /* Hover state */
-    div.stButton > button:hover,
-    div.stDownloadButton > button:hover,
-    button[kind="primary"]:hover, button[kind="secondary"]:hover,
-    [data-testid="baseButton-secondary"]:hover, [data-testid="baseButton-primary"]:hover,
-    .stForm [type=submit]:hover {
-        background-color: #E97C25 !important;
-        border-color: #E97C25 !important;
-    }
-
-    /* File uploader "Browse files" button */
+    .stForm [type=submit],
     [data-testid="stFileUploader"] section div div span button {
         background-color: #FF8C32 !important;
         color: #111418 !important;
         border: 1px solid #FF8C32 !important;
+        box-shadow: none !important;
+        padding: 0.25rem 0.75rem !important;
+        font-size: 0.875rem !important;
         border-radius: 0.5rem !important;
     }
+    div.stButton > button:hover,
+    div.stDownloadButton > button:hover,
+    .stForm [type=submit]:hover,
     [data-testid="stFileUploader"] section div div span button:hover {
         background-color: #E97C25 !important;
         border-color: #E97C25 !important;
@@ -582,7 +549,6 @@ with col_logo:
         candidate = Path(UPLOAD_FOLDER) / CURRENT_LOGO_FILENAME
         if candidate.is_file():
             logo_path = candidate
-
     if logo_path:
         try:
             st.image(logo_path.read_bytes(), use_container_width=True)
@@ -592,21 +558,19 @@ with col_logo:
 with col_title:
     st.title("Veritas — Pilot Test")
     if CURRENT_TAGLINE:
-        st.caption("Designed for Empowerment, Not Influence")
+        st.caption(CURRENT_TAGLINE)
 
 # Session request_id
 if "request_id" not in st.session_state:
     st.session_state["request_id"] = _gen_request_id()
 
 # Auth/session state init
-if "authed" not in st.session_state:
-    st.session_state["authed"] = False
-if "history" not in st.session_state:
-    st.session_state["history"] = []  # list of {role, content}
-if "last_reply" not in st.session_state:
-    st.session_state["last_reply"] = ""
-if "is_admin" not in st.session_state:
-    st.session_state["is_admin"] = False
+st.session_state.setdefault("authed", False)
+st.session_state.setdefault("history", [])     # list of {role, content}
+st.session_state.setdefault("last_reply", "")
+st.session_state.setdefault("is_admin", False)
+st.session_state.setdefault("user_input_box", "")  # -- controls the text area value
+st.session_state.setdefault("_last_user_lengths", {"typed": 0, "file_chars": 0, "file_pages": 0})
 
 # Pilot countdown
 if not pilot_started():
@@ -717,24 +681,36 @@ if st.session_state["is_admin"]:
 
 st.divider()
 
-# Chat / Analysis UI
+# ===== Helpers to hide user text in UI & exports =====
+def _summarize_user_input(typed_text: str, file_chars: int, file_pages: int) -> str:
+    parts = []
+    if typed_text:
+        parts.append(f"[User text hidden — {len(typed_text)} characters]")
+    if file_chars > 0:
+        if file_pages > 0:
+            parts.append(f"[File text hidden — ~{file_pages} pages]")
+        else:
+            parts.append(f"[File text hidden — {file_chars} characters]")
+    if not parts:
+        parts.append("[No content submitted]")
+    return " ".join(parts)
+
+# ===== Chat / Analysis UI =====
 st.subheader("Bias Analysis")
 
 with st.form("analysis_form"):
-    # Give widgets keys so we can clear them via session_state
+    # Controlled text area (so we can clear it reliably)
     user_text = st.text_area(
         "Paste or type text to analyze",
         height=180,
-        value="",
         key="user_input_box",
+        value=st.session_state["user_input_box"]
     )
     doc = st.file_uploader(
         f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
         type=list(DOC_ALLOWED_EXTENSIONS),
-        accept_multiple_files=False,
-        key="doc_uploader",
+        accept_multiple_files=False
     )
-
     submitted = st.form_submit_button("Analyze")
 
     if submitted:
@@ -742,6 +718,10 @@ with st.form("analysis_form"):
             network_error()
             st.stop()
 
+        # Track file-derived text length and (approx) pages for UI summary
+        file_chars = 0
+        approx_pages = 0
+
         extracted = ""
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
@@ -750,9 +730,18 @@ with st.form("analysis_form"):
                 st.stop()
             try:
                 with st.spinner("Extracting…"):
-                    extracted = extract_text_from_file(doc.getvalue(), doc.name)
+                    raw = doc.getvalue()
+                    if (doc.name or "").lower().endswith(".pdf") and PdfReader is not None:
+                        # Rough page estimate for PDF (for UI only)
+                        try:
+                            reader = PdfReader(io.BytesIO(raw))
+                            approx_pages = len(reader.pages)
+                        except Exception:
+                            approx_pages = 0
+                    extracted = extract_text_from_file(raw, doc.name)
                     extracted = (extracted or "").strip()
-                    if not extracted:
+                    file_chars = len(extracted)
+                    if not extracted and not user_text.strip():
                         st.error("No extractable text found.")
                         st.stop()
             except Exception as e:
@@ -768,96 +757,26 @@ with st.form("analysis_form"):
             st.error("Please enter some text or upload a document.")
             st.stop()
 
-        # ✅ Clear the widgets right after we’ve captured the input
-        st.session_state["user_input_box"] = ""      # clears the text area
-        st.session_state["doc_uploader"] = None      # best-effort clear of uploader (may not reset in all cases)
-
-        # Continue with your normal chat flow
-        st.session_state["history"].append({"role": "user", "content": final_input})
-        messages = [
-            {"role": "system", "content": IDENTITY_PROMPT},
-            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-        ] + st.session_state["history"]
-
-        try:
-            with st.spinner("Analyzing…"):
-                client = OpenAI(api_key=settings.openai_api_key)
-                resp = client.chat.completions.create(
-                    model=MODEL,
-                    temperature=TEMPERATURE,
-                    messages=messages,
-                )
-                model_reply = resp.choices[0].message.content or ""
-        except Exception as e:
-            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
-            st.session_state["history"].pop()
-            network_error()
-            st.stop()
-
-        public_report_id = _gen_public_report_id()
-        internal_report_id = _gen_internal_report_id()
-        header = f"📄 Report ID: {public_report_id}"
-        decorated_reply = f"{header}\n\n{model_reply}".strip()
-
-        st.session_state["history"].append({"role": "assistant", "content": decorated_reply})
-        st.session_state["last_reply"] = decorated_reply
-
-        try:
-            log_analysis(public_report_id, internal_report_id, st.session_state["history"], decorated_reply)
-        except Exception as e:
-            log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
-
-    if submitted:
-        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-            network_error()
-            st.stop()
-
-        extracted = ""
-        if doc is not None:
-            size_mb = doc.size / (1024 * 1024)
-            if size_mb > MAX_UPLOAD_MB:
-                st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB.")
-                st.stop()
-            try:
-                with st.spinner("Extracting…"):
-                    extracted = extract_text_from_file(doc.getvalue(), doc.name)
-                    extracted = (extracted or "").strip()
-                    if not extracted:
-                        st.error("No extractable text found.")
-                        st.stop()
-            except Exception as e:
-                log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
-                network_error()
-                st.stop()
-
-        final_input = (user_text or "").strip()
-        if extracted:
-            final_input = (final_input + ("\n\n" if final_input else "") + extracted).strip()
-
-        if not final_input:
-            st.error("Please enter some text or upload a document.")
-            st.stop()
-
-        # --- Report-only handling ---
-        # Store a placeholder in transcript (never raw text)
-        st.session_state["history"].append({
-            "role": "user",
-            "content": f"(User submitted {len(final_input)} characters for analysis.)"
-        })
-
-        # Build a wrapped user message and send ONLY that to the model this turn
-        wrapped_user = (
-            "Analyze the following academic text and return ONLY the Bias Detection Report. "
-            "Do NOT repeat or quote the input text.\n\n"
-            "<<<BEGIN TEXT>>>\n"
-            f"{final_input}\n"
-            "<<<END TEXT>>>"
+        # ----- mask user's text in UI/exports -----
+        st.session_state["_last_user_lengths"] = {
+            "typed": len(user_text or ""),
+            "file_chars": file_chars,
+            "file_pages": approx_pages,
+        }
+        masked_user_line = _summarize_user_input(
+            typed_text=user_text or "",
+            file_chars=file_chars,
+            file_pages=approx_pages
         )
 
+        # Store masked “user message” for the UI transcript only
+        st.session_state["history"].append({"role": "user", "content": masked_user_line})
+
+        # Build messages for the model (real content is sent; UI remains masked)
         messages = [
             {"role": "system", "content": IDENTITY_PROMPT},
             {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-            {"role": "user", "content": wrapped_user},
+            {"role": "user", "content": final_input},
         ]
 
         try:
@@ -870,18 +789,12 @@ with st.form("analysis_form"):
                 )
                 model_reply = resp.choices[0].message.content or ""
         except Exception as e:
-            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
-            # Remove the last (placeholder) user entry on failure
+            # Rollback the masked user line if the request failed
             if st.session_state["history"] and st.session_state["history"][-1]["role"] == "user":
                 st.session_state["history"].pop()
+            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
             network_error()
             st.stop()
-
-        # --- Safety net: strip any accidental echo from model output ---
-        anchor = "Bias Detected:"
-        if anchor in model_reply:
-            model_reply = model_reply[model_reply.index(anchor):]
-        model_reply = model_reply.split("<<<BEGIN TEXT>>>")[0].strip()
 
         public_report_id = _gen_public_report_id()
         internal_report_id = _gen_internal_report_id()
@@ -892,16 +805,22 @@ with st.form("analysis_form"):
         st.session_state["last_reply"] = decorated_reply
 
         try:
-            # Log the snapshot—including placeholder, not raw text
-            log_analysis(public_report_id, internal_report_id, st.session_state["history"], decorated_reply)
+            # Log the true conversation content safely (assistant output + masked user line + true input length)
+            # We keep the stored 'messages' we actually sent to the model.
+            log_analysis(public_report_id, internal_report_id, messages, decorated_reply)
         except Exception as e:
             log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
-# Conversation transcript
+        # ----- CLEAR the input box now and rerun to show cleared field -----
+        st.session_state["user_input_box"] = ""
+        st.rerun()
+
+# Conversation transcript (never show raw user text)
 if st.session_state["history"]:
     st.write("### Conversation")
     for msg in st.session_state["history"]:
         if msg["role"] == "user":
+            # Already masked line like: [User text hidden — 12345 characters] […]
             st.markdown(f"**You:**\n\n{msg['content']}")
         elif msg["role"] == "assistant":
             st.markdown(f"**Veritas:**\n\n{msg['content']}")
@@ -955,37 +874,32 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.session_state["history"]:
-        # Build transcript text (already placeholder-safe)
-        transcript = []
+        # Build masked transcript text for clipboard/export
+        lines = []
         for m in st.session_state["history"]:
-            prefix = "User: " if m["role"] == "user" else "Assistant: "
-            transcript.append(prefix + m["content"])
-        full_conversation = "\n\n".join(transcript)
+            if m["role"] == "user":
+                lines.append("User: " + m["content"])  # masked already
+            else:
+                lines.append("Assistant: " + m["content"])
+        full_conversation = "\n\n".join(lines)
 
-        # Persistent HTML button for copying the transcript
         components.html(
             f"""
 <style>
   .copy-btn {{
     display: inline-block;
     cursor: pointer;
-    background: transparent;
-    color: inherit;
-    border: 1px solid rgba(49, 51, 63, 0.2);
+    background: #FF8C32;
+    color: #111418;
+    border: 1px solid #FF8C32;
     padding: 0.25rem 0.75rem;
     border-radius: 0.5rem;
     font-size: 0.875rem;
     line-height: 1.6;
     font-family: inherit;
   }}
-  .copy-btn:hover {{
-    background: rgba(49, 51, 63, 0.05);
-  }}
-  .copy-note {{
-    font-size: 12px;
-    opacity: .75;
-    margin-top: 6px;
-  }}
+  .copy-btn:hover {{ background: #E97C25; border-color: #E97C25; }}
+  .copy-note {{ font-size: 12px; opacity: .75; margin-top: 6px; }}
 </style>
 
 <button id="copyBtn" class="copy-btn">Copy conversation</button>
@@ -1024,12 +938,18 @@ with col2:
     if st.button("Clear conversation"):
         st.session_state["history"] = []
         st.session_state["last_reply"] = ""
+        st.session_state["_last_user_lengths"] = {"typed": 0, "file_chars": 0, "file_pages": 0}
         st.success("Conversation cleared ✓")
 with col3:
     if st.session_state.get("last_reply"):
         try:
             pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
-            st.download_button("Download Report (PDF)", data=pdf_bytes, file_name="veritas_report.pdf", mime="application/pdf")
+            st.download_button(
+                "Download Report (PDF)",
+                data=pdf_bytes,
+                file_name="veritas_report.pdf",
+                mime="application/pdf"
+            )
         except Exception as e:
             log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
             st.error("network error")
@@ -1053,8 +973,10 @@ with st.form("feedback_form"):
 
         lines = []
         for m in st.session_state["history"]:
-            prefix = "User: " if m["role"] == "user" else "Assistant: "
-            lines.append(prefix + m["content"])
+            if m["role"] == "user":
+                lines.append("User: " + m["content"])  # masked
+            else:
+                lines.append("Assistant: " + m["content"])
         transcript = "\n\n".join(lines)[:100000]
         conv_chars = len(transcript)
 
@@ -1080,7 +1002,8 @@ with st.form("feedback_form"):
                 conv_preview = transcript[:2000]
                 plain = (
                     f"New Veritas feedback\nTime (UTC): {timestamp}\nRating: {rating}/5\n"
-                    f"From user email: {email}\nComments:\n{comments}\n\n--- Conversation (first 2,000 chars) ---\n{conv_preview}\n\n"
+                    f"From user email: {email}\nComments:\n{comments}\n\n"
+                    f"--- Conversation (first 2,000 chars) ---\n{conv_preview}\n\n"
                     f"IP: streamlit\nUser-Agent: streamlit\n"
                 )
                 html_body = (
@@ -1117,8 +1040,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
-
 
 
 
