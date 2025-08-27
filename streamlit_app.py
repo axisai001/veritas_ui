@@ -586,7 +586,7 @@ with col_logo:
 with col_title:
     st.title("Veritas — Pilot Test")
     if CURRENT_TAGLINE:
-        st.caption(Designed for Empowerment, Not Influence)
+        st.caption("Designed for Empowerment, Not Influence")
 
 # Session request_id
 if "request_id" not in st.session_state:
@@ -1010,6 +1010,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
