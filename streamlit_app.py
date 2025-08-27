@@ -499,14 +499,45 @@ _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 # 1) MUST be the first Streamlit call:
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
-# 2) Then global CSS so all st.buttons share sizing (including "Copy conversation")
+# 2) Global font + button CSS
 st.markdown(
     """
     <style>
-    div.stButton > button {
-        padding: 0.25rem 0.75rem;   /* smaller padding to match copy button */
-        font-size: 0.875rem;        /* ~14px font size */
-        border-radius: 0.5rem;      /* rounded corners */
+    /* Import Google Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Raleway:wght@400&display=swap');
+
+    /* Body text */
+    html, body, [class*="css"] {
+        font-family: 'Raleway', sans-serif !important;
+    }
+
+    /* Headers */
+    h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+        font-family: 'Inter', sans-serif !important;
+        font-weight: 600 !important;
+    }
+
+    /* Sidebar text */
+    section[data-testid="stSidebar"] * {
+        font-family: 'Raleway', sans-serif !important;
+    }
+
+    /* Bronze-orange button styling (with your size tweaks) */
+    div.stButton > button,
+    div.stDownloadButton > button {
+        background-color: #FF8C32 !important;
+        color: #111418 !important;
+        border: 1px solid #FF8C32 !important;
+        padding: 0.25rem 0.75rem !important;  /* keeps compact size */
+        font-size: 0.875rem !important;       /* keeps small font */
+        border-radius: 0.5rem !important;
+    }
+
+    /* Hover effect */
+    div.stButton > button:hover,
+    div.stDownloadButton > button:hover {
+        background-color: #E97C25 !important;
+        border-color: #E97C25 !important;
     }
     </style>
     """,
@@ -959,6 +990,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
