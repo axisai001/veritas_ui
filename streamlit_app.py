@@ -678,7 +678,7 @@ with st.sidebar:
         st.rerun()
 
 # Branding (admin)
-if st.session_state["is_admin"]):
+if st.session_state["is_admin"]
     st.divider()
     st.subheader("Branding (Admin)")
     new_tag = st.text_input("Slogan / tagline", value=CURRENT_TAGLINE, help="Leave blank to hide.")
@@ -1039,6 +1039,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
