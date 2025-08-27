@@ -1,7 +1,7 @@
 [theme]
-base="light"                                # "light" or "dark" is just a starting point
-primaryColor="#CD7F32"                      # Bronze Orange (buttons, sliders, accents)
-backgroundColor="#0E4D64"                   # Bronze Blue (page background)
-secondaryBackgroundColor="#145374"          # Slightly lighter bronze blue (widget panels / sidebar)
-textColor="#FFFFFF"                         # White text for contrast
-font="sans serif"                           # "sans serif", "serif", or "monospace"
+base="light"
+primaryColor="#CD7F32"             # Bronze Orange (buttons/accents)
+backgroundColor="#0E4D64"          # Bronze Blue (main background)
+secondaryBackgroundColor="#145374" # Lighter bronze blue (sidebar/panels)
+textColor="#FFFFFF"                # White text for contrast
+font="sans serif"
