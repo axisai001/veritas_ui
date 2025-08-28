@@ -834,9 +834,9 @@ if st.session_state.get("last_reply"):
 
     with col2:
         if st.button("Clear Report"):
-            st.session_state["history"] = []
-            st.session_state["last_reply"] = ""
-            st.experimental_rerun()  # single-click clear & refresh
+    st.session_state["history"] = []
+    st.session_state["last_reply"] = ""
+    st.rerun()  # single-click clear & refresh
 
     with col3:
         # Download Report (PDF)
@@ -975,6 +975,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
