@@ -58,8 +58,6 @@ try:
 except Exception:
     TEMPERATURE = 0.2
 
-ADMIN_KEY = os.environ.get("BRAND_ADMIN_PASSWORD", "")
-
 # --- Safe timezone loader ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
     try:
@@ -97,7 +95,7 @@ def pilot_started() -> bool:
 
 # Rates / windows
 RATE_LIMIT_LOGIN = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
-RATE_LIMIT_CHAT = int(os.environ.get("RATE_LIMIT_CHAT", "6"))
+RATE_LIMIT_CHAT  = int(os.environ.get("RATE_LIMIT_CHAT",  "6"))
 RATE_LIMIT_EXTRACT = int(os.environ.get("RATE_LIMIT_EXTRACT", "6"))
 RATE_LIMIT_WINDOW_SEC = int(os.environ.get("RATE_LIMIT_WINDOW_SEC", "60"))
 
@@ -109,34 +107,34 @@ except Exception:
 MAX_EXTRACT_CHARS = int(os.environ.get("MAX_EXTRACT_CHARS", "50000"))
 
 # TTLs (days)
-AUTH_LOG_TTL_DAYS = int(os.environ.get("AUTH_LOG_TTL_DAYS", str(getattr(settings, "auth_log_ttl_days", 365))))
+AUTH_LOG_TTL_DAYS     = int(os.environ.get("AUTH_LOG_TTL_DAYS", str(getattr(settings, "auth_log_ttl_days", 365))))
 ANALYSES_LOG_TTL_DAYS = int(os.environ.get("ANALYSES_LOG_TTL_DAYS", "365"))
 FEEDBACK_LOG_TTL_DAYS = int(os.environ.get("FEEDBACK_LOG_TTL_DAYS", "365"))
-ERRORS_LOG_TTL_DAYS = int(os.environ.get("ERRORS_LOG_TTL_DAYS", "365"))
+ERRORS_LOG_TTL_DAYS   = int(os.environ.get("ERRORS_LOG_TTL_DAYS", "365"))
 
 # SendGrid (optional)
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-SENDGRID_TO = os.environ.get("SENDGRID_TO", "")
-SENDGRID_FROM = os.environ.get("SENDGRID_FROM", "")
-SENDGRID_SUBJECT = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
+SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
+SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
+SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 
 # Password gate (optional)
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 # Storage / branding
-BASE_DIR = os.path.dirname(__file__)
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")  # logos only
-DATA_DIR = os.path.join(BASE_DIR, "data")
+BASE_DIR     = os.path.dirname(__file__)
+STATIC_DIR   = os.path.join(BASE_DIR, "static")
+UPLOAD_FOLDER= os.path.join(STATIC_DIR, "uploads")  # logos only
+DATA_DIR     = os.path.join(BASE_DIR, "data")
 FEEDBACK_CSV = os.path.join(DATA_DIR, "feedback.csv")
-ERRORS_CSV = os.path.join(DATA_DIR, "errors.csv")
-AUTH_CSV = os.path.join(DATA_DIR, "auth_events.csv")
+ERRORS_CSV   = os.path.join(DATA_DIR, "errors.csv")
+AUTH_CSV     = os.path.join(DATA_DIR, "auth_events.csv")
 ANALYSES_CSV = os.path.join(DATA_DIR, "analyses.csv")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}           # logo types
-DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}  # upload types
+ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}           # logo types
+DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}      # upload types
 
 # Initialize CSV headers if missing
 if not os.path.exists(AUTH_CSV):
@@ -213,47 +211,94 @@ domestic situations, financial status, or schedule flexibility.
 reinforce stereotypes. 
  
 Bias Detection Rules 
-1.Context Check for Legal/Program/Framework Names​ 
+1.Context Check for Legal/Program/Framework Names​
 Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
 “Book of Matthew”) unless context shows discriminatory or exclusionary framing. 
 Maintain a whitelist of common compliance/legal/religious/program titles. 
-2.Framework Awareness​ 
+2.Framework Awareness​
 If flagged bias appears in a legal, religious, or defined-framework text, explicitly note: 
 “This operates within [Framework X]. Interpret accordingly.” 
-3.Multi-Pass Detection​ 
+3.Multi-Pass Detection​
 After initial bias identification, re-check text for secondary or overlapping bias types. If 
 multiple categories apply, bias score must reflect combined severity. 
-4.False Positive Reduction​ 
+4.False Positive Reduction​
 Avoid flagging mild cultural references, standard course descriptions, or neutral 
 institutional references unless paired with exclusionary framing. 
-5.Terminology Neutralization​ 
+5.Terminology Neutralization​
 Always explain terms like bias, lens, perspective in context to avoid appearing 
 accusatory. Frame as descriptive, not judgmental. 
-6.Objective vs. Subjective Distinction​ 
-Distinguish between objective truth claims and subjective statements. 
-7.Contextual Definition Layer​ 
-For each flagged word/phrase, provide contextual vs general meaning. 
-8.Fact-Checking and Accurate Attribution​ 
-Ensure accurate grouping and attribution; note uncertainty if unsure. 
+6.Objective vs. Subjective Distinction​
+Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
+and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
+errors. 
+7.Contextual Definition Layer​
+For each flagged word/phrase, provide: 
+oContextual meaning (in this sentence) 
+oGeneral meaning (dictionary/neutral usage) 
+8.Fact-Checking and Accurate Attribution​
+When listing or referencing individuals, schools of thought, or intellectual traditions, the 
+model must fact-check groupings and associations to ensure accuracy. 
+oDo not misclassify individuals into categories they do not belong to. 
+oEnsure representation is accurate and balanced. 
+oInclude only figures who genuinely belong to referenced groups. 
+oIf uncertain, either omit or note uncertainty explicitly. 
+🔄 Alternative Wordings for this safeguard: 
+oAccurate Attribution Safeguard 
+oFactual Integrity in Grouping 
+oRepresentation with Accuracy 
 9.Legal and Compliance Neutrality Rule 
-If text factually reports a law/compliance requirement without evaluative framing → No Bias | 0.00. 
-Bias only if institutional language introduces exclusionary framing.
+oIf a text objectively reports a law, regulation, or compliance requirement without 
+evaluative, judgmental, or exclusionary framing, it must not be scored as 
+biased. 
+oIn such cases, the output should explicitly state: “This text factually reports a 
+legal/compliance requirement. No bias detected.” 
+oBias should only be flagged if the institution’s language about the law 
+introduces exclusionary framing (e.g., endorsing, mocking, or amplifying 
+restrictions beyond compliance). 
+oExample: 
+✅ Neutral → “The state budget prohibits DEI-related initiatives. The university is reviewing policies to ensure compliance.” → No Bias | Score: 0.00 
+⚠️ Biased → “The state budget wisely prohibits unnecessary DEI initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 0.00 
  
 Severity Score Mapping (Fixed) 
-If no bias → No | 🟢 0.00 
-If any bias → Yes | > 0.00, thresholded: Low 0.01–0.35 · Medium 0.36–0.69 · High 0.70–1.00 
+Bias Detection Logic 
+∙If no bias is present: 
+  Bias Detected: No 
+  Bias Score: 🟢 No Bias | Score: 0.00 
+  No bias types, phrases, or revisions should be listed. 
+∙If any bias is present (even subtle/low): 
+  Bias Detected: Yes 
+  Bias Score: Must be > 0.00, aligned to severity thresholds. 
+  Explanation must clarify why the score is not 0.00. 
+Strict Thresholds — No Exceptions 
+∙🟢 No Bias → 0.00 (includes factual legal/compliance reporting). 
+∙🟢 Low Bias → 0.01 – 0.35 
+∙🟡 Medium Bias → 0.36 – 0.69 
+∙🔴 High Bias → 0.70 – 1.00 
+∙If Bias Detected = No → Score must = 0.00. 
+∙If Score > 0.00 → Bias Detected must = Yes. 
  
-Output Format (Strict)
-1. Bias Detected (Yes/No)
-2. Bias Score (emoji + label + 0.00 format)
-3. Type(s) of Bias (bullets)
-4. Biased Phrases or Terms (bullets, quotes)
-5. Bias Summary (2–4 sentences)
-6. Explanation (bullets linking phrase→category)
-7. Contextual Definitions
-8. Framework Awareness Note (if applicable)
-9. Suggested Revisions (clear, actionable)
-10. Interpretation of Score (1 short paragraph)
+AXIS-AI Bias Evaluation Reference 
+∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually justified. 
+∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate barriers or reinforce stereotypes. 
+∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, inclusion, or accessibility. 
+ 
+Output Format (Strict) 
+1. Bias Detected: Yes/No 
+2. Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 0.55) 
+3. Type(s) of Bias: Bullet list of all that apply 
+4. Biased Phrases or Terms: Bullet list of direct quotes from the text 
+5. Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
+6. Explanation: Bullet points linking each biased phrase to its bias category 
+7. Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. general meaning 
+8. Framework Awareness Note (if applicable): If text is within a legal, religious, or cultural framework, note it here 
+9. Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
+10. 📊 Interpretation of Score: One short paragraph clarifying why the score falls within its range (Low/Medium/High/None) and how the balance between inclusivity and bias was assessed. If the text is a factual legal/compliance report, explicitly state that no bias is present for this reason. 
+ 
+Revision Guidance 
+∙Maintain academic tone and intent. 
+∙Replace exclusionary terms with inclusive equivalents. 
+∙Avoid prestige or demographic restrictions unless academically necessary. 
+∙Suggestions must be clear, actionable, and directly tied to flagged issues.
 """.strip()
 
 # ================= Utilities =================
@@ -288,12 +333,6 @@ def _gen_internal_report_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d")
     rand = secrets.token_hex(4).upper()
     return f"AX-{ts}-{rand}"
-
-def allowed_file(fn: str) -> bool:
-    return "." in fn and fn.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def allowed_doc(fn: str) -> bool:
-    return "." in fn and fn.rsplit(".", 1)[1].lower() in DOC_ALLOWED_EXTENSIONS
 
 def _safe_decode(b: bytes) -> str:
     for enc in ("utf-8", "utf-16", "latin-1"):
@@ -468,7 +507,7 @@ st.markdown(
         font-size: 0.95rem !important;
         font-weight: 400 !important;           /* not bold */
         text-align: center !important;
-        width: 100% !important;                /* align across columns */
+        width: 100% !important;                /* align level across columns */
     }
 
     /* Hover */
@@ -485,10 +524,6 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
-
-# Optional boot line (only for admins)
-if st.session_state.get("is_admin", False):
-    st.info(f"Boot OK • Model: {MODEL} • Key loaded: {'yes' if (getattr(settings,'openai_api_key','') or os.environ.get('OPENAI_API_KEY')) else 'no'}")
 
 # Header with logo + tagline (centered title)
 col_logo, col_title = st.columns([1, 6])
@@ -507,7 +542,7 @@ with col_logo:
 with col_title:
     st.markdown("<h1 style='text-align:center;margin:0;'>Veritas — Pilot Test</h1>", unsafe_allow_html=True)
     if CURRENT_TAGLINE:
-        st.caption("Designed for Empowerment, Not Influence")
+        st.caption(CURRENT_TAGLINE)
 
 # Session request_id
 if "request_id" not in st.session_state:
@@ -517,7 +552,6 @@ if "request_id" not in st.session_state:
 st.session_state.setdefault("authed", False)
 st.session_state.setdefault("history", [])     # ONLY assistant messages stored here
 st.session_state.setdefault("last_reply", "")
-st.session_state.setdefault("is_admin", False)
 st.session_state.setdefault("user_input_box", "")
 st.session_state.setdefault("_clear_text_box", False)
 
@@ -567,76 +601,20 @@ elif not APP_PASSWORD:
     log_auth_event("login_success", True, login_id="", credential_label="NO_PASSWORD")
     st.session_state["authed"] = True
 
-# ================= Sidebar (reordered) =================
+# ================= Sidebar (admin controls hidden) =================
 with st.sidebar:
     # Logout at the very top
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","is_admin","login_id","user_input_box","_clear_text_box"):
+        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box"):
             st.session_state.pop(k, None)
         st.rerun()
 
     st.subheader("Session")
     st.write(f"Report time zone: **{PILOT_TZ_NAME}**")
 
-    # Spacer to push admin controls to bottom
-    st.markdown("<div style='height: 40vh;'></div>", unsafe_allow_html=True)
-
-    # Bottom-pinned admin controls
-    if st.button("Lock Admin"):
-        st.session_state["is_admin"] = False
-        st.rerun()
-
-    with st.expander("Admin unlock"):
-        key = st.text_input("Enter admin key", type="password")
-        if st.button("Unlock"):
-            if ADMIN_KEY and key and key == ADMIN_KEY:
-                st.session_state["is_admin"] = True
-                st.success("Admin unlocked")
-            else:
-                st.error("Invalid key")
-
-# Branding (admin)
-if st.session_state["is_admin"]:
-    st.divider()
-    st.subheader("Branding (Admin)")
-    new_tag = st.text_input("Slogan / tagline", value=CURRENT_TAGLINE, help="Leave blank to hide.")
-    logo_file = st.file_uploader("Logo (PNG/JPG/WebP)", type=["png","jpg","jpeg","webp"])
-    colA, colB = st.columns(2)
-    with colA:
-        if st.button("Save tagline"):
-            CURRENT_TAGLINE = (new_tag or "").strip()
-            st.success("Tagline saved (reload to see in header).")
-    with colB:
-        if st.button("Remove logo"):
-            if CURRENT_LOGO_FILENAME:
-                try:
-                    os.remove(os.path.join(UPLOAD_FOLDER, CURRENT_LOGO_FILENAME))
-                except Exception:
-                    pass
-                CURRENT_LOGO_FILENAME = None
-                st.success("Logo removed (reload to see effect).")
-    if logo_file is not None:
-        ext = (logo_file.name.rsplit(".",1)[-1] or "").lower()
-        if ext not in ALLOWED_EXTENSIONS:
-            st.error("Unsupported file type. Use PNG/JPG/WebP.")
-        else:
-            filename = f"logo.{ext}"
-            path = os.path.join(UPLOAD_FOLDER, filename)
-            for existing in os.listdir(UPLOAD_FOLDER):
-                if existing.lower().startswith("logo."):
-                    try:
-                        os.remove(os.path.join(UPLOAD_FOLDER, existing))
-                    except Exception:
-                        pass
-            with open(path, "wb") as f:
-                f.write(logo_file.getbuffer())
-            CURRENT_LOGO_FILENAME = filename
-            st.success("Logo uploaded (reload to see in header).")
-
-st.divider()
-
 # ===== Chat / Analysis UI =====
+st.divider()
 st.subheader("Bias Analysis")
 
 # Clear text box only after a completed run
@@ -928,7 +906,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
 
 
 
