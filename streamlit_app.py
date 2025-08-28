@@ -1,4 +1,4 @@
-# streamlit_app.py  — Veritas (Streamlit)
+# streamlit_app.py — Veritas (Streamlit)
 import os
 import io
 import csv
@@ -39,13 +39,20 @@ except Exception:
     SimpleDocTemplate = None  # will error politely if missing
 
 # ================= Updated Config (via config.py) =================
-from config import load_settings
-settings = load_settings()  # requires OPENAI_API_KEY in Secrets
+# Provide a minimal loader fallback if you don't have config.py
+try:
+    from config import load_settings
+    settings = load_settings()  # requires OPENAI_API_KEY available to it
+except Exception:
+    class _FallbackSettings:
+        openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        openai_model = os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo-0125")
+        auth_log_ttl_days = int(os.environ.get("AUTH_LOG_TTL_DAYS", "365"))
+    settings = _FallbackSettings()
 
-# ================= App constants from secrets/env (with safe defaults) =================
+# ================= App constants from secrets/env =================
 APP_TITLE = os.environ.get("APP_TITLE", "Veritas — Pilot Test")
-
-MODEL = settings.openai_model
+MODEL = getattr(settings, "openai_model", os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo-0125"))
 try:
     TEMPERATURE = float(os.environ.get("OPENAI_TEMPERATURE", "0.2"))
 except Exception:
@@ -53,7 +60,7 @@ except Exception:
 
 ADMIN_KEY = os.environ.get("BRAND_ADMIN_PASSWORD", "")
 
-# --- Safe timezone loader (prevents white screen if TZ is wrong) ---
+# --- Safe timezone loader ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
     try:
         return ZoneInfo(name)
@@ -63,33 +70,6 @@ def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
 PILOT_TZ_NAME = os.environ.get("VERITAS_TZ", "America/Denver")
 PILOT_TZ = _safe_zoneinfo(PILOT_TZ_NAME, "UTC")
 PILOT_START_AT = os.environ.get("PILOT_START_AT", "")  # e.g., "2025-09-15 08:00" or ISO
-
-# Rates / windows
-RATE_LIMIT_LOGIN = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
-RATE_LIMIT_CHAT = int(os.environ.get("RATE_LIMIT_CHAT", "6"))
-RATE_LIMIT_EXTRACT = int(os.environ.get("RATE_LIMIT_EXTRACT", "6"))
-RATE_LIMIT_WINDOW_SEC = int(os.environ.get("RATE_LIMIT_WINDOW_SEC", "60"))
-
-# Uploads
-try:
-    MAX_UPLOAD_MB = float(os.environ.get("MAX_UPLOAD_MB", "10"))
-except Exception:
-    MAX_UPLOAD_MB = 10.0
-
-# TTLs (days)
-AUTH_LOG_TTL_DAYS = int(os.environ.get("AUTH_LOG_TTL_DAYS", str(settings.auth_log_ttl_days)))
-ANALYSES_LOG_TTL_DAYS = int(os.environ.get("ANALYSES_LOG_TTL_DAYS", "365"))
-FEEDBACK_LOG_TTL_DAYS = int(os.environ.get("FEEDBACK_LOG_TTL_DAYS", "365"))
-ERRORS_LOG_TTL_DAYS = int(os.environ.get("ERRORS_LOG_TTL_DAYS", "365"))
-
-# SendGrid (optional)
-SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
-SENDGRID_TO = os.environ.get("SENDGRID_TO", "")
-SENDGRID_FROM = os.environ.get("SENDGRID_FROM", "")
-SENDGRID_SUBJECT = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
-
-# Password gate (optional)
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 def _parse_pilot_start_to_utc(s: str):
     if not s:
@@ -115,6 +95,34 @@ def pilot_started() -> bool:
         return True
     return datetime.now(timezone.utc) >= PILOT_START_UTC
 
+# Rates / windows
+RATE_LIMIT_LOGIN = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
+RATE_LIMIT_CHAT = int(os.environ.get("RATE_LIMIT_CHAT", "6"))
+RATE_LIMIT_EXTRACT = int(os.environ.get("RATE_LIMIT_EXTRACT", "6"))
+RATE_LIMIT_WINDOW_SEC = int(os.environ.get("RATE_LIMIT_WINDOW_SEC", "60"))
+
+# Uploads
+try:
+    MAX_UPLOAD_MB = float(os.environ.get("MAX_UPLOAD_MB", "10"))
+except Exception:
+    MAX_UPLOAD_MB = 10.0
+MAX_EXTRACT_CHARS = int(os.environ.get("MAX_EXTRACT_CHARS", "50000"))
+
+# TTLs (days)
+AUTH_LOG_TTL_DAYS = int(os.environ.get("AUTH_LOG_TTL_DAYS", str(getattr(settings, "auth_log_ttl_days", 365))))
+ANALYSES_LOG_TTL_DAYS = int(os.environ.get("ANALYSES_LOG_TTL_DAYS", "365"))
+FEEDBACK_LOG_TTL_DAYS = int(os.environ.get("FEEDBACK_LOG_TTL_DAYS", "365"))
+ERRORS_LOG_TTL_DAYS = int(os.environ.get("ERRORS_LOG_TTL_DAYS", "365"))
+
+# SendGrid (optional)
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+SENDGRID_TO = os.environ.get("SENDGRID_TO", "")
+SENDGRID_FROM = os.environ.get("SENDGRID_FROM", "")
+SENDGRID_SUBJECT = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
+
+# Password gate (optional)
+APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
 # Storage / branding
 BASE_DIR = os.path.dirname(__file__)
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -129,7 +137,6 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}           # logo types
 DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}  # upload types
-MAX_EXTRACT_CHARS = int(os.environ.get("MAX_EXTRACT_CHARS", "50000"))
 
 # Initialize CSV headers if missing
 if not os.path.exists(AUTH_CSV):
@@ -173,9 +180,7 @@ if os.path.isdir(UPLOAD_FOLDER):
 STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 
 # ===== Identity + Veritas Prompts =====
-IDENTITY_PROMPT = (
-    "I'm Veritas — a bias detection tool."
-)
+IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
 
 DEFAULT_SYSTEM_PROMPT = """
 You are a language and bias detection expert trained to analyze academic documents for both 
@@ -184,7 +189,7 @@ any accompanying charts, graphs, or images — to identify elements that may be 
 biased, or create barriers for individuals from underrepresented or marginalized groups.​ 
 In addition, provide contextual definitions and framework awareness to improve user literacy 
 and reduce false positives. 
-
+ 
 Bias Categories (with academic context) 
 ∙Gendered language: Words or phrases that assume or privilege a specific gender identity 
 (e.g., “chairman,” “he”). 
@@ -206,33 +211,33 @@ barriers.
 domestic situations, financial status, or schedule flexibility. 
 ∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
 reinforce stereotypes. 
-
+ 
 Bias Detection Rules 
-1.Context Check for Legal/Program/Framework Names​ 
+1.Context Check for Legal/Program/Framework Names​
 Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
 “Book of Matthew”) unless context shows discriminatory or exclusionary framing. 
 Maintain a whitelist of common compliance/legal/religious/program titles. 
-2.Framework Awareness​ 
+2.Framework Awareness​
 If flagged bias appears in a legal, religious, or defined-framework text, explicitly note: 
 “This operates within [Framework X]. Interpret accordingly.” 
-3.Multi-Pass Detection​ 
+3.Multi-Pass Detection​
 After initial bias identification, re-check text for secondary or overlapping bias types. If 
 multiple categories apply, bias score must reflect combined severity. 
-4.False Positive Reduction​ 
+4.False Positive Reduction​
 Avoid flagging mild cultural references, standard course descriptions, or neutral 
 institutional references unless paired with exclusionary framing. 
-5.Terminology Neutralization​ 
+5.Terminology Neutralization​
 Always explain terms like bias, lens, perspective in context to avoid appearing 
 accusatory. Frame as descriptive, not judgmental. 
-6.Objective vs. Subjective Distinction​ 
+6.Objective vs. Subjective Distinction​
 Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
 and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
 errors. 
-7.Contextual Definition Layer​ 
+7.Contextual Definition Layer​
 For each flagged word/phrase, provide: 
 oContextual meaning (in this sentence) 
 oGeneral meaning (dictionary/neutral usage) 
-8.Fact-Checking and Accurate Attribution​ 
+8.Fact-Checking and Accurate Attribution​
 When listing or referencing individuals, schools of thought, or intellectual traditions, the 
 model must fact-check groupings and associations to ensure accuracy. 
 oDo not misclassify individuals into categories they do not belong to. 
@@ -253,23 +258,19 @@ oBias should only be flagged if the institution’s language about the law
 introduces exclusionary framing (e.g., endorsing, mocking, or amplifying 
 restrictions beyond compliance). 
 oExample: 
-✅ Neutral → “The state budget prohibits DEI-related initiatives. The 
-university is reviewing policies to ensure compliance.” → No Bias | 
-Score: 0.00 
-⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
-initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
-0.00 
-
+✅ Neutral → “The state budget prohibits DEI-related initiatives. The university is reviewing policies to ensure compliance.” → No Bias | Score: 0.00 
+⚠️ Biased → “The state budget wisely prohibits unnecessary DEI initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 0.00 
+ 
 Severity Score Mapping (Fixed) 
 Bias Detection Logic 
 ∙If no bias is present: 
-oBias Detected: No 
-oBias Score: 🟢 No Bias | Score: 0.00 
-oNo bias types, phrases, or revisions should be listed. 
+  Bias Detected: No 
+  Bias Score: 🟢 No Bias | Score: 0.00 
+  No bias types, phrases, or revisions should be listed. 
 ∙If any bias is present (even subtle/low): 
-oBias Detected: Yes 
-oBias Score: Must be > 0.00, aligned to severity thresholds. 
-oExplanation must clarify why the score is not 0.00. 
+  Bias Detected: Yes 
+  Bias Score: Must be > 0.00, aligned to severity thresholds. 
+  Explanation must clarify why the score is not 0.00. 
 Strict Thresholds — No Exceptions 
 ∙🟢 No Bias → 0.00 (includes factual legal/compliance reporting). 
 ∙🟢 Low Bias → 0.01 – 0.35 
@@ -277,33 +278,24 @@ Strict Thresholds — No Exceptions
 ∙🔴 High Bias → 0.70 – 1.00 
 ∙If Bias Detected = No → Score must = 0.00. 
 ∙If Score > 0.00 → Bias Detected must = Yes. 
-
+ 
 AXIS-AI Bias Evaluation Reference 
-∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
-justified. 
-∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate 
-barriers or reinforce stereotypes. 
-∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
-inclusion, or accessibility. 
-
+∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually justified. 
+∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate barriers or reinforce stereotypes. 
+∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, inclusion, or accessibility. 
+ 
 Output Format (Strict) 
-1.Bias Detected: Yes/No 
-2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
-0.55) 
-3.Type(s) of Bias: Bullet list of all that apply 
-4.Biased Phrases or Terms: Bullet list of direct quotes from the text 
-5.Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
-6.Explanation: Bullet points linking each biased phrase to its bias category 
-7.Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. 
-general meaning 
-8.Framework Awareness Note (if applicable): If text is within a legal, religious, or 
-cultural framework, note it here 
-9.Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
-10.📊 Interpretation of Score: One short paragraph clarifying why the score falls within 
-its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
-was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
-is present for this reason. 
-
+1. Bias Detected: Yes/No 
+2. Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 0.55) 
+3. Type(s) of Bias: Bullet list of all that apply 
+4. Biased Phrases or Terms: Bullet list of direct quotes from the text 
+5. Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
+6. Explanation: Bullet points linking each biased phrase to its bias category 
+7. Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. general meaning 
+8. Framework Awareness Note (if applicable): If text is within a legal, religious, or cultural framework, note it here 
+9. Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
+10. 📊 Interpretation of Score: One short paragraph clarifying why the score falls within its range (Low/Medium/High/None) and how the balance between inclusivity and bias was assessed. If the text is a factual legal/compliance report, explicitly state that no bias is present for this reason. 
+ 
 Revision Guidance 
 ∙Maintain academic tone and intent. 
 ∙Replace exclusionary terms with inclusive equivalents. 
@@ -370,15 +362,16 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                 parts.append(page.extract_text() or "")
             except Exception:
                 continue
-        return "\n\n".join(parts)
+        return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
     elif ext == "docx":
         if docx is None:
             return ""
         buf = io.BytesIO(file_bytes)
         doc_obj = docx.Document(buf)
-        return "\n".join(p.text for p in doc_obj.paragraphs)
+        text = "\n".join(p.text for p in doc_obj.paragraphs)
+        return text[:MAX_EXTRACT_CHARS]
     elif ext in ("txt", "md", "csv"):
-        return _safe_decode(file_bytes)
+        return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
     return ""
 
 # ---- Error logging + unified user message ----
@@ -405,9 +398,6 @@ def network_error():
 
 # ---- Rate limit (per session) ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
-    """
-    Returns True if ALLOWED; False if limited.
-    """
     dq_map = st.session_state.setdefault("_rate_map", {})
     dq = dq_map.get(key)
     now = time.time()
@@ -423,7 +413,6 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq.append(now)
     return True
 
-# ---- CSV logs ----
 def log_auth_event(event_type: str, success: bool, login_id: str = "", credential_label: str = "APP_PASSWORD", attempted_secret: Optional[str] = None):
     try:
         ts = datetime.now(timezone.utc).isoformat()
@@ -443,14 +432,14 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
         print("Auth log error:", repr(e))
         return None
 
-def log_analysis(public_id: str, internal_id: str, messages_obj: list, assistant_text: str):
+def log_analysis(public_id: str, internal_id: str, assistant_text: str):
     try:
         ts = datetime.now(timezone.utc).isoformat()
         sid = _get_sid()
         login_id = st.session_state.get("login_id", "")
         addr = "streamlit"
         ua = "streamlit"
-        conv_obj = {"messages": messages_obj, "assistant_reply": assistant_text}
+        conv_obj = {"assistant_reply": assistant_text}
         conv_json = json.dumps(conv_obj, ensure_ascii=False)
         conv_chars = len(conv_json)
         row = [ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json]
@@ -495,40 +484,45 @@ _prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 
 # ================= Streamlit UI =================
-# 1) MUST be the first Streamlit call:
+# 1) Must be first Streamlit call:
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
-# 2) Global font + button CSS (Inter headers, bronze-orange buttons)
+# 2) Global font + button CSS (Inter + bronze-orange)
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@600;700&family=Raleway:wght@400&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
 
-    html, body, [class*="css"] { font-family: 'Raleway', sans-serif !important; }
-    h1, h2, h3, .stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
-        font-family: 'Inter', sans-serif !important;
-        font-weight: 700 !important;
-        text-align: center;  /* center the main header */
+    /* Global font */
+    html, body, [class*="css"] {
+        font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
     }
-    section[data-testid="stSidebar"] * { font-family: 'Raleway', sans-serif !important; }
 
-    /* Bronze-orange buttons (incl. form submit + download + uploader button) */
+    /* Bronze-blue background + tidy container (optional)
+    body { background: #0B1726 !important; } */
+
+    /* Bronze-orange buttons everywhere, including submit/download/uploader */
     div.stButton > button,
     div.stDownloadButton > button,
-    .stForm [type=submit],
-    [data-testid="stFileUploader"] section div div span button {
-        background-color: #FF8C32 !important;
-        color: #111418 !important;
+    [data-testid="stFileUploader"] section div div span button,
+    .stForm [type="submit"],
+    button[kind="primary"], button[kind="secondary"],
+    [data-testid="baseButton-secondary"], [data-testid="baseButton-primary"] {
+        background-color: #FF8C32 !important; /* bronze orange */
+        color: #111418 !important;             /* dark text for contrast */
         border: 1px solid #FF8C32 !important;
-        box-shadow: none !important;
-        padding: 0.25rem 0.75rem !important;
-        font-size: 0.875rem !important;
         border-radius: 0.5rem !important;
+        box-shadow: none !important;
+        padding: 0.45rem 0.9rem !important;
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
     }
     div.stButton > button:hover,
     div.stDownloadButton > button:hover,
-    .stForm [type=submit]:hover,
-    [data-testid="stFileUploader"] section div div span button:hover {
+    [data-testid="stFileUploader"] section div div span button:hover,
+    .stForm [type="submit"]:hover,
+    button[kind="primary"]:hover, button[kind="secondary"]:hover,
+    [data-testid="baseButton-secondary"]:hover, [data-testid="baseButton-primary"]:hover {
         background-color: #E97C25 !important;
         border-color: #E97C25 !important;
     }
@@ -537,12 +531,12 @@ st.markdown(
     unsafe_allow_html=True
 )
 
+# Optional boot line (only for admins)
 if st.session_state.get("is_admin", False):
-    st.info(f"Boot OK • Model: {MODEL} • Key loaded: {'yes' if os.environ.get('OPENAI_API_KEY') else 'no'}")
+    st.info(f"Boot OK • Model: {MODEL} • Key loaded: {'yes' if (getattr(settings,'openai_api_key','') or os.environ.get('OPENAI_API_KEY')) else 'no'}")
 
-# Top header with logo + tagline
+# Header with logo + tagline (centered title)
 col_logo, col_title = st.columns([1, 6])
-
 with col_logo:
     logo_path = None
     if CURRENT_LOGO_FILENAME:
@@ -556,9 +550,9 @@ with col_logo:
             pass
 
 with col_title:
-    st.title("Veritas — Pilot Test")
+    st.markdown("<h1 style='text-align:center;margin:0;'>Veritas — Pilot Test</h1>", unsafe_allow_html=True)
     if CURRENT_TAGLINE:
-        st.caption(CURRENT_TAGLINE)
+        st.caption("Designed for Empowerment, Not Influence")
 
 # Session request_id
 if "request_id" not in st.session_state:
@@ -566,11 +560,11 @@ if "request_id" not in st.session_state:
 
 # Auth/session state init
 st.session_state.setdefault("authed", False)
-st.session_state.setdefault("history", [])     # list of {role, content}
+st.session_state.setdefault("history", [])     # ONLY assistant messages stored here
 st.session_state.setdefault("last_reply", "")
 st.session_state.setdefault("is_admin", False)
-st.session_state.setdefault("user_input_box", "")  # -- controls the text area value
-st.session_state.setdefault("_last_user_lengths", {"typed": 0, "file_chars": 0, "file_pages": 0})
+st.session_state.setdefault("user_input_box", "")
+st.session_state.setdefault("_clear_text_box", False)
 
 # Pilot countdown
 if not pilot_started():
@@ -637,7 +631,7 @@ with st.sidebar:
 
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","is_admin","login_id"):
+        for k in ("authed","history","last_reply","is_admin","login_id","user_input_box","_clear_text_box"):
             st.session_state.pop(k, None)
         st.rerun()
 
@@ -681,50 +675,26 @@ if st.session_state["is_admin"]:
 
 st.divider()
 
-# ===== Helpers to hide user text in UI & exports =====
-def _summarize_user_input(typed_text: str, file_chars: int, file_pages: int) -> str:
-    parts = []
-    if typed_text:
-        parts.append(f"[User text hidden — {len(typed_text)} characters]")
-    if file_chars > 0:
-        if file_pages > 0:
-            parts.append(f"[File text hidden — ~{file_pages} pages]")
-        else:
-            parts.append(f"[File text hidden — {file_chars} characters]")
-    if not parts:
-        parts.append("[No content submitted]")
-    return " ".join(parts)
-
 # ===== Chat / Analysis UI =====
 st.subheader("Bias Analysis")
 
-# --- CLEAR FLAG: run this BEFORE rendering the text area ---
+# Clear text box only after a completed run
 if st.session_state.get("_clear_text_box", False):
-    # reset flag and clear the widget state before the widget is created
-    st.session_state["_clear_text_box"] = False
-    st.session_state["user_input_box"] = ""
-    
-# --- Clear flag & defaults for user input box ---
-st.session_state.setdefault("user_input_box", "")
-if st.session_state.get("_clear_text_box", False):
-    # Clear on next run
     st.session_state["_clear_text_box"] = False
     st.session_state["user_input_box"] = ""
 
 with st.form("analysis_form"):
-    # Controlled text area (NO value=, only key)
     st.text_area(
         "Paste or type text to analyze",
         height=180,
         key="user_input_box",
+        help="Your pasted content is used for analysis but won’t be printed below—only the bias report appears."
     )
-
     doc = st.file_uploader(
         f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
         type=list(DOC_ALLOWED_EXTENSIONS),
         accept_multiple_files=False
     )
-
     submitted = st.form_submit_button("Analyze")
 
     if submitted:
@@ -732,13 +702,9 @@ with st.form("analysis_form"):
             network_error()
             st.stop()
 
-        # ✅ Read the text that user typed from session_state
+        # Gather inputs
         user_text = st.session_state.get("user_input_box", "").strip()
-
         extracted = ""
-        file_chars = 0
-        approx_pages = 0
-
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
             if size_mb > MAX_UPLOAD_MB:
@@ -746,105 +712,64 @@ with st.form("analysis_form"):
                 st.stop()
             try:
                 with st.spinner("Extracting…"):
-                    raw = doc.getvalue()
-                    if (doc.name or "").lower().endswith(".pdf") and PdfReader is not None:
-                        try:
-                            reader = PdfReader(io.BytesIO(raw))
-                            approx_pages = len(reader.pages)
-                        except Exception:
-                            approx_pages = 0
-                    extracted = extract_text_from_file(raw, doc.name)
+                    extracted = extract_text_from_file(doc.getvalue(), doc.name)
                     extracted = (extracted or "").strip()
-                    file_chars = len(extracted)
-                    if not extracted and not user_text:
-                        st.error("No extractable text found.")
-                        st.stop()
             except Exception as e:
                 log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
                 network_error()
                 st.stop()
 
-        final_input = user_text
-        if extracted:
-            final_input = (final_input + ("\n\n" if final_input else "") + extracted).strip()
-
+        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
         if not final_input:
             st.error("Please enter some text or upload a document.")
             st.stop()
 
-        # Masked summary for history
-        st.session_state["_last_user_lengths"] = {
-            "typed": len(user_text),
-            "file_chars": file_chars,
-            "file_pages": approx_pages,
-        }
-
-        def _summarize_user_input(typed_text: str, file_chars: int, file_pages: int) -> str:
-            parts = []
-            if typed_text:
-                parts.append(f"[User text hidden — {len(typed_text)} characters]")
-            if file_chars > 0:
-                if file_pages > 0:
-                    parts.append(f"[File text hidden — ~{file_pages} pages]")
-                else:
-                    parts.append(f"[File text hidden — {file_chars} characters]")
-            if not parts:
-                parts.append("[No content submitted]")
-            return " ".join(parts)
-
-        masked_user_line = _summarize_user_input(user_text, file_chars, approx_pages)
-        st.session_state["history"].append({"role": "user", "content": masked_user_line})
-
-        messages = [
-            {"role": "system", "content": IDENTITY_PROMPT},
-            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-            {"role": "user", "content": final_input},
-        ]
-
+        # Call model (do NOT show user text in the UI; only keep assistant's reply)
         try:
             with st.spinner("Analyzing…"):
-                client = OpenAI(api_key=settings.openai_api_key)
+                client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
                 resp = client.chat.completions.create(
                     model=MODEL,
                     temperature=TEMPERATURE,
-                    messages=messages,
+                    messages=[
+                        {"role": "system", "content": IDENTITY_PROMPT},
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        {"role": "user", "content": final_input},
+                    ],
                 )
                 model_reply = resp.choices[0].message.content or ""
         except Exception as e:
-            if st.session_state["history"] and st.session_state["history"][-1]["role"] == "user":
-                st.session_state["history"].pop()
             log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
             network_error()
             st.stop()
 
+        # Prepare report-only output
         public_report_id = _gen_public_report_id()
         internal_report_id = _gen_internal_report_id()
-        header = f"📄 Report ID: {public_report_id}"
-        decorated_reply = f"{header}\n\n{model_reply}".strip()
+        decorated_reply = f"📄 Report ID: {public_report_id}\n\n{model_reply}".strip()
 
-        st.session_state["history"].append({"role": "assistant", "content": decorated_reply})
+        # Save only the assistant reply in visible history
+        st.session_state["history"].append({"role":"assistant","content":decorated_reply})
         st.session_state["last_reply"] = decorated_reply
 
+        # Persist analysis snapshot (only assistant content)
         try:
-            log_analysis(public_report_id, internal_report_id, messages, decorated_reply)
+            log_analysis(public_report_id, internal_report_id, decorated_reply)
         except Exception as e:
             log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
-        # ✅ clear the input box next run
+        # Clear input box on next render
         st.session_state["_clear_text_box"] = True
         st.rerun()
 
-# Conversation transcript (never show raw user text)
+# ===== Bias Report (ONLY assistant output) =====
 if st.session_state["history"]:
-    st.write("### Conversation")
+    st.write("### Bias Report")
     for msg in st.session_state["history"]:
-        if msg["role"] == "user":
-            # Already masked line like: [User text hidden — 12345 characters] […]
-            st.markdown(f"**You:**\n\n{msg['content']}")
-        elif msg["role"] == "assistant":
-            st.markdown(f"**Veritas:**\n\n{msg['content']}")
+        if msg["role"] == "assistant":
+            st.markdown(msg["content"])
 
-# Download last reply as PDF
+# ===== Download last reply as PDF =====
 def build_pdf_bytes(content: str) -> bytes:
     if SimpleDocTemplate is None:
         raise RuntimeError("PDF engine not available. Install 'reportlab'.")
@@ -893,14 +818,12 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     if st.session_state["history"]:
-        # Build masked transcript text for clipboard/export
-        lines = []
+        # Build transcript consisting ONLY of assistant outputs
+        transcript = []
         for m in st.session_state["history"]:
-            if m["role"] == "user":
-                lines.append("User: " + m["content"])  # masked already
-            else:
-                lines.append("Assistant: " + m["content"])
-        full_conversation = "\n\n".join(lines)
+            if m["role"] == "assistant":
+                transcript.append("Assistant: " + m["content"])
+        full_conversation = "\n\n".join(transcript)
 
         components.html(
             f"""
@@ -911,24 +834,22 @@ with col1:
     background: #FF8C32;
     color: #111418;
     border: 1px solid #FF8C32;
-    padding: 0.25rem 0.75rem;
+    padding: 0.45rem 0.9rem;
     border-radius: 0.5rem;
-    font-size: 0.875rem;
+    font-size: 0.95rem;
+    font-weight: 600;
     line-height: 1.6;
     font-family: inherit;
   }}
-  .copy-btn:hover {{ background: #E97C25; border-color: #E97C25; }}
+  .copy-btn:hover {{ background:#E97C25; border-color:#E97C25; }}
   .copy-note {{ font-size: 12px; opacity: .75; margin-top: 6px; }}
 </style>
-
-<button id="copyBtn" class="copy-btn">Copy conversation</button>
+<button id="copyBtn" class="copy-btn">Copy report</button>
 <div id="copyNote" class="copy-note" style="display:none;">Copied ✓</div>
-
 <script>
   const text = {json.dumps(full_conversation)};
   const btn = document.getElementById("copyBtn");
   const note = document.getElementById("copyNote");
-
   btn.addEventListener("click", async () => {{
     try {{
       await navigator.clipboard.writeText(text);
@@ -954,11 +875,10 @@ with col1:
         )
 
 with col2:
-    if st.button("Clear conversation"):
+    if st.button("Clear report"):
         st.session_state["history"] = []
         st.session_state["last_reply"] = ""
-        st.session_state["_last_user_lengths"] = {"typed": 0, "file_chars": 0, "file_pages": 0}
-        st.success("Conversation cleared ✓")
+        st.success("Report cleared ✓")
 with col3:
     if st.session_state.get("last_reply"):
         try:
@@ -973,7 +893,7 @@ with col3:
             log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
             st.error("network error")
 
-# Feedback
+# ===== Feedback (stores only assistant content in transcript) =====
 st.divider()
 st.subheader("Feedback")
 with st.form("feedback_form"):
@@ -990,11 +910,10 @@ with st.form("feedback_form"):
             st.error("Please enter a valid email.")
             st.stop()
 
+        # transcript includes only assistant output
         lines = []
         for m in st.session_state["history"]:
-            if m["role"] == "user":
-                lines.append("User: " + m["content"])  # masked
-            else:
+            if m["role"] == "assistant":
                 lines.append("Assistant: " + m["content"])
         transcript = "\n\n".join(lines)[:100000]
         conv_chars = len(transcript)
@@ -1016,13 +935,12 @@ with st.form("feedback_form"):
         ok, err = False, "missing_api_key"
         if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
             try:
-                # SendGrid relay (best-effort)
                 timestamp = datetime.now(timezone.utc).isoformat()
                 conv_preview = transcript[:2000]
                 plain = (
                     f"New Veritas feedback\nTime (UTC): {timestamp}\nRating: {rating}/5\n"
                     f"From user email: {email}\nComments:\n{comments}\n\n"
-                    f"--- Conversation (first 2,000 chars) ---\n{conv_preview}\n\n"
+                    f"--- Report (first 2,000 chars) ---\n{conv_preview}\n\n"
                     f"IP: streamlit\nUser-Agent: streamlit\n"
                 )
                 html_body = (
@@ -1031,7 +949,7 @@ with st.form("feedback_form"):
                     f"<p><strong>Rating:</strong> {rating}/5</p>"
                     f"<p><strong>From user email:</strong> {email}</p>"
                     f"<p><strong>Comments:</strong><br>{(comments or '').replace(chr(10), '<br>')}</p>"
-                    f"<hr><p><strong>Conversation (first 2,000 chars):</strong><br>"
+                    f"<hr><p><strong>Report (first 2,000 chars):</strong><br>"
                     f"<pre style='white-space:pre-wrap'>{conv_preview}</pre></p>"
                     f"<hr><p><strong>IP:</strong> streamlit<br><strong>User-Agent:</strong> streamlit</p>"
                 )
@@ -1059,12 +977,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
-
-
-
-
-
 
 
 
