@@ -491,36 +491,37 @@ st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 st.markdown(
     """
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap');
 
     /* Global font */
     html, body, [class*="css"] {
         font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
     }
 
-    /* Bronze-blue background + tidy container (optional)
-    body { background: #0B1726 !important; } */
-
-    /* Bronze-orange buttons everywhere, including submit/download/uploader */
+    /* --- Consistent bronze-orange buttons --- */
     div.stButton > button,
     div.stDownloadButton > button,
     [data-testid="stFileUploader"] section div div span button,
     .stForm [type="submit"],
     button[kind="primary"], button[kind="secondary"],
     [data-testid="baseButton-secondary"], [data-testid="baseButton-primary"] {
-        background-color: #FF8C32 !important; /* bronze orange */
-        color: #111418 !important;             /* dark text for contrast */
+        background-color: #FF8C32 !important;  /* bronze orange */
+        color: #111418 !important;             /* dark text */
         border: 1px solid #FF8C32 !important;
         border-radius: 0.5rem !important;
         box-shadow: none !important;
+
         padding: 0.45rem 0.9rem !important;
         font-size: 0.95rem !important;
-        font-weight: 600 !important;
+        font-weight: 400 !important;   /* no bold */
+        text-align: center !important;
     }
+
+    /* Hover */
     div.stButton > button:hover,
     div.stDownloadButton > button:hover,
     [data-testid="stFileUploader"] section div div span button:hover,
-    .stForm [type="submit"]:hover,
+    .stForm [type=submit]:hover,
     button[kind="primary"]:hover, button[kind="secondary"]:hover,
     [data-testid="baseButton-secondary"]:hover, [data-testid="baseButton-primary"]:hover {
         background-color: #E97C25 !important;
@@ -977,6 +978,7 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
 
 
 
