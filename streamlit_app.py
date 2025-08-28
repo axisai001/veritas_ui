@@ -498,7 +498,7 @@ st.markdown(
         font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
     }
 
-    /* --- Consistent bronze-orange buttons --- */
+    /* --- Consistent bronze-orange buttons (same size & font) --- */
     div.stButton > button,
     div.stDownloadButton > button,
     [data-testid="stFileUploader"] section div div span button,
@@ -511,10 +511,11 @@ st.markdown(
         border-radius: 0.5rem !important;
         box-shadow: none !important;
 
-        padding: 0.45rem 0.9rem !important;
+        padding: 0.50rem 1rem !important;
         font-size: 0.95rem !important;
-        font-weight: 400 !important;   /* no bold */
+        font-weight: 400 !important;           /* not bold */
         text-align: center !important;
+        width: 100% !important;                /* align level across columns */
     }
 
     /* Hover */
@@ -613,10 +614,22 @@ elif not APP_PASSWORD:
     log_auth_event("login_success", True, login_id="", credential_label="NO_PASSWORD")
     st.session_state["authed"] = True
 
-# Admin unlock (sidebar)
+# ================= Sidebar (reordered) =================
 with st.sidebar:
+    # Logout at the very top
+    if st.button("Logout"):
+        log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
+        for k in ("authed","history","last_reply","is_admin","login_id","user_input_box","_clear_text_box"):
+            st.session_state.pop(k, None)
+        st.rerun()
+
     st.subheader("Session")
     st.write(f"Report time zone: **{PILOT_TZ_NAME}**")
+
+    # Spacer to push admin controls to bottom
+    st.markdown("<div style='height: 40vh;'></div>", unsafe_allow_html=True)
+
+    # Bottom-pinned admin controls
     if st.button("Lock Admin"):
         st.session_state["is_admin"] = False
         st.rerun()
@@ -629,12 +642,6 @@ with st.sidebar:
                 st.success("Admin unlocked")
             else:
                 st.error("Invalid key")
-
-    if st.button("Logout"):
-        log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","is_admin","login_id","user_input_box","_clear_text_box"):
-            st.session_state.pop(k, None)
-        st.rerun()
 
 # Branding (admin)
 if st.session_state["is_admin"]:
@@ -725,7 +732,7 @@ with st.form("analysis_form"):
             st.error("Please enter some text or upload a document.")
             st.stop()
 
-        # Call model (do NOT show user text in the UI; only keep assistant's reply)
+        # Call model (report-only UI)
         try:
             with st.spinner("Analyzing…"):
                 client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
@@ -753,7 +760,7 @@ with st.form("analysis_form"):
         st.session_state["history"].append({"role":"assistant","content":decorated_reply})
         st.session_state["last_reply"] = decorated_reply
 
-        # Persist analysis snapshot (only assistant content)
+        # Persist analysis snapshot (assistant only)
         try:
             log_analysis(public_report_id, internal_report_id, decorated_reply)
         except Exception as e:
@@ -764,91 +771,41 @@ with st.form("analysis_form"):
         st.rerun()
 
 # ===== Bias Report (ONLY assistant output) =====
-if st.session_state["history"]:
+if st.session_state.get("last_reply"):
     st.write("### Bias Report")
-    for msg in st.session_state["history"]:
-        if msg["role"] == "assistant":
-            st.markdown(msg["content"])
+    st.markdown(st.session_state["last_reply"])
 
-# ===== Download last reply as PDF =====
-def build_pdf_bytes(content: str) -> bytes:
-    if SimpleDocTemplate is None:
-        raise RuntimeError("PDF engine not available. Install 'reportlab'.")
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=letter,
-        leftMargin=0.8*inch, rightMargin=0.8*inch,
-        topMargin=0.9*inch, bottomMargin=0.9*inch
-    )
-    styles = getSampleStyleSheet()
-    base = styles["Normal"]
-    base.leading = 14
-    base.fontName = "Helvetica"
-    body = ParagraphStyle("Body", parent=base, fontSize=10)
-    h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
+    # ===== Report Action Buttons (only when a report exists) =====
+    st.divider()
+    col1, col2, col3 = st.columns(3)
 
-    story = []
-    title = APP_TITLE + " — Bias Analysis Report"
-    ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-    story.append(Paragraph(f"<b>{title}</b>", h))
-    story.append(Paragraph(f"<i>Generated {ts}</i>", base))
-    story.append(Spacer(1, 10))
-
-    for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
-        safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        story.append(Paragraph(safe, body))
-        story.append(Spacer(1, 6))
-
-    def _header_footer(canvas, doc_):
-        canvas.saveState()
-        w, h = letter
-        footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
-        page = f"Page {doc_.page}"
-        canvas.setFont("Helvetica", 8)
-        canvas.drawString(0.8*inch, 0.55*inch, footer)
-        pw = stringWidth(page, "Helvetica", 8)
-        canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
-        canvas.restoreState()
-
-    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-    buf.seek(0)
-    return buf.read()
-
-st.divider()
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    if st.session_state["history"]:
-        # Build transcript consisting ONLY of assistant outputs
-        transcript = []
-        for m in st.session_state["history"]:
-            if m["role"] == "assistant":
-                transcript.append("Assistant: " + m["content"])
-        full_conversation = "\n\n".join(transcript)
-
+    with col1:
+        # Copy Report (HTML/JS) — styled to match buttons (width 100%, font-weight 400)
         components.html(
             f"""
 <style>
   .copy-btn {{
+    width: 100%;
     display: inline-block;
     cursor: pointer;
     background: #FF8C32;
     color: #111418;
     border: 1px solid #FF8C32;
-    padding: 0.45rem 0.9rem;
+    padding: 0.50rem 1rem;
     border-radius: 0.5rem;
     font-size: 0.95rem;
-    font-weight: 600;
+    font-weight: 400;
     line-height: 1.6;
     font-family: inherit;
+    text-align: center;
   }}
   .copy-btn:hover {{ background:#E97C25; border-color:#E97C25; }}
   .copy-note {{ font-size: 12px; opacity: .75; margin-top: 6px; }}
 </style>
-<button id="copyBtn" class="copy-btn">Copy report</button>
+<button id="copyBtn" class="copy-btn">Copy Report</button>
 <div id="copyNote" class="copy-note" style="display:none;">Copied ✓</div>
 <script>
-  const text = {json.dumps(full_conversation)};
+  const text = {json.dumps(st.session_state["last_reply"])};
   const btn = document.getElementById("copyBtn");
   const note = document.getElementById("copyNote");
   btn.addEventListener("click", async () => {{
@@ -864,7 +821,7 @@ with col1:
       document.body.appendChild(ta);
       ta.focus();
       ta.select();
-      try {{ document.execCommand("copy"); }} catch (_) {{}}
+      try {{ document.execCommand("copy"); }} catch (_e) {{}}
       ta.remove();
       note.style.display = "block";
       setTimeout(() => note.style.display = "none", 1200);
@@ -872,24 +829,64 @@ with col1:
   }});
 </script>
             """,
-            height=80,
+            height=90,
         )
 
-with col2:
-    if st.button("Clear report"):
-        st.session_state["history"] = []
-        st.session_state["last_reply"] = ""
-        st.success("Report cleared ✓")
-with col3:
-    if st.session_state.get("last_reply"):
+    with col2:
+        if st.button("Clear Report"):
+            st.session_state["history"] = []
+            st.session_state["last_reply"] = ""
+            st.experimental_rerun()  # single-click clear & refresh
+
+    with col3:
+        # Download Report (PDF)
         try:
-            pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
-            st.download_button(
-                "Download Report (PDF)",
-                data=pdf_bytes,
-                file_name="veritas_report.pdf",
-                mime="application/pdf"
-            )
+            if st.session_state["last_reply"]:
+                def build_pdf_bytes(content: str) -> bytes:
+                    if SimpleDocTemplate is None:
+                        raise RuntimeError("PDF engine not available. Install 'reportlab'.")
+                    buf = io.BytesIO()
+                    doc = SimpleDocTemplate(
+                        buf, pagesize=letter,
+                        leftMargin=0.8*inch, rightMargin=0.8*inch,
+                        topMargin=0.9*inch, bottomMargin=0.9*inch
+                    )
+                    styles = getSampleStyleSheet()
+                    base = styles["Normal"]
+                    base.leading = 14
+                    base.fontName = "Helvetica"
+                    body = ParagraphStyle("Body", parent=base, fontSize=10)
+                    h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
+
+                    story = []
+                    title = APP_TITLE + " — Bias Analysis Report"
+                    ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+                    story.append(Paragraph(f"<b>{title}</b>", h))
+                    story.append(Paragraph(f"<i>Generated {ts}</i>", base))
+                    story.append(Spacer(1, 10))
+
+                    for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
+                        safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        story.append(Paragraph(safe, body))
+                        story.append(Spacer(1, 6))
+
+                    def _header_footer(canvas, doc_):
+                        canvas.saveState()
+                        w, h = letter
+                        footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
+                        page = f"Page {doc_.page}"
+                        canvas.setFont("Helvetica", 8)
+                        canvas.drawString(0.8*inch, 0.55*inch, footer)
+                        pw = stringWidth(page, "Helvetica", 8)
+                        canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
+                        canvas.restoreState()
+
+                    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+                    buf.seek(0)
+                    return buf.read()
+
+                pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
+                st.download_button("Download Report (PDF)", data=pdf_bytes, file_name="veritas_report.pdf", mime="application/pdf")
         except Exception as e:
             log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
             st.error("network error")
@@ -978,7 +975,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
 
 
 
