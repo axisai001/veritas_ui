@@ -296,7 +296,7 @@ barriers.
 domestic situations, financial status, or schedule flexibility. 
 ∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
 reinforce stereotypes. 
-  
+
   
 Bias Detection Rules 
 1.Context Check for Legal/Program/Framework Names​
@@ -670,9 +670,8 @@ with st.container():
         if CURRENT_TAGLINE:
             st.caption(CURRENT_TAGLINE)
     with col_actions:
-        # Open Support drawer
-        if st.button("Support", use_container_width=True):
-            st.session_state["show_support"] = True
+        st.empty()  # No header actions for now
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # ===== Support Drawer =====
@@ -1253,5 +1252,6 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
