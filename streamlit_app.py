@@ -1202,94 +1202,150 @@ if ADMIN_PASSWORD:
                     st.rerun()
             st.stop()
 
-        # --- Admin content (only visible after successful admin login) ---
-        st.success(f"Admin mode active — {st.session_state.get('admin_email', '')}")
+# -------------------- Admin Tab (only if ADMIN_PASSWORD is set) --------------------
+if admin_enabled:
+    admin_tab_index = len(tab_labels) - 1
+    with tabs[admin_tab_index]:
+        st.write("### 🔐 Admin")
+        st.caption("Access is restricted to administrators.")
 
-        # Exit Admin
-        if st.button("Exit Admin"):
-            st.session_state.pop("is_admin", None)
-            st.session_state.pop("admin_email", None)
-            st.rerun()
+        # Admin not logged in yet
+        if not st.session_state.get("is_admin", False):
+            with st.form("admin_login_form"):
+                admin_email = st.text_input("Admin Email", value=ADMIN_PREFILL_EMAIL, placeholder="you@yourorg.edu")
+                admin_pw = st.text_input("Admin Password", type="password")
+                colA, colB = st.columns(2)
+                with colA:
+                    submit_login = st.form_submit_button("Log in")
+                with colB:
+                    cancel_login = st.form_submit_button("Cancel")
 
-        st.divider()
-        st.write("#### History (latest 500)")
-        try:
-            con = sqlite3.connect(DB_PATH)
-            df_hist = pd.read_sql_query(
-                "SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json "
-                "FROM analyses ORDER BY id DESC LIMIT 500", con
-            )
-            con.close()
-        except Exception as e:
-            df_hist = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
-            log_error_event(kind="HISTORY_DB", route="/admin/history", http_status=200, detail=repr(e))
+            if cancel_login:
+                st.info("Admin login canceled.")
+            elif submit_login:
+                if not ADMIN_PASSWORD:
+                    st.error("Admin is not configured. Set ADMIN_PASSWORD in environment.")
+                elif ADMIN_EMAIL and admin_email.strip().lower() != ADMIN_EMAIL.lower():
+                    st.error("Email is not authorized for admin.")
+                elif admin_pw != ADMIN_PASSWORD:
+                    st.error("Incorrect admin password.")
+                else:
+                    st.session_state["is_admin"] = True
+                    st.session_state["admin_email"] = admin_email.strip()
+                    st.success("Welcome, admin.")
+                    st.rerun()
 
-        if not df_hist.empty:
-            def _extract_preview(js: str) -> str:
-                try:
-                    return json.loads(js).get("assistant_reply","")[:220]
-                except Exception:
-                    return ""
-            df_hist["preview"] = df_hist["conversation_json"].apply(_extract_preview)
-            # Admin search
-            q_admin = st.text_input("Search by Report ID or text (admin)", placeholder="e.g., VER-2025… or a phrase…")
-            if q_admin.strip():
-                ql = q_admin.lower()
-                df_hist = df_hist[df_hist.apply(
-                    lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1
-                )]
-            st.dataframe(
-                df_hist[["timestamp_utc","public_report_id","internal_report_id","preview"]],
-                use_container_width=True, hide_index=True
-            )
+        # Admin logged in → show admin tools
+        else:
+            st.success(f"Signed in as {st.session_state.get('admin_email')}")
 
-        st.divider()
-        st.write("#### Data Explorer (CSV)")
+            # --- History (moved here) ---
+            st.write("#### Previous Reports")
+            q = st.text_input("Search by Report ID or text (local DB)",
+                              placeholder="e.g., VER-2025… or a phrase…",
+                              key="admin_history_search")
 
-        def _read_csv_safe(path: str) -> pd.DataFrame:
+            import pandas as pd, sqlite3, json
             try:
-                return pd.read_csv(path)
-            except Exception:
-                return pd.DataFrame()
-
-        c1, c2 = st.columns(2)
-        with c1:
-            st.write("**Auth Events**")
-            df_auth = _read_csv_safe(AUTH_CSV)
-            st.dataframe(df_auth, use_container_width=True)
-            if os.path.exists(AUTH_CSV):
-                st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv")
-
-            st.write("**Errors**")
-            df_err = _read_csv_safe(ERRORS_CSV)
-            st.dataframe(df_err, use_container_width=True)
-            if os.path.exists(ERRORS_CSV):
-                st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv")
-
-        with c2:
-            st.write("**Analyses**")
-            df_an = _read_csv_safe(ANALYSES_CSV)
-            st.dataframe(df_an, use_container_width=True)
-            if os.path.exists(ANALYSES_CSV):
-                st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv")
-
-            st.write("**Feedback**")
-            df_fb = _read_csv_safe(FEEDBACK_CSV)
-            st.dataframe(df_fb, use_container_width=True)
-            if os.path.exists(FEEDBACK_CSV):
-                st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv")
-
-        # Optional: bundle CSVs + DB into a single ZIP
-        st.divider()
-        if st.button("Download All Data (ZIP)"):
-            try:
-                buf = io.BytesIO()
-                with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                    for path in [AUTH_CSV, ANALYSES_CSV, FEEDBACK_CSV, ERRORS_CSV, SUPPORT_CSV, DB_PATH]:
-                        if os.path.exists(path):
-                            zf.write(path, arcname=os.path.basename(path))
-                buf.seek(0)
-                st.download_button("Save ZIP", data=buf.read(), file_name="veritas_data_bundle.zip")
+                con = sqlite3.connect(DB_PATH)
+                df = pd.read_sql_query(
+                    "SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json "
+                    "FROM analyses ORDER BY id DESC LIMIT 500",
+                    con
+                )
+                con.close()
             except Exception as e:
-                log_error_event("ADMIN_ZIP", "/admin/zip", 500, repr(e))
-                st.error("Could not build ZIP. See logs.")
+                df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
+                log_error_event(kind="HISTORY_DB", route="/admin/history", http_status=200, detail=repr(e))
+
+            if not df.empty:
+                def extract_preview(js: str) -> str:
+                    try:
+                        return json.loads(js).get("assistant_reply", "")[:220]
+                    except Exception:
+                        return ""
+                df["preview"] = df["conversation_json"].apply(extract_preview)
+
+                if q.strip():
+                    ql = q.lower()
+                    df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower())
+                                              or (ql in str(r["preview"]).lower()), axis=1)]
+                st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]],
+                             use_container_width=True, hide_index=True)
+
+                sel = st.text_input("Load a report into Analyze by Report ID (optional)",
+                                    key="admin_history_load_id")
+                if st.button("Load Report", key="admin_history_load_btn"):
+                    row = df[df["public_report_id"] == sel]
+                    if len(row) == 1:
+                        try:
+                            txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
+                            st.session_state["last_reply"] = txt
+                            st.success("Loaded into Analyze tab.")
+                        except Exception:
+                            st.error("Could not load that report.")
+                    else:
+                        st.warning("Report ID not found in the current list.")
+            else:
+                st.info("No reports yet. Run an analysis in the Analyze tab.")
+
+            st.markdown("---")
+
+            # --- Data Explorer (moved here) ---
+            st.write("#### Data Explorer")
+            st.caption("Browse CSV data stored on this instance. Use the download buttons for backups.")
+
+            def _read_csv_safe(path: str):
+                try:
+                    import pandas as pd
+                    return pd.read_csv(path)
+                except Exception:
+                    import pandas as pd
+                    return pd.DataFrame()
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.write("##### Auth Events")
+                st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download auth_events.csv",
+                                       data=open(AUTH_CSV, "rb").read(),
+                                       file_name="auth_events.csv")
+                except Exception:
+                    st.warning("auth_events.csv not available.")
+
+                st.write("##### Errors")
+                st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download errors.csv",
+                                       data=open(ERRORS_CSV, "rb").read(),
+                                       file_name="errors.csv")
+                except Exception:
+                    st.warning("errors.csv not available.")
+
+            with c2:
+                st.write("##### Analyses")
+                st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download analyses.csv",
+                                       data=open(ANALYSES_CSV, "rb").read(),
+                                       file_name="analyses.csv")
+                except Exception:
+                    st.warning("analyses.csv not available.")
+
+                st.write("##### Feedback")
+                st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download feedback.csv",
+                                       data=open(FEEDBACK_CSV, "rb").read(),
+                                       file_name="feedback.csv")
+                except Exception:
+                    st.warning("feedback.csv not available.")
+
+            # --- Admin sign out ---
+            st.markdown("---")
+            if st.button("Sign out of Admin"):
+                st.session_state["is_admin"] = False
+                st.session_state.pop("admin_email", None)
+                st.rerun()
+
