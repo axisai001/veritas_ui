@@ -1272,7 +1272,8 @@ if show_admin:
         st.markdown("---")
         if st.button("Exit Admin"):
             st.session_state["is_admin"] = False
-            st.experimental_rerun()
+            st.rerun()
+
 
 
 
