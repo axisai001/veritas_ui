@@ -1,9 +1,8 @@
 # streamlit_app.py — Veritas (Streamlit)
-# UI refresh + Admin gating:
-# - Tabs: Analyze, Feedback, Support, Help, [Admin*]
-# - Admin tab only appears if ADMIN_PASSWORD is set (env var), and shows History + Data Explorer after login
-# - Session + Timezone removed from sidebar (still tracked internally)
-# - Keeps CSV + SQLite storage, SendGrid feedback email, login + lockout, and your full prompt
+# UI: Analyze / Feedback / Support / Help (+ Admin if ADMIN_PASSWORD set)
+# Admin panel holds History + Data Explorer (locked behind email+password)
+# Modern styles, sticky header, copy/download, CSV+SQLite logging, SendGrid, login+lockout
+# No session/timezone shown in UI (still tracked internally)
 
 import os
 import io
@@ -26,7 +25,7 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 import httpx
 
-# ---------- Optional parsers for uploads ----------
+# ---------- Optional parsers ----------
 try:
     from pypdf import PdfReader
 except Exception:
@@ -36,7 +35,7 @@ try:
 except Exception:
     docx = None
 
-# ---------- PDF (ReportLab) for Download report ----------
+# ---------- PDF (ReportLab) ----------
 try:
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -44,9 +43,9 @@ try:
     from reportlab.lib.units import inch
     from reportlab.pdfbase.pdfmetrics import stringWidth
 except Exception:
-    SimpleDocTemplate = None  # will error politely if missing
+    SimpleDocTemplate = None  # optional; show friendly error if missing
 
-# ================= Updated Config (via config.py) =================
+# ================= Config (via config.py or env) =================
 try:
     from config import load_settings
     settings = load_settings()  # requires OPENAI_API_KEY available to it
@@ -57,7 +56,7 @@ except Exception:
         auth_log_ttl_days = int(os.environ.get("AUTH_LOG_TTL_DAYS", "365"))
     settings = _FallbackSettings()
 
-# ================= App constants from secrets/env =================
+# ================= App constants =================
 APP_TITLE = os.environ.get("APP_TITLE", "Veritas — Pilot Test")
 MODEL = getattr(settings, "openai_model", os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo-0125"))
 try:
@@ -65,10 +64,12 @@ try:
 except Exception:
     TEMPERATURE = 0.2
 
-# Admin password (new)
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+# --- Admin auth (email + password) ---
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip()  # optional restriction
+ADMIN_PREFILL_EMAIL = ADMIN_EMAIL or ""
 
-# --- Safe timezone loader ---
+# --- Safe timezone loader (tracked internally, not shown) ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
     try:
         return ZoneInfo(name)
@@ -77,7 +78,7 @@ def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
 
 PILOT_TZ_NAME = os.environ.get("VERITAS_TZ", "America/Denver")
 PILOT_TZ = _safe_zoneinfo(PILOT_TZ_NAME, "UTC")
-PILOT_START_AT = os.environ.get("PILOT_START_AT", "")  # e.g., "2025-09-15 08:00" or ISO
+PILOT_START_AT = os.environ.get("PILOT_START_AT", "")
 
 def _parse_pilot_start_to_utc(s: str):
     if not s:
@@ -132,14 +133,14 @@ SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 # Lockout config
-LOCKOUT_THRESHOLD      = int(os.environ.get("LOCKOUT_THRESHOLD", "5"))       # failed attempts
+LOCKOUT_THRESHOLD      = int(os.environ.get("LOCKOUT_THRESHOLD", "5"))
 LOCKOUT_WINDOW_SEC     = int(os.environ.get("LOCKOUT_WINDOW_SEC", "900"))    # 15 min
 LOCKOUT_DURATION_SEC   = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800")) # 30 min
 
 # Storage / branding
 BASE_DIR      = os.path.dirname(__file__)
 STATIC_DIR    = os.path.join(BASE_DIR, "static")
-UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")  # logos only
+UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
 DATA_DIR      = os.path.join(BASE_DIR, "data")
 DB_PATH       = os.path.join(DATA_DIR, "veritas.db")
 FEEDBACK_CSV  = os.path.join(DATA_DIR, "feedback.csv")
@@ -150,8 +151,8 @@ SUPPORT_CSV   = os.path.join(DATA_DIR, "support_tickets.csv")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
-ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}           # logo types
-DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}      # upload types
+ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}
+DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
 
 # ---------- SQLite setup ----------
 def _init_db():
@@ -366,7 +367,6 @@ Strict Thresholds — No Exceptions
 ∙🟡 Medium Bias → 0.36 – 0.69 
 ∙🔴 High Bias → 0.70 – 1.00 
 ∙If Bias Detected = No → Score must = 0.00. 
-∙If Score > 0.00 → Bias Detected must = Yes. 
   
 AXIS-AI Bias Evaluation Reference 
 ∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
@@ -403,10 +403,9 @@ Revision Guidance
 
 # ================= Utilities =================
 def _get_sid() -> str:
-    # Internal random session id (no longer shown in UI)
     sid = st.session_state.get("sid")
     if not sid:
-        sid = secrets.token_hex(16)
+        sid = secrets.token_hex(16)  # internal random session id
         st.session_state["sid"] = sid
     return sid
 
@@ -472,7 +471,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
         return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
     return ""
 
-# ---- Error logging + unified user message ----
+# ---- Error logging ----
 def log_error_event(kind: str, route: str, http_status: int, detail: str):
     try:
         ts = datetime.now(timezone.utc).isoformat()
@@ -483,8 +482,10 @@ def log_error_event(kind: str, route: str, http_status: int, detail: str):
         addr = "streamlit"
         ua = "streamlit"
         safe_detail = (detail or "")[:500]
+        # CSV
         with open(ERRORS_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow([ts, eid, rid, route, kind, http_status, safe_detail, sid, login_id, addr, ua])
+        # DB
         _db_exec("""INSERT INTO errors (timestamp_utc,error_id,request_id,route,kind,http_status,detail,session_id,login_id,remote_addr,user_agent)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                  (ts, eid, rid, route, kind, http_status, safe_detail, sid, login_id, addr, ua))
@@ -525,8 +526,10 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
         if attempted_secret and not success:
             hashed_prefix = hashlib.sha256(attempted_secret.encode("utf-8")).hexdigest()[:12]
         row = [ts, event_type, (login_id or "").strip()[:120], sid, tid, credential_label, success, hashed_prefix, addr, ua]
+        # CSV
         with open(AUTH_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(row)
+        # DB
         _db_exec("""INSERT INTO auth_events (timestamp_utc,event_type,login_id,session_id,tracking_id,credential_label,success,hashed_attempt_prefix,remote_addr,user_agent)
                     VALUES (?,?,?,?,?,?,?,?,?,?)""",
                  (ts, event_type, (login_id or "").strip()[:120], sid, tid, credential_label, 1 if success else 0, hashed_prefix, addr, ua))
@@ -546,8 +549,10 @@ def log_analysis(public_id: str, internal_id: str, assistant_text: str):
         conv_obj = {"assistant_reply": assistant_text}
         conv_json = json.dumps(conv_obj, ensure_ascii=False)
         conv_chars = len(conv_json)
+        # CSV
         with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow([ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json])
+        # DB
         _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
                     VALUES (?,?,?,?,?,?,?,?,?)""",
                  (ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json))
@@ -591,10 +596,9 @@ _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 # ================= Streamlit UI =================
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
-# ====== Global CSS (modern theme + sticky header/action bar) ======
+# ====== Global CSS ======
 PRIMARY = "#FF8C32"
 ACCENT = "#E97C25"
-
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
@@ -602,8 +606,6 @@ html, body, [class*="css"] {{
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }}
 .reportview-container .main .block-container{{ padding-top: 1rem; }}
-
-/* Buttons */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
 button[kind="primary"], button[kind="secondary"],
@@ -621,28 +623,18 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 .stForm [type="submit"]:hover, [data-testid="baseButton-primary"]:hover {{
   background-color: {ACCENT} !important; border-color: {ACCENT} !important;
 }}
-
-/* Cards */
 .v-card {{
   background: rgba(255,255,255,0.02);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px;
   padding: 18px;
 }}
-
-/* Header */
 .header-wrap {{
   position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px);
   background: rgba(0,0,0,0.30); border-bottom: 1px solid rgba(255,255,255,0.08);
   padding-bottom: .5rem; margin-bottom: 1rem;
 }}
 .header-title h1 {{ margin: 0; padding: .25rem 0; }}
-
-/* Sticky action row under the report */
-.sticky-actions {{
-  position: sticky; top: 64px; z-index: 5; padding: .25rem 0 .5rem 0;
-  background: rgba(0,0,0,0.30); backdrop-filter: blur(6px);
-}}
 .copy-btn {{
   width: 100%; cursor: pointer; background: {PRIMARY}; color: #111418;
   border: 1px solid {PRIMARY}; padding: .55rem 1rem; border-radius: .75rem;
@@ -650,11 +642,15 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 }}
 .copy-btn:hover {{ background:{ACCENT}; border-color:{ACCENT}; }}
 .copy-note {{ font-size: 12px; opacity: .75; margin-top: 6px; }}
+.sticky-actions {{
+  position: sticky; top: 64px; z-index: 5; padding: .25rem 0 .5rem 0;
+  background: rgba(0,0,0,0.30); backdrop-filter: blur(6px);
+}}
 hr.soft {{ border: none; border-top: 1px solid rgba(255,255,255,.08); margin: .5rem 0 1rem; }}
 </style>
 """, unsafe_allow_html=True)
 
-# =========== Header (logo + centered title + top-right Support quick access) ===========
+# =========== Header ===========
 with st.container():
     st.markdown('<div class="header-wrap">', unsafe_allow_html=True)
     col_logo, col_title, col_actions = st.columns([1, 6, 2])
@@ -674,14 +670,15 @@ with st.container():
         if CURRENT_TAGLINE:
             st.caption(CURRENT_TAGLINE)
     with col_actions:
+        # Open Support drawer
         if st.button("Support", use_container_width=True):
             st.session_state["show_support"] = True
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ===== Support Drawer (quick toggle; the full Support form is also a tab) =====
+# ===== Support Drawer =====
 if st.session_state.get("show_support", False):
     st.markdown("### 🛠️ Support")
-    with st.form("support_form_header"):
+    with st.form("support_form"):
         full_name = st.text_input("Full name")
         email_sup = st.text_input("Email")
         bias_report_id = st.text_input("Bias Report ID (if applicable)")
@@ -695,22 +692,87 @@ if st.session_state.get("show_support", False):
         st.session_state["show_support"] = False
         st.rerun()
     if submit_support:
-        # Reuse save function further below after tabs define SUPPORT_CSV etc.
-        pass  # The dedicated Support tab is the primary entry point
+        if not full_name.strip():
+            st.error("Please enter your full name.")
+        elif not email_sup.strip():
+            st.error("Please enter your email.")
+        elif not issue_text.strip():
+            st.error("Please describe the issue.")
+        else:
+            ticket_id = _gen_ticket_id()
+            ts = datetime.now(timezone.utc).isoformat()
+            sid = st.session_state.get("sid") or _get_sid()
+            login_id = st.session_state.get("login_id", "")
+            ua = "streamlit"
+            # CSV
+            try:
+                with open(SUPPORT_CSV, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow([ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua])
+            except Exception as e:
+                log_error_event(kind="SUPPORT_WRITE", route="/support", http_status=500, detail=repr(e))
+                st.error("We couldn't save your ticket. Please try again.")
+            else:
+                # DB
+                try:
+                    _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
+                                VALUES (?,?,?,?,?,?,?,?,?)""",
+                             (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
+                except Exception as e:
+                    log_error_event(kind="SUPPORT_DB", route="/support", http_status=200, detail=repr(e))
+                # Optional email
+                if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
+                    try:
+                        subject = f"[Veritas Support] Ticket {ticket_id}"
+                        plain = (
+                            f"New Support Ticket\n"
+                            f"Ticket ID: {ticket_id}\n"
+                            f"Time (UTC): {ts}\n"
+                            f"From: {full_name} <{email_sup}>\n"
+                            f"Bias Report ID: {bias_report_id}\n\n"
+                            f"Issue:\n{issue_text}\n\n"
+                            f"Session: {sid}\nLogin: {login_id}\n"
+                        )
+                        html_body = (
+                            f"<h3>New Support Ticket</h3>"
+                            f"<p><strong>Ticket ID:</strong> {ticket_id}</p>"
+                            f"<p><strong>Time (UTC):</strong> {ts}</p>"
+                            f"<p><strong>From:</strong> {full_name} &lt;{email_sup}&gt;</p>"
+                            f"<p><strong>Bias Report ID:</strong> {bias_report_id or '(none)'}"
+                            f"<p><strong>Issue:</strong><br><pre style='white-space:pre-wrap'>{issue_text}</pre></p>"
+                            f"<hr><p><strong>Session:</strong> {sid}<br><strong>Login:</strong> {login_id}</p>"
+                        )
+                        payload = {
+                            "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
+                            "from": {"email": SENDGRID_FROM, "name": "Veritas"},
+                            "subject": subject,
+                            "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
+                        }
+                        with httpx.Client(timeout=12) as client:
+                            r = client.post(
+                                "https://api.sendgrid.com/v3/mail/send",
+                                headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                                json=payload,
+                            )
+                        if r.status_code not in (200, 202):
+                            log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=r.status_code, detail=r.text[:300])
+                    except Exception as e:
+                        log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=200, detail=repr(e))
+                st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
+                st.session_state["show_support"] = False
+                st.rerun()
 
 # ---------------- Session/Auth bootstrap ----------------
 if "request_id" not in st.session_state:
     st.session_state["request_id"] = _gen_request_id()
 st.session_state.setdefault("authed", False)
-st.session_state.setdefault("history", [])
+st.session_state.setdefault("history", [])     # assistant messages only
 st.session_state.setdefault("last_reply", "")
 st.session_state.setdefault("user_input_box", "")
 st.session_state.setdefault("_clear_text_box", False)
 st.session_state.setdefault("_fail_times", deque())
 st.session_state.setdefault("_locked_until", 0.0)
-
-# Admin session state
 st.session_state.setdefault("is_admin", False)
+st.session_state.setdefault("admin_email", "")
 
 # Pilot countdown gate
 if not pilot_started():
@@ -769,9 +831,10 @@ def show_login():
                 st.error("Incorrect password")
 
 if not st.session_state["authed"] and APP_PASSWORD:
-    show_login(); st.stop()
+    show_login()
+    st.stop()
 elif not APP_PASSWORD:
-    _get_sid()
+    _get_sid()  # ensure session id exists
     if "login_id" not in st.session_state:
         st.session_state["login_id"] = ""
     log_auth_event("login_success", True, login_id="", credential_label="NO_PASSWORD")
@@ -779,29 +842,27 @@ elif not APP_PASSWORD:
 
 # ================= Sidebar =================
 with st.sidebar:
+    # Keep only a Logout button; no session/timezone display
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until","show_support","is_admin"):
+        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box",
+                  "_fail_times","_locked_until","show_support","is_admin","admin_email"):
             st.session_state.pop(k, None)
         st.rerun()
-    # Removed session/timezone from UI per request (still tracked internally)
 
-# ================= Main Tabs =================
-# Base tabs: Analyze, Feedback, Support, Help
-tab_labels = ["🔍 Analyze", "⭐ Feedback", "🛠️ Support", "❓ Help"]
-
-# Conditionally add Admin (always last) if ADMIN_PASSWORD is set (non-empty)
-show_admin = bool(ADMIN_PASSWORD.strip())
-if show_admin:
-    tab_labels.append("🔐 Admin")
+# ================= Tabs =================
+tab_labels = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
+admin_enabled = bool(ADMIN_PASSWORD)  # Admin tab only if ADMIN_PASSWORD is set
+if admin_enabled:
+    tab_labels.append("🔐 Admin")  # admin after Help (last)
 
 tabs = st.tabs(tab_labels)
 
-# -------------------- Analyze Tab --------------------
+# -------------------- Analyze --------------------
 with tabs[0]:
     st.markdown('<div class="v-card">', unsafe_allow_html=True)
 
-    # Reset text box after a completed run
+    # reset text box after completed run
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
@@ -815,7 +876,7 @@ with tabs[0]:
             help="Your pasted content is used for analysis but won’t be printed below—only the bias report appears."
         )
         doc = st.file_uploader(
-            f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+            f"Upload document — Max {int(MAX_UPLOAD_MB)}MB — PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
             accept_multiple_files=False
         )
@@ -826,7 +887,6 @@ with tabs[0]:
             network_error(); st.stop()
 
         prog = st.progress(0, text="Preparing…")
-
         user_text = st.session_state.get("user_input_box", "").strip()
         extracted = ""
         prog.progress(10, text="Checking upload…")
@@ -846,6 +906,7 @@ with tabs[0]:
         if not final_input:
             st.error("Please enter some text or upload a document."); st.stop()
 
+        # Model call
         try:
             prog.progress(40, text="Contacting model…")
             client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
@@ -868,6 +929,7 @@ with tabs[0]:
         internal_report_id = _gen_internal_report_id()
         decorated_reply = f"📄 Report ID: {public_report_id}\n\n{model_reply}".strip()
 
+        # visible history stores assistant report only
         st.session_state["history"].append({"role":"assistant","content":decorated_reply})
         st.session_state["last_reply"] = decorated_reply
 
@@ -880,6 +942,7 @@ with tabs[0]:
         prog.progress(100, text="Done ✓")
         st.rerun()
 
+    # Show latest report (if any)
     if st.session_state.get("last_reply"):
         st.write("### Bias Report")
         st.markdown(st.session_state["last_reply"])
@@ -960,18 +1023,18 @@ with tabs[0]:
             except Exception as e:
                 log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
                 st.error("network error")
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-# -------------------- Feedback Tab --------------------
+# -------------------- Feedback --------------------
 with tabs[1]:
-    st.markdown("### ⭐ Feedback")
+    st.markdown("### Feedback")
     with st.form("feedback_form"):
         rating = st.slider("Your rating", min_value=1, max_value=5, value=5)
         email = st.text_input("Email (required)")
         comments = st.text_area("Comments (what worked / what didn’t)", height=120, max_chars=2000)
         submit_fb = st.form_submit_button("Submit feedback")
-
     if submit_fb:
         if not rate_limiter("feedback", RATE_LIMIT_EXTRACT, RATE_LIMIT_WINDOW_SEC):
             network_error(); st.stop()
@@ -994,14 +1057,12 @@ with tabs[1]:
             conv_chars, transcript,
             "streamlit", "streamlit"
         ]
-        # CSV
         try:
             with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow(row)
         except Exception as e:
             log_error_event(kind="FEEDBACK", route="/feedback", http_status=500, detail=repr(e))
             network_error(); st.stop()
-        # DB
         try:
             _db_exec("""INSERT INTO feedback (timestamp_utc,rating,email,comments,conversation_chars,conversation,remote_addr,ua)
                         VALUES (?,?,?,?,?,?,?,?)""",
@@ -1009,22 +1070,21 @@ with tabs[1]:
         except Exception as e:
             log_error_event(kind="FEEDBACK_DB", route="/feedback", http_status=200, detail=repr(e))
 
-        # Email (optional)
+        # SendGrid (optional)
         if not (SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM):
-            st.warning("Feedback saved. (Email not sent—configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to enable email.)")
+            st.info("Feedback saved locally. (Email not configured.)")
         else:
             try:
-                timestamp = ts_now
                 conv_preview = transcript[:2000]
                 plain = (
-                    f"New Veritas feedback\nTime (UTC): {timestamp}\nRating: {rating}/5\n"
+                    f"New Veritas feedback\nTime (UTC): {ts_now}\nRating: {rating}/5\n"
                     f"From user email: {email}\nComments:\n{comments}\n\n"
                     f"--- Report (first 2,000 chars) ---\n{conv_preview}\n\n"
                     f"IP: streamlit\nUser-Agent: streamlit\n"
                 )
                 html_body = (
                     f"<h3>New Veritas feedback</h3>"
-                    f"<p><strong>Time (UTC):</strong> {timestamp}</p>"
+                    f"<p><strong>Time (UTC):</strong> {ts_now}</p>"
                     f"<p><strong>Rating:</strong> {rating}/5</p>"
                     f"<p><strong>From user email:</strong> {email}</p>"
                     f"<p><strong>Comments:</strong><br>{(comments or '').replace(chr(10), '<br>')}</p>"
@@ -1053,176 +1113,40 @@ with tabs[1]:
                 log_error_event(kind="SENDGRID_EXC", route="/feedback", http_status=200, detail=repr(e))
                 st.error("Feedback saved but email failed to send.")
 
-# -------------------- Support Tab --------------------
+# -------------------- Support --------------------
 with tabs[2]:
-    st.markdown("### 🛠️ Support")
-    with st.form("support_form_tab"):
-        full_name = st.text_input("Full name")
-        email_sup = st.text_input("Email")
-        bias_report_id = st.text_input("Bias Report ID (if applicable)")
-        issue_text = st.text_area("Describe the issue", height=160)
-        colA, colB = st.columns(2)
-        with colA:
-            submit_support = st.form_submit_button("Submit Support Request")
-        with colB:
-            cancel_support = st.form_submit_button("Cancel")
+    st.info("Use the **Support** button in the header to open the support form drawer at any time.")
 
-    if cancel_support:
-        st.session_state["show_support"] = False
-        st.rerun()
-
-    if submit_support:
-        if not full_name.strip():
-            st.error("Please enter your full name.")
-        elif not email_sup.strip():
-            st.error("Please enter your email.")
-        elif not issue_text.strip():
-            st.error("Please describe the issue.")
-        else:
-            ticket_id = _gen_ticket_id()
-            ts = datetime.now(timezone.utc).isoformat()
-            sid = st.session_state.get("sid") or _get_sid()
-            login_id = st.session_state.get("login_id", "")
-            ua = "streamlit"
-
-            # CSV write
-            try:
-                with open(SUPPORT_CSV, "a", newline="", encoding="utf-8") as f:
-                    csv.writer(f).writerow([
-                        ts, ticket_id, full_name.strip(), email_sup.strip(),
-                        bias_report_id.strip(), issue_text.strip(),
-                        sid, login_id, ua
-                    ])
-            except Exception as e:
-                log_error_event(kind="SUPPORT_WRITE", route="/support", http_status=500, detail=repr(e))
-                st.error("We couldn't save your ticket. Please try again.")
-            else:
-                # DB write
-                try:
-                    _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
-                                VALUES (?,?,?,?,?,?,?,?,?)""",
-                             (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
-                except Exception as e:
-                    log_error_event(kind="SUPPORT_DB", route="/support", http_status=200, detail=repr(e))
-
-                # Optional SendGrid email
-                if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
-                    try:
-                        subject = f"[Veritas Support] Ticket {ticket_id}"
-                        plain = (
-                            f"New Support Ticket\n"
-                            f"Ticket ID: {ticket_id}\n"
-                            f"Time (UTC): {ts}\n"
-                            f"From: {full_name} <{email_sup}>\n"
-                            f"Bias Report ID: {bias_report_id}\n\n"
-                            f"Issue:\n{issue_text}\n\n"
-                            f"Session: {sid}\nLogin: {login_id}\n"
-                        )
-                        html_body = (
-                            f"<h3>New Support Ticket</h3>"
-                            f"<p><strong>Ticket ID:</strong> {ticket_id}</p>"
-                            f"<p><strong>Time (UTC):</strong> {ts}</p>"
-                            f"<p><strong>From:</strong> {full_name} &lt;{email_sup}&gt;</p>"
-                            f"<p><strong>Bias Report ID:</strong> {bias_report_id or '(none)'}"
-                            f"<p><strong>Issue:</strong><br><pre style='white-space:pre-wrap'>{issue_text}</pre></p>"
-                            f"<hr><p><strong>Session:</strong> {sid}<br><strong>Login:</strong> {login_id}</p>"
-                        )
-                        payload = {
-                            "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
-                            "from": {"email": SENDGRID_FROM, "name": "Veritas"},
-                            "subject": subject,
-                            "content": [
-                                {"type": "text/plain", "value": plain},
-                                {"type": "text/html", "value": html_body}
-                            ],
-                        }
-                        with httpx.Client(timeout=12) as client:
-                            r = client.post(
-                                "https://api.sendgrid.com/v3/mail/send",
-                                headers={
-                                    "Authorization": f"Bearer {SENDGRID_API_KEY}",
-                                    "Content-Type": "application/json"
-                                },
-                                json=payload,
-                            )
-                        if r.status_code not in (200, 202):
-                            log_error_event(
-                                kind="SENDGRID_SUPPORT",
-                                route="/support",
-                                http_status=r.status_code,
-                                detail=r.text[:300]
-                            )
-                    except Exception as e:
-                        log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=200, detail=repr(e))
-
-                st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
-                st.session_state["show_support"] = False
-                st.rerun()
-
-# -------------------- Help Tab --------------------
+# -------------------- Help --------------------
 with tabs[3]:
-    st.markdown("### ❓ Help")
+    st.markdown("### Help")
     st.markdown(
         """
-- **Analyze**: Paste text or upload a document (PDF, DOCX, TXT, MD, CSV). The app produces a structured bias report following a strict rubric.
-- **Feedback**: Rate your experience and share comments. Optionally emails your feedback to the configured address.
-- **Support**: Submit an issue with your name/email; generates a ticket and (optionally) emails your support mailbox.
-- **Privacy**: Reports and events store only necessary metadata; original pasted text is not printed back in the UI history.  
-        """.strip()
+**How to use Veritas**
+
+1) Paste or upload text in **Analyze** and click **Analyze**.  
+2) Read the **Bias Report**, copy or download it as PDF.  
+3) Share thoughts in **Feedback** or open a **Support** ticket from the header at any time.
+
+**Data & Privacy**
+- We store report snapshots, basic error/auth events, and feedback locally (CSV + SQLite) on this app instance.
+- Admins can export data from the Admin panel (if configured).
+        """
     )
-    # No admin instructions here (per request)
 
-# -------------------- Admin Tab (only if ADMIN_PASSWORD set) --------------------
-if ADMIN_PASSWORD:
-    with tabs[4]:  # index 4 because it's after Help
-        st.write("### Admin")
-
-        # If not authenticated as admin, show admin login form
-        if not st.session_state.get("is_admin", False):
-            with st.form("admin_login_form"):
-                st.write("#### Admin Login")
-                admin_email = st.text_input("Admin Email", value=ADMIN_PREFILL_EMAIL)
-                admin_pwd = st.text_input("Admin Password", type="password")
-                submit_admin = st.form_submit_button("Enter Admin")
-
-            if submit_admin:
-                EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-                if not EMAIL_RE.match((admin_email or "").strip()):
-                    st.error("Please enter a valid email address.")
-                elif admin_pwd != ADMIN_PASSWORD:
-                    # Optional log of failed admin auth attempt
-                    log_auth_event("admin_login_failed", False, login_id=(admin_email or ""), credential_label="ADMIN_PASSWORD", attempted_secret=admin_pwd)
-                    st.error("Invalid admin password.")
-                else:
-                    # Success
-                    st.session_state["is_admin"] = True
-                    st.session_state["admin_email"] = (admin_email or "").strip()
-                    log_auth_event("admin_login_success", True, login_id=st.session_state["admin_email"], credential_label="ADMIN_PASSWORD")
-                    st.success("Admin mode enabled.")
-                    st.rerun()
-            st.stop()
-
-# -------------------- Admin Tab (only if ADMIN_PASSWORD is set) --------------------
+# -------------------- Admin (if enabled) --------------------
 if admin_enabled:
-    admin_tab_index = len(tab_labels) - 1
+    admin_tab_index = len(tab_labels) - 1  # last tab
     with tabs[admin_tab_index]:
         st.write("### 🔐 Admin")
-        st.caption("Access is restricted to administrators.")
 
-        # Admin not logged in yet
+        # Not logged in -> show login form
         if not st.session_state.get("is_admin", False):
             with st.form("admin_login_form"):
                 admin_email = st.text_input("Admin Email", value=ADMIN_PREFILL_EMAIL, placeholder="you@yourorg.edu")
                 admin_pw = st.text_input("Admin Password", type="password")
-                colA, colB = st.columns(2)
-                with colA:
-                    submit_login = st.form_submit_button("Log in")
-                with colB:
-                    cancel_login = st.form_submit_button("Cancel")
-
-            if cancel_login:
-                st.info("Admin login canceled.")
-            elif submit_login:
+                submitted = st.form_submit_button("Log in")
+            if submitted:
                 if not ADMIN_PASSWORD:
                     st.error("Admin is not configured. Set ADMIN_PASSWORD in environment.")
                 elif ADMIN_EMAIL and admin_email.strip().lower() != ADMIN_EMAIL.lower():
@@ -1234,118 +1158,100 @@ if admin_enabled:
                     st.session_state["admin_email"] = admin_email.strip()
                     st.success("Welcome, admin.")
                     st.rerun()
+            st.stop()
 
-        # Admin logged in → show admin tools
-        else:
-            st.success(f"Signed in as {st.session_state.get('admin_email')}")
+        # Admin content (only after successful login)
+        st.success(f"Admin session active: {st.session_state.get('admin_email','')}")
 
-            # --- History (moved here) ---
-            st.write("#### Previous Reports")
-            q = st.text_input("Search by Report ID or text (local DB)",
-                              placeholder="e.g., VER-2025… or a phrase…",
-                              key="admin_history_search")
+        # --- History (DB) ---
+        st.write("#### History (last 500)")
+        q = st.text_input("Search by Report ID or text", placeholder="e.g., VER-2025… or a phrase…")
+        try:
+            con = sqlite3.connect(DB_PATH)
+            df = pd.read_sql_query(
+                "SELECT id, timestamp_utc, public_report_id, internal_report_id, conversation_json "
+                "FROM analyses ORDER BY id DESC LIMIT 500", con
+            )
+            con.close()
+        except Exception as e:
+            df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
+            log_error_event(kind="HISTORY_DB", route="/admin/history", http_status=200, detail=repr(e))
 
-            import pandas as pd, sqlite3, json
-            try:
-                con = sqlite3.connect(DB_PATH)
-                df = pd.read_sql_query(
-                    "SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json "
-                    "FROM analyses ORDER BY id DESC LIMIT 500",
-                    con
-                )
-                con.close()
-            except Exception as e:
-                df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
-                log_error_event(kind="HISTORY_DB", route="/admin/history", http_status=200, detail=repr(e))
+        if not df.empty:
+            def extract_preview(js: str) -> str:
+                try:
+                    return json.loads(js).get("assistant_reply","")[:220]
+                except Exception:
+                    return ""
+            df["preview"] = df["conversation_json"].apply(extract_preview)
+            if q.strip():
+                ql = q.lower()
+                df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1)]
+            st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
 
-            if not df.empty:
-                def extract_preview(js: str) -> str:
+            sel = st.text_input("Load a report back into viewer by Report ID (optional)")
+            if st.button("Load Report into Analyze"):
+                row = df[df["public_report_id"] == sel]
+                if len(row) == 1:
                     try:
-                        return json.loads(js).get("assistant_reply", "")[:220]
+                        txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
+                        st.session_state["last_reply"] = txt
+                        st.success("Loaded into Analyze tab.")
                     except Exception:
-                        return ""
-                df["preview"] = df["conversation_json"].apply(extract_preview)
+                        st.error("Could not load that report.")
+                else:
+                    st.warning("Report ID not found in the current list.")
+        else:
+            st.info("No reports yet on this instance.")
 
-                if q.strip():
-                    ql = q.lower()
-                    df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower())
-                                              or (ql in str(r["preview"]).lower()), axis=1)]
-                st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]],
-                             use_container_width=True, hide_index=True)
+        st.divider()
 
-                sel = st.text_input("Load a report into Analyze by Report ID (optional)",
-                                    key="admin_history_load_id")
-                if st.button("Load Report", key="admin_history_load_btn"):
-                    row = df[df["public_report_id"] == sel]
-                    if len(row) == 1:
-                        try:
-                            txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
-                            st.session_state["last_reply"] = txt
-                            st.success("Loaded into Analyze tab.")
-                        except Exception:
-                            st.error("Could not load that report.")
-                    else:
-                        st.warning("Report ID not found in the current list.")
-            else:
-                st.info("No reports yet. Run an analysis in the Analyze tab.")
+        # --- Data Explorer (CSV snapshots) ---
+        st.write("#### Data Explorer (CSV)")
+        def _read_csv_safe(path: str) -> pd.DataFrame:
+            try:
+                return pd.read_csv(path)
+            except Exception:
+                return pd.DataFrame()
 
-            st.markdown("---")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.write("**Auth Events**")
+            st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
+            if os.path.exists(AUTH_CSV):
+                with open(AUTH_CSV, "rb") as f:
+                    st.download_button("Download auth_events.csv", data=f.read(), file_name="auth_events.csv")
 
-            # --- Data Explorer (moved here) ---
-            st.write("#### Data Explorer")
-            st.caption("Browse CSV data stored on this instance. Use the download buttons for backups.")
+            st.write("**Errors**")
+            st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
+            if os.path.exists(ERRORS_CSV):
+                with open(ERRORS_CSV, "rb") as f:
+                    st.download_button("Download errors.csv", data=f.read(), file_name="errors.csv")
 
-            def _read_csv_safe(path: str):
-                try:
-                    import pandas as pd
-                    return pd.read_csv(path)
-                except Exception:
-                    import pandas as pd
-                    return pd.DataFrame()
+        with c2:
+            st.write("**Analyses**")
+            st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
+            if os.path.exists(ANALYSES_CSV):
+                with open(ANALYSES_CSV, "rb") as f:
+                    st.download_button("Download analyses.csv", data=f.read(), file_name="analyses.csv")
 
-            c1, c2 = st.columns(2)
-            with c1:
-                st.write("##### Auth Events")
-                st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
-                try:
-                    st.download_button("Download auth_events.csv",
-                                       data=open(AUTH_CSV, "rb").read(),
-                                       file_name="auth_events.csv")
-                except Exception:
-                    st.warning("auth_events.csv not available.")
+            st.write("**Feedback**")
+            st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
+            if os.path.exists(FEEDBACK_CSV):
+                with open(FEEDBACK_CSV, "rb") as f:
+                    st.download_button("Download feedback.csv", data=f.read(), file_name="feedback.csv")
 
-                st.write("##### Errors")
-                st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
-                try:
-                    st.download_button("Download errors.csv",
-                                       data=open(ERRORS_CSV, "rb").read(),
-                                       file_name="errors.csv")
-                except Exception:
-                    st.warning("errors.csv not available.")
+            st.write("**Support Tickets**")
+            st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
+            if os.path.exists(SUPPORT_CSV):
+                with open(SUPPORT_CSV, "rb") as f:
+                    st.download_button("Download support_tickets.csv", data=f.read(), file_name="support_tickets.csv")
 
-            with c2:
-                st.write("##### Analyses")
-                st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
-                try:
-                    st.download_button("Download analyses.csv",
-                                       data=open(ANALYSES_CSV, "rb").read(),
-                                       file_name="analyses.csv")
-                except Exception:
-                    st.warning("analyses.csv not available.")
+        st.divider()
+        if st.button("Log out (admin)"):
+            # Clear admin-only session flags and rerun safely
+            st.session_state["is_admin"] = False
+            st.session_state["admin_email"] = ""
+            st.rerun()
 
-                st.write("##### Feedback")
-                st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
-                try:
-                    st.download_button("Download feedback.csv",
-                                       data=open(FEEDBACK_CSV, "rb").read(),
-                                       file_name="feedback.csv")
-                except Exception:
-                    st.warning("feedback.csv not available.")
-
-            # --- Admin sign out ---
-            st.markdown("---")
-            if st.button("Sign out of Admin"):
-                st.session_state["is_admin"] = False
-                st.session_state.pop("admin_email", None)
-                st.rerun()
 
