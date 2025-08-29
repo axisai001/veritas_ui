@@ -1,4 +1,4 @@
-# streamlit_app.py — Veritas (Streamlit) with Email + SQLite storage + Lockout
+# streamlit_app.py — Veritas (Streamlit) with Email + SQLite storage + Lockout + Support Tickets
 import os
 import io
 import csv
@@ -95,8 +95,8 @@ def pilot_started() -> bool:
     return datetime.now(timezone.utc) >= PILOT_START_UTC
 
 # Rates / windows
-RATE_LIMIT_LOGIN = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
-RATE_LIMIT_CHAT  = int(os.environ.get("RATE_LIMIT_CHAT",  "6"))
+RATE_LIMIT_LOGIN   = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
+RATE_LIMIT_CHAT    = int(os.environ.get("RATE_LIMIT_CHAT",  "6"))
 RATE_LIMIT_EXTRACT = int(os.environ.get("RATE_LIMIT_EXTRACT", "6"))
 RATE_LIMIT_WINDOW_SEC = int(os.environ.get("RATE_LIMIT_WINDOW_SEC", "60"))
 
@@ -128,15 +128,16 @@ LOCKOUT_WINDOW_SEC     = int(os.environ.get("LOCKOUT_WINDOW_SEC", "900"))    # 1
 LOCKOUT_DURATION_SEC   = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800")) # 30 min
 
 # Storage / branding
-BASE_DIR     = os.path.dirname(__file__)
-STATIC_DIR   = os.path.join(BASE_DIR, "static")
-UPLOAD_FOLDER= os.path.join(STATIC_DIR, "uploads")  # logos only
-DATA_DIR     = os.path.join(BASE_DIR, "data")
-DB_PATH      = os.path.join(DATA_DIR, "veritas.db")
-FEEDBACK_CSV = os.path.join(DATA_DIR, "feedback.csv")
-ERRORS_CSV   = os.path.join(DATA_DIR, "errors.csv")
-AUTH_CSV     = os.path.join(DATA_DIR, "auth_events.csv")
-ANALYSES_CSV = os.path.join(DATA_DIR, "analyses.csv")
+BASE_DIR      = os.path.dirname(__file__)
+STATIC_DIR    = os.path.join(BASE_DIR, "static")
+UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")  # logos only
+DATA_DIR      = os.path.join(BASE_DIR, "data")
+DB_PATH       = os.path.join(DATA_DIR, "veritas.db")
+FEEDBACK_CSV  = os.path.join(DATA_DIR, "feedback.csv")
+ERRORS_CSV    = os.path.join(DATA_DIR, "errors.csv")
+AUTH_CSV      = os.path.join(DATA_DIR, "auth_events.csv")
+ANALYSES_CSV  = os.path.join(DATA_DIR, "analyses.csv")
+SUPPORT_CSV   = os.path.join(DATA_DIR, "support_tickets.csv")  # NEW
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
@@ -205,6 +206,21 @@ def _init_db():
             user_agent TEXT
         )
     """)
+    # NEW: support tickets table
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            ticket_id TEXT,
+            full_name TEXT,
+            email TEXT,
+            bias_report_id TEXT,
+            issue TEXT,
+            session_id TEXT,
+            login_id TEXT,
+            user_agent TEXT
+        )
+    """)
     con.commit()
     con.close()
 
@@ -243,6 +259,14 @@ if not os.path.exists(ERRORS_CSV):
         csv.writer(f).writerow([
             "timestamp_utc","error_id","request_id","route","kind","http_status","detail",
             "session_id","login_id","remote_addr","user_agent"
+        ])
+
+# NEW: initialize support tickets CSV
+if not os.path.exists(SUPPORT_CSV):
+    with open(SUPPORT_CSV, "w", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([
+            "timestamp_utc", "ticket_id", "full_name", "email",
+            "bias_report_id", "issue", "session_id", "login_id", "user_agent"
         ])
 
 # Default tagline + logo autodetect
@@ -297,6 +321,12 @@ def _gen_internal_report_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d")
     rand = secrets.token_hex(4).upper()
     return f"AX-{ts}-{rand}"
+
+# NEW: Support ticket ID
+def _gen_ticket_id(prefix: str = "SUP") -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    rand = secrets.token_hex(3).upper()
+    return f"{prefix}-{ts}-{rand}"
 
 def _safe_decode(b: bytes) -> str:
     for enc in ("utf-8", "utf-16", "latin-1"):
@@ -398,7 +428,7 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
         print("Auth log error:", repr(e))
         return None
 
-def log_analysis(public_id: str, internal_id: str, assistant_text: str):
+def log_analysis(public_report_id: str, internal_report_id: str, assistant_text: str):
     try:
         ts = datetime.now(timezone.utc).isoformat()
         sid = _get_sid()
@@ -410,7 +440,7 @@ def log_analysis(public_id: str, internal_id: str, assistant_text: str):
         conv_chars = len(conv_json)
         # CSV
         with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json])
+            csv.writer(f).writerow([ts, public_report_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json])
         # DB
         _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
                     VALUES (?,?,?,?,?,?,?,?,?)""",
@@ -461,11 +491,7 @@ st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400&display=swap');
-
-    html, body, [class*="css"] {
-        font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important;
-    }
-
+    html, body, [class*="css"] { font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif !important; }
     div.stButton > button,
     div.stDownloadButton > button,
     [data-testid="stFileUploader"] section div div span button,
@@ -477,7 +503,6 @@ st.markdown(
         border: 1px solid #FF8C32 !important;
         border-radius: 0.5rem !important;
         box-shadow: none !important;
-
         padding: 0.50rem 1rem !important;
         font-size: 0.95rem !important;
         font-weight: 400 !important;
@@ -498,8 +523,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Header with logo + tagline
-col_logo, col_title = st.columns([1, 6])
+# Header with logo + centered title + top-right Support
+col_logo, col_title, col_support = st.columns([1, 6, 2])
 with col_logo:
     logo_path = None
     if CURRENT_LOGO_FILENAME:
@@ -516,6 +541,117 @@ with col_title:
     st.markdown("<h1 style='text-align:center;margin:0;'>Veritas — Pilot Test</h1>", unsafe_allow_html=True)
     if CURRENT_TAGLINE:
         st.caption(CURRENT_TAGLINE)
+
+with col_support:
+    if st.button("Support", use_container_width=True):
+        st.session_state["show_support"] = True
+
+# ===== Support Form (toggle) =====
+if st.session_state.get("show_support", False):
+    st.divider()
+    with st.form("support_form"):
+        st.subheader("Support Request")
+        full_name = st.text_input("Full name")
+        email_sup = st.text_input("Email")
+        bias_report_id = st.text_input("Bias Report ID (if applicable)")
+        issue_text = st.text_area("Describe the issue", height=160)
+        colA, colB = st.columns(2)
+        with colA:
+            submit_support = st.form_submit_button("Submit Support Request")
+        with colB:
+            cancel_support = st.form_submit_button("Cancel")
+
+    if 'cancel_support' in locals() and cancel_support:
+        st.session_state["show_support"] = False
+        st.experimental_rerun()
+
+    if 'submit_support' in locals() and submit_support:
+        if not full_name.strip():
+            st.error("Please enter your full name.")
+        elif not email_sup.strip():
+            st.error("Please enter your email.")
+        elif not issue_text.strip():
+            st.error("Please describe the issue.")
+        else:
+            ticket_id = _gen_ticket_id()
+            ts = datetime.now(timezone.utc).isoformat()
+            sid = st.session_state.get("sid") or _get_sid()
+            login_id = st.session_state.get("login_id", "")
+            ua = "streamlit"
+
+            # CSV write
+            try:
+                with open(SUPPORT_CSV, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow([
+                        ts, ticket_id, full_name.strip(), email_sup.strip(),
+                        bias_report_id.strip(), issue_text.strip(),
+                        sid, login_id, ua
+                    ])
+            except Exception as e:
+                log_error_event(kind="SUPPORT_WRITE", route="/support", http_status=500, detail=repr(e))
+                st.error("We couldn't save your ticket. Please try again.")
+            else:
+                # DB write
+                try:
+                    _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
+                                VALUES (?,?,?,?,?,?,?,?,?)""",
+                             (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
+                except Exception as e:
+                    log_error_event(kind="SUPPORT_DB", route="/support", http_status=200, detail=repr(e))
+
+                # Optional SendGrid email
+                if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
+                    try:
+                        subject = f"[Veritas Support] Ticket {ticket_id}"
+                        plain = (
+                            f"New Support Ticket\n"
+                            f"Ticket ID: {ticket_id}\n"
+                            f"Time (UTC): {ts}\n"
+                            f"From: {full_name} <{email_sup}>\n"
+                            f"Bias Report ID: {bias_report_id}\n\n"
+                            f"Issue:\n{issue_text}\n\n"
+                            f"Session: {sid}\nLogin: {login_id}\n"
+                        )
+                        html_body = (
+                            f"<h3>New Support Ticket</h3>"
+                            f"<p><strong>Ticket ID:</strong> {ticket_id}</p>"
+                            f"<p><strong>Time (UTC):</strong> {ts}</p>"
+                            f"<p><strong>From:</strong> {full_name} &lt;{email_sup}&gt;</p>"
+                            f"<p><strong>Bias Report ID:</strong> {bias_report_id or '(none)'}"
+                            f"<p><strong>Issue:</strong><br><pre style='white-space:pre-wrap'>{issue_text}</pre></p>"
+                            f"<hr><p><strong>Session:</strong> {sid}<br><strong>Login:</strong> {login_id}</p>"
+                        )
+                        payload = {
+                            "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
+                            "from": {"email": SENDGRID_FROM, "name": "Veritas"},
+                            "subject": subject,
+                            "content": [
+                                {"type": "text/plain", "value": plain},
+                                {"type": "text/html", "value": html_body}
+                            ],
+                        }
+                        with httpx.Client(timeout=12) as client:
+                            r = client.post(
+                                "https://api.sendgrid.com/v3/mail/send",
+                                headers={
+                                    "Authorization": f"Bearer {SENDGRID_API_KEY}",
+                                    "Content-Type": "application/json"
+                                },
+                                json=payload,
+                            )
+                        if r.status_code not in (200, 202):
+                            log_error_event(
+                                kind="SENDGRID_SUPPORT",
+                                route="/support",
+                                http_status=r.status_code,
+                                detail=r.text[:300]
+                            )
+                    except Exception as e:
+                        log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=200, detail=repr(e))
+
+                st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
+                st.session_state["show_support"] = False
+                st.experimental_rerun()
 
 # Session request_id
 if "request_id" not in st.session_state:
@@ -604,11 +740,11 @@ elif not APP_PASSWORD:
     log_auth_event("login_success", True, login_id="", credential_label="NO_PASSWORD")
     st.session_state["authed"] = True
 
-# ================= Sidebar (admin hidden) =================
+# ================= Sidebar =================
 with st.sidebar:
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until"):
+        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until","show_support"):
             st.session_state.pop(k, None)
         st.rerun()
     st.subheader("Session")
@@ -917,6 +1053,8 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+
+
 
 
 
