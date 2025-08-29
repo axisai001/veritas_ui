@@ -419,7 +419,8 @@ Revision Guidance
 ∙Maintain academic tone and intent. 
 ∙Replace exclusionary terms with inclusive equivalents. 
 ∙Avoid prestige or demographic restrictions unless academically necessary. 
-∙Suggestions must be clear, actionable, and directly tied to flagged issues. 
+∙Suggestions must be clear, actionable, and directly tied to flagged issues.
+""".strip()
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -507,9 +508,14 @@ def log_error_event(kind: str, route: str, http_status: int, detail: str):
         with open(ERRORS_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow([ts, eid, rid, route, kind, http_status, safe_detail, sid, login_id, addr, ua])
         # DB
-        _db_exec("""INSERT INTO errors (timestamp_utc,error_id,request_id,route,kind,http_status,detail,session_id,login_id,remote_addr,user_agent)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                 (ts, eid, rid, route, kind, http_status, safe_detail, sid, login_id, addr, ua))
+        _db_exec(
+            """INSERT INTO errors (
+                   timestamp_utc, error_id, request_id, route, kind, http_status,
+                   detail, session_id, login_id, remote_addr, user_agent
+               )
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (ts, eid, rid, route, kind, http_status, safe_detail, sid, login_id, addr, ua),
+        )
         print(f"[{ts}] ERROR {eid} (req {rid}) {route} {kind} {http_status} :: {safe_detail}")
         return eid
     except Exception as e:
@@ -551,9 +557,14 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
         with open(AUTH_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(row)
         # DB
-        _db_exec("""INSERT INTO auth_events (timestamp_utc,event_type,login_id,session_id,tracking_id,credential_label,success,hashed_attempt_prefix,remote_addr,user_agent)
-                    VALUES (?,?,?,?,?,?,?,?,?,?)""",
-                 (ts, event_type, (login_id or "").strip()[:120], sid, tid, credential_label, 1 if success else 0, hashed_prefix, addr, ua))
+        _db_exec(
+            """INSERT INTO auth_events (
+                   timestamp_utc, event_type, login_id, session_id, tracking_id,
+                   credential_label, success, hashed_attempt_prefix, remote_addr, user_agent
+               )
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (ts, event_type, (login_id or "").strip()[:120], sid, tid, credential_label, 1 if success else 0, hashed_prefix, addr, ua),
+        )
         st.session_state["last_tracking_id"] = tid
         return tid
     except Exception as e:
@@ -574,9 +585,14 @@ def log_analysis(public_report_id: str, internal_report_id: str, assistant_text:
         with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow([ts, public_report_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json])
         # DB
-        _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
-                 (ts, public_report_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json))
+        _db_exec(
+            """INSERT INTO analyses (
+                   timestamp_utc, public_report_id, internal_report_id, session_id, login_id,
+                   remote_addr, user_agent, conversation_chars, conversation_json
+               )
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (ts, public_report_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json),
+        )
     except Exception as e:
         print("Analysis log error:", repr(e))
 
@@ -695,7 +711,7 @@ if st.session_state.get("show_support", False):
 
     if 'cancel_support' in locals() and cancel_support:
         st.session_state["show_support"] = False
-        st.experimental_rerun()
+        st.rerun()
 
     if 'submit_support' in locals() and submit_support:
         if not full_name.strip():
@@ -725,9 +741,14 @@ if st.session_state.get("show_support", False):
             else:
                 # DB write
                 try:
-                    _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
-                                VALUES (?,?,?,?,?,?,?,?,?)""",
-                             (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
+                    _db_exec(
+                        """INSERT INTO support_tickets (
+                               timestamp_utc, ticket_id, full_name, email, bias_report_id,
+                               issue, session_id, login_id, user_agent
+                           )
+                           VALUES (?,?,?,?,?,?,?,?,?)""",
+                        (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua),
+                    )
                 except Exception as e:
                     log_error_event(kind="SUPPORT_DB", route="/support", http_status=200, detail=repr(e))
 
@@ -783,7 +804,7 @@ if st.session_state.get("show_support", False):
 
                 st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
                 st.session_state["show_support"] = False
-                st.experimental_rerun()
+                st.rerun()
 
 # Session request_id
 if "request_id" not in st.session_state:
@@ -1133,9 +1154,14 @@ with st.form("feedback_form"):
             st.stop()
         # DB
         try:
-            _db_exec("""INSERT INTO feedback (timestamp_utc,rating,email,comments,conversation_chars,conversation,remote_addr,ua)
-                        VALUES (?,?,?,?,?,?,?,?)""",
-                     (ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"))
+            _db_exec(
+                """INSERT INTO feedback (
+                       timestamp_utc, rating, email, comments, conversation_chars,
+                       conversation, remote_addr, ua
+                   )
+                   VALUES (?,?,?,?,?,?,?,?)""",
+                (ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"),
+            )
         except Exception as e:
             log_error_event(kind="FEEDBACK_DB", route="/feedback", http_status=200, detail=repr(e))
 
@@ -1185,9 +1211,6 @@ with st.form("feedback_form"):
 
 # Footer
 st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
-
-
-
 
 
 
