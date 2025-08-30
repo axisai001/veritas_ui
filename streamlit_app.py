@@ -970,7 +970,7 @@ with tabs[0]:
 <div class="v-actions">
   <a id="{copy_id}" href="javascript:void(0)">Copy Report</a>
   <a id="download_{uid}" href="data:application/pdf;base64,{pdf_b64}" download="veritas_report.pdf">Download PDF</a>
-  <a id="clear_{uid}" href="?clear=1">Clear Report</a>
+  <a id="clear_{uid}" href="?clear=1" target="_top">Clear Report</a>
   <span id="{note_id}" class="copy-note" style="display:none;">Copied ✓</span>
 </div>
 <script>
@@ -989,6 +989,15 @@ with tabs[0]:
       try {{ document.execCommand("copy"); }} catch (_e) {{}}
       ta.remove(); note_{uid}.style.display="inline";
       setTimeout(() => note_{uid}.style.display="none", 1200);
+    }}
+  }});
+  const clearEl_{uid} = document.getElementById("clear_{uid}");
+  clearEl_{uid}.addEventListener("click", (e) => {{
+    try {{
+      e.preventDefault();
+      window.top.location.search = "?clear=1";
+    }} catch (_) {{
+      return true;
     }}
   }});
 </script>
@@ -1274,7 +1283,7 @@ if ADMIN_PASSWORD:
                     except Exception:
                         pass
 
-                    # NEW: Support Tickets tracker
+                    # Support Tickets tracker
                     st.write("##### Support Tickets")
                     st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
                     try:
