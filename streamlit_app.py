@@ -588,6 +588,21 @@ _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 # ================= Streamlit UI =================
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
+# --- Query param handler for "Clear report" ---
+try:
+    params = st.experimental_get_query_params()
+except Exception:
+    params = {}
+
+if params.get("clear", ["0"])[0] == "1":
+    st.session_state["history"] = []
+    st.session_state["last_reply"] = ""
+    try:
+        st.experimental_set_query_params()  # clears all params
+    except Exception:
+        pass
+    st.experimental_rerun()
+
 # ====== Global CSS (modern theme + link-style action controls) ======
 PRIMARY = "#FF8C32"
 ACCENT = "#E97C25"
@@ -641,6 +656,22 @@ html, body, [class*="css"] {{
   border-color: {ACCENT} !important;
 }}
 </style>
+
+/* Uniform action links for Copy / Download / Clear */
+.actions-row { display: flex; gap: 1rem; align-items: center; }
+.action-link {
+  color: #FF8C32 !important;
+  text-decoration: none !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1.6 !important;
+  display: inline-block !important;
+}
+.action-link:hover { color: #E97C25 !important; text-decoration: underline !important; }
+.action-sep { opacity: .45; }
+
 """,
     unsafe_allow_html=True,
 )
@@ -840,59 +871,58 @@ with tabs[0]:
 
     # Show latest report (if any)
     if st.session_state.get("last_reply"):
-        st.write("### Bias Report")
-        st.markdown(st.session_state["last_reply"])
+    st.write("### Bias Report")
+    st.markdown(st.session_state["last_reply"])
 
-        # ---- Link-style actions (only after analysis) ----
-        # Build PDF bytes for download link
-        def build_pdf_bytes(content: str) -> bytes:
-            if SimpleDocTemplate is None:
-                # fallback: plain text as PDF-like (very simple)
-                return content.encode("utf-8")
-            buf = io.BytesIO()
-            doc = SimpleDocTemplate(
-                buf, pagesize=letter,
-                leftMargin=0.8*inch, rightMargin=0.8*inch,
-                topMargin=0.9*inch, bottomMargin=0.9*inch
-            )
-            styles = getSampleStyleSheet()
-            base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
-            body = ParagraphStyle("Body", parent=base, fontSize=10)
-            h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
-            story = []
-            title = APP_TITLE + " — Bias Analysis Report"
-            ts_local = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-            story.append(Paragraph(f"<b>{title}</b>", h))
-            story.append(Paragraph(f"<i>Generated {ts_local}</i>", base))
-            story.append(Spacer(1, 10))
-            for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
-                safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
-            def _header_footer(canvas, doc_):
-                canvas.saveState()
-                w, h = letter
-                footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
-                page = f"Page {doc_.page}"
-                canvas.setFont("Helvetica", 8)
-                canvas.drawString(0.8*inch, 0.55*inch, footer)
-                pw = stringWidth(page, "Helvetica", 8)
-                canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
-                canvas.restoreState()
-            doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-            buf.seek(0); return buf.read()
+    # ---- Link-style actions (only after analysis) ----
+    def build_pdf_bytes(content: str) -> bytes:
+        if SimpleDocTemplate is None:
+            return content.encode("utf-8")
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buf, pagesize=letter,
+            leftMargin=0.8*inch, rightMargin=0.8*inch,
+            topMargin=0.9*inch, bottomMargin=0.9*inch
+        )
+        styles = getSampleStyleSheet()
+        base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
+        body = ParagraphStyle("Body", parent=base, fontSize=10)
+        h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
+        story = []
+        title = APP_TITLE + " — Bias Analysis Report"
+        ts_local = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+        story.append(Paragraph(f"<b>{title}</b>", h))
+        story.append(Paragraph(f"<i>Generated {ts_local}</i>", base))
+        story.append(Spacer(1, 10))
+        for p in [p.strip() for p in st.session_state["last_reply"].split("\n\n") if p.strip()]:
+            safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
+        def _header_footer(canvas, doc_):
+            canvas.saveState()
+            w, h = letter
+            footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
+            page = f"Page {doc_.page}"
+            canvas.setFont("Helvetica", 8)
+            canvas.drawString(0.8*inch, 0.55*inch, footer)
+            pw = stringWidth(page, "Helvetica", 8)
+            canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
+            canvas.restoreState()
+        doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+        buf.seek(0); return buf.read()
 
-        pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
-        pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
-        pdf_href = f'data:application/pdf;base64,{pdf_b64}'
+    pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
+    import base64
+    pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+    pdf_href = f'data:application/pdf;base64,{pdf_b64}'
+    clear_href = "?clear=1"
 
-        # Build inline actions row
-        c1, c2, c3 = st.columns([1,1,1])
-        with c1:
-            # Copy via HTML+JS link (no giant button)
-            components.html(
-                f"""
+    st.markdown('<div class="sticky-actions">', unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1,1,1])
+    with c1:
+        components.html(
+            f"""
 <div class="actions-row">
-  <a id="copyLink" href="javascript:void(0)">Copy report</a>
+  <a class="action-link" id="copyLink" href="javascript:void(0)">Copy report</a>
 </div>
 <script>
   const textToCopy = {json.dumps(st.session_state["last_reply"])};
@@ -914,23 +944,18 @@ with tabs[0]:
   }});
 </script>
 """,
-                height=30,
-            )
-        with c2:
-            # Download as link (data URL)
-            st.markdown(
-                f"""<div class="actions-row"><a download="veritas_report.pdf" href="{pdf_href}">Download report</a></div>""",
-                unsafe_allow_html=True,
-            )
-        with c3:
-            # Clear report via true Streamlit action, styled like a link
-            st.markdown('<div class="linklike">', unsafe_allow_html=True)
-            if st.button("Clear report", key="clear_report_linklike"):
-                st.session_state["history"] = []
-                st.session_state["last_reply"] = ""
-                st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
+            height=30,
+        )
+    with c2:
+        st.markdown(
+            f"""<div class="actions-row"><a class="action-link" download="veritas_report.pdf" href="{pdf_href}">Download report</a></div>""",
+            unsafe_allow_html=True,
+        )
+    with c3:
+        st.markdown(
+            f"""<div class="actions-row"><a class="action-link" href="{clear_href}">Clear report</a></div>""",
+            unsafe_allow_html=True,
+        )
     st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Feedback Tab --------------------
@@ -1229,6 +1254,7 @@ if ADMIN_PASSWORD:
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
