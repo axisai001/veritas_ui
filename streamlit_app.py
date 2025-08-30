@@ -46,7 +46,7 @@ try:
     from reportlab.lib.units import inch
     from reportlab.pdfbase.pdfmetrics import stringWidth
 except Exception:
-    SimpleDocTemplate = None  # will error politely if missing
+    SimpleDocTemplate = None  # will fall back to plain-text bytes
 
 # ================= Updated Config (via config.py) =================
 try:
@@ -66,6 +66,40 @@ try:
     TEMPERATURE = float(os.environ.get("OPENAI_TEMPERATURE", "0.2"))
 except Exception:
     TEMPERATURE = 0.2
+
+# ----- Streamlit bootstrap (place as the first Streamlit call) -----
+st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
+
+# ----- Compatibility helpers for rerun & query params -----
+def _safe_rerun():
+    try:
+        st.rerun()
+    except Exception:
+        try:
+            st.experimental_rerun()
+        except Exception:
+            pass
+
+def _get_query_params():
+    # prefer new API; fallback to experimental
+    try:
+        return dict(st.query_params)
+    except Exception:
+        try:
+            return st.experimental_get_query_params()
+        except Exception:
+            return {}
+
+def _set_query_params(**kwargs):
+    try:
+        st.query_params.clear()
+        for k, v in kwargs.items():
+            st.query_params[k] = v
+    except Exception:
+        try:
+            st.experimental_set_query_params(**kwargs)
+        except Exception:
+            pass
 
 # Admin controls
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
@@ -590,17 +624,14 @@ _prune_csv_by_ttl(ANALYSES_CSV, ANALYSES_LOG_TTL_DAYS)
 _prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 
-# ================= Streamlit UI =================
-st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
-
-# --- handle ?clear=1 to reset report state (for HTML "Clear Report" link) ---
+# ---------------- Query param: ?clear=1 ----------------
 try:
-    qparams = st.experimental_get_query_params()
+    qparams = _get_query_params()
     if "clear" in qparams:
         st.session_state["history"] = []
         st.session_state["last_reply"] = ""
-        st.experimental_set_query_params()  # remove param
-        st.experimental_rerun()
+        _set_query_params()  # remove param
+        _safe_rerun()
 except Exception:
     pass
 
@@ -614,7 +645,8 @@ st.markdown(f"""
 html, body, [class*="css"] {{
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }}
-.reportview-container .main .block-container{{ padding-top: 1rem; }}
+/* Up-to-date container spacing */
+.block-container {{ padding-top: 1rem; }}
 
 /* Buttons (consistent) */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
@@ -743,7 +775,7 @@ def show_login():
                 st.session_state["_locked_until"] = 0.0
                 log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
                 st.success("Logged in.")
-                st.rerun()
+                _safe_rerun()
             else:
                 _note_failed_login(attempted_secret=pwd)
                 st.error("Incorrect password")
@@ -763,8 +795,7 @@ with st.sidebar:
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
         for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until","show_support","is_admin"):
             st.session_state.pop(k, None)
-        st.rerun()
-    # Session/time zone intentionally not displayed per your request.
+        _safe_rerun()
 
 # ================= Tabs =================
 tab_names = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
@@ -799,11 +830,18 @@ with tabs[0]:
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
             network_error(); st.stop()
 
-        prog = st.progress(0, text="Preparing…")
+        try:
+            prog = st.progress(0, text="Preparing…")
+        except TypeError:
+            prog = st.progress(0)  # older Streamlit without text kw
 
         user_text = st.session_state.get("user_input_box", "").strip()
         extracted = ""
-        prog.progress(10, text="Checking upload…")
+        try:
+            prog.progress(10)
+        except Exception:
+            pass
+
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
             if size_mb > MAX_UPLOAD_MB:
@@ -822,9 +860,12 @@ with tabs[0]:
 
         # Model call
         try:
-            prog.progress(40, text="Contacting model…")
+            try:
+                prog.progress(40, text="Contacting model…")
+            except Exception:
+                prog.progress(40)
             client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
-            resp = client.chat.completions.create(
+            resp = client.chat_completions.create(  # OpenAI v1: alias works; fallback below if needed
                 model=MODEL,
                 temperature=TEMPERATURE,
                 messages=[
@@ -833,11 +874,33 @@ with tabs[0]:
                     {"role": "user", "content": final_input},
                 ],
             )
-            model_reply = resp.choices[0].message.content or ""
-            prog.progress(85, text="Formatting report…")
+            # If SDK version exposes .chat.completions.create instead:
+            try:
+                model_reply = resp.choices[0].message.content or ""
+            except Exception:
+                # fallback path for alt SDK attribute naming
+                model_reply = resp.choices[0].messages[0].content if resp and resp.choices else ""
+            try:
+                prog.progress(85, text="Formatting report…")
+            except Exception:
+                prog.progress(85)
         except Exception as e:
-            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
-            network_error(); st.stop()
+            # Try alternate endpoint name if the first call fails due to SDK differences
+            try:
+                client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
+                resp = client.chat.completions.create(
+                    model=MODEL,
+                    temperature=TEMPERATURE,
+                    messages=[
+                        {"role": "system", "content": IDENTITY_PROMPT},
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        {"role": "user", "content": final_input},
+                    ],
+                )
+                model_reply = resp.choices[0].message.content or ""
+            except Exception as e2:
+                log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=f"{repr(e)} | {repr(e2)}")
+                network_error(); st.stop()
 
         public_report_id = _gen_public_report_id()
         internal_report_id = _gen_internal_report_id()
@@ -852,8 +915,11 @@ with tabs[0]:
             log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
         st.session_state["_clear_text_box"] = True
-        prog.progress(100, text="Done ✓")
-        st.rerun()
+        try:
+            prog.progress(100, text="Done ✓")
+        except Exception:
+            prog.progress(100)
+        _safe_rerun()
 
     # Show latest report (if any)
     if st.session_state.get("last_reply"):
@@ -1033,7 +1099,7 @@ with tabs[1]:
                         json=payload,
                     )
                 if r.status_code not in (200, 202):
-                    log_error_event(kind="SENDGRID", route="/feedback", http_status=r.status_code, detail=r.text)
+                    log_error_event(kind="SENDGRID", route="/feedback", http_status=r.status_code, detail=r.text[:300])
                     st.error("Feedback saved but email failed to send.")
                 else:
                     st.success("Thanks — feedback saved and emailed ✓")
@@ -1055,7 +1121,7 @@ with tabs[2]:
         with c2:
             cancel_support = st.form_submit_button("Cancel")
     if cancel_support:
-        st.experimental_rerun()
+        _safe_rerun()
     if submit_support:
         if not full_name.strip():
             st.error("Please enter your full name.")
@@ -1121,7 +1187,7 @@ with tabs[2]:
                     except Exception as e:
                         log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=200, detail=repr(e))
                 st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
-                st.experimental_rerun()
+                _safe_rerun()
 
 # -------------------- Help Tab --------------------
 with tabs[3]:
@@ -1155,13 +1221,13 @@ if ADMIN_PASSWORD:
                 else:
                     st.session_state["is_admin"] = True
                     st.success("Admin access granted.")
-                    st.experimental_rerun()
+                    _safe_rerun()
             st.stop()
         else:
             # Admin content: History + Data Explorer; and Exit button
             if st.button("Exit Admin"):
                 st.session_state["is_admin"] = False
-                st.experimental_rerun()
+                _safe_rerun()
 
             # Subtabs inside Admin
             sub1, sub2 = st.tabs(["🕘 History", "📂 Data Explorer"])
@@ -1217,30 +1283,31 @@ if ADMIN_PASSWORD:
                     st.write("##### Auth Events")
                     st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
                     try:
-                        st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv")
+                        st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
                     except Exception:
                         pass
 
                     st.write("##### Errors")
                     st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
                     try:
-                        st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv")
+                        st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
                     except Exception:
                         pass
                 with c2:
                     st.write("##### Analyses")
                     st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
                     try:
-                        st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv")
+                        st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
                     except Exception:
                         pass
 
                     st.write("##### Feedback")
                     st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
                     try:
-                        st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv")
+                        st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
                     except Exception:
                         pass
+
 
 
 
