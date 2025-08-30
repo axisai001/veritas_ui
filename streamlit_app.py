@@ -947,80 +947,56 @@ with tabs[0]:
         st.markdown(st.session_state["last_reply"])
 
         st.markdown('<div class="sticky-actions">', unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown("""
-<style>
-div.stButton > button,
-.copy-btn {
-  background-color: #FF8C32 !important;
-  color: #111418 !important;
-  border: 1px solid #FF8C32 !important;
-  border-radius: .75rem !important;
-  padding: 0.60rem 1rem !important;
-  font-size: 0.95rem !important;
-  font-weight: 500 !important;
-  width: 100% !important;
-}
-.copy-btn:hover,
-div.stButton > button:hover {
-  background-color: #E97C25 !important;
-  border-color: #E97C25 !important;
-}
-</style>
-""", unsafe_allow_html=True)
+c1, c2, c3 = st.columns(3)
 
+# Copy Report button
+with c1:
+    components.html(
+        f"""
+        <button id="copyBtn" class="copy-btn">Copy Report</button>
+        <div id="copyNote" class="copy-note" style="display:none;">Copied ✓</div>
+        <script>
+          const text = {json.dumps(st.session_state["last_reply"])};
+          const btn = document.getElementById("copyBtn");
+          const note = document.getElementById("copyNote");
+          btn.addEventListener("click", async () => {{
+            try {{
+              await navigator.clipboard.writeText(text);
+              note.style.display = "block";
+              setTimeout(() => note.style.display = "none", 1200);
+            }} catch (e) {{
+              const ta = document.createElement("textarea");
+              ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+              document.body.appendChild(ta); ta.focus(); ta.select();
+              try {{ document.execCommand("copy"); }} catch (_e) {{}}
+              ta.remove(); note.style.display="block";
+              setTimeout(() => note.style.display="none", 1200);
+            }}
+          }});
+        </script>
+        """,
+        height=80,
+    )
 
-        with c2:
-            if st.button("Clear Report"):
-                st.session_state["history"] = []
-                st.session_state["last_reply"] = ""
-                st.rerun()
-        with c3:
-            try:
-                if st.session_state["last_reply"]:
-                    def build_pdf_bytes(content: str) -> bytes:
-                        if SimpleDocTemplate is None:
-                            raise RuntimeError("PDF engine not available. Install 'reportlab'.")
-                        buf = io.BytesIO()
-                        doc = SimpleDocTemplate(
-                            buf, pagesize=letter,
-                            leftMargin=0.8*inch, rightMargin=0.8*inch,
-                            topMargin=0.9*inch, bottomMargin=0.9*inch
-                        )
-                        styles = getSampleStyleSheet()
-                        base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
-                        body = ParagraphStyle("Body", parent=base, fontSize=10)
-                        h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
-                        story = []
-                        title = APP_TITLE + " — Bias Analysis Report"
-                        ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-                        story.append(Paragraph(f"<b>{title}</b>", h))
-                        story.append(Paragraph(f"<i>Generated {ts}</i>", base))
-                        story.append(Spacer(1, 10))
-                        for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
-                            safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                            story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
-                        def _header_footer(canvas, doc_):
-                            canvas.saveState()
-                            w, h = letter
-                            footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
-                            page = f"Page {doc_.page}"
-                            canvas.setFont("Helvetica", 8)
-                            canvas.drawString(0.8*inch, 0.55*inch, footer)
-                            pw = stringWidth(page, "Helvetica", 8)
-                            canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
-                            canvas.restoreState()
-                        doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-                        buf.seek(0); return buf.read()
-                    pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
-                    st.download_button("Download Report (PDF)", data=pdf_bytes, file_name="veritas_report.pdf", mime="application/pdf")
-            except Exception as e:
-                log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
-                st.error("network error")
-        st.markdown('</div>', unsafe_allow_html=True)
+# Clear Report button
+with c2:
+    if st.button("Clear Report"):
+        st.session_state["history"] = []
+        st.session_state["last_reply"] = ""
+        st.rerun()
 
-    st.markdown('</div>', unsafe_allow_html=True)
+# Download PDF button
+with c3:
+    if st.session_state["last_reply"]:
+        pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
+        st.download_button(
+            "Download Report (PDF)",
+            data=pdf_bytes,
+            file_name="veritas_report.pdf",
+            mime="application/pdf"
+        )
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Feedback --------------------
 with tabs[1]:
@@ -1340,6 +1316,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
