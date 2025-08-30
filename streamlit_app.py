@@ -850,8 +850,8 @@ with tabs[0]:
 
     # Show latest report (if any)
         if st.session_state.get("last_reply"):
-        st.write("### Bias Report")
-        st.markdown(st.session_state["last_reply"])
+            st.write("### Bias Report")
+            st.markdown(st.session_state["last_reply"])
 
     # Orange link style
     st.markdown("""
@@ -1216,6 +1216,7 @@ if ADMIN_PASSWORD:
                     pass
 
             st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
