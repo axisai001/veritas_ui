@@ -1113,8 +1113,100 @@ with tabs[1]:
                 st.error("Feedback saved but email failed to send.")
 
 # -------------------- Support --------------------
+# -------------------- Support --------------------
 with tabs[2]:
-    st.info("Use the **Support** button in the header to open the support form drawer at any time.")
+    st.markdown("### 🛟 Support")
+    with st.form("support_form"):
+        full_name = st.text_input("Full name")
+        email_sup = st.text_input("Email")
+        bias_report_id = st.text_input("Bias Report ID (if applicable)")
+        issue_text = st.text_area("Describe the issue", height=160)
+        c1, c2 = st.columns(2)
+        with c1:
+            submit_support = st.form_submit_button("Submit Support Request")
+        with c2:
+            cancel_support = st.form_submit_button("Clear Form")
+
+    if cancel_support:
+        # Just clear the inputs visually by rerunning (no drawer state anymore)
+        st.experimental_rerun()
+
+    if submit_support:
+        if not full_name.strip():
+            st.error("Please enter your full name.")
+        elif not email_sup.strip():
+            st.error("Please enter your email.")
+        elif not issue_text.strip():
+            st.error("Please describe the issue.")
+        else:
+            ticket_id = _gen_ticket_id()
+            ts = datetime.now(timezone.utc).isoformat()
+            sid = st.session_state.get("sid") or _get_sid()
+            login_id = st.session_state.get("login_id", "")
+            ua = "streamlit"
+            # CSV
+            try:
+                with open(SUPPORT_CSV, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow([
+                        ts, ticket_id, full_name.strip(), email_sup.strip(),
+                        bias_report_id.strip(), issue_text.strip(), sid, login_id, ua
+                    ])
+            except Exception as e:
+                log_error_event(kind="SUPPORT_WRITE", route="/support", http_status=500, detail=repr(e))
+                st.error("We couldn't save your ticket. Please try again.")
+            else:
+                # DB
+                try:
+                    _db_exec("""INSERT INTO support_tickets
+                        (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
+                        VALUES (?,?,?,?,?,?,?,?,?)""",
+                        (ts, ticket_id, full_name.strip(), email_sup.strip(),
+                         bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
+                except Exception as e:
+                    log_error_event(kind="SUPPORT_DB", route="/support", http_status=200, detail=repr(e))
+
+                # Optional email via SendGrid
+                if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
+                    try:
+                        subject = f"[Veritas Support] Ticket {ticket_id}"
+                        plain = (
+                            f"New Support Ticket\n"
+                            f"Ticket ID: {ticket_id}\n"
+                            f"Time (UTC): {ts}\n"
+                            f"From: {full_name} <{email_sup}>\n"
+                            f"Bias Report ID: {bias_report_id}\n\n"
+                            f"Issue:\n{issue_text}\n\n"
+                            f"Session: {sid}\nLogin: {login_id}\n"
+                        )
+                        html_body = (
+                            f"<h3>New Support Ticket</h3>"
+                            f"<p><strong>Ticket ID:</strong> {ticket_id}</p>"
+                            f"<p><strong>Time (UTC):</strong> {ts}</p>"
+                            f"<p><strong>From:</strong> {full_name} &lt;{email_sup}&gt;</p>"
+                            f"<p><strong>Bias Report ID:</strong> {bias_report_id or '(none)'}"
+                            f"<p><strong>Issue:</strong><br><pre style='white-space:pre-wrap'>{issue_text}</pre></p>"
+                            f"<hr><p><strong>Session:</strong> {sid}<br><strong>Login:</strong> {login_id}</p>"
+                        )
+                        payload = {
+                            "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
+                            "from": {"email": SENDGRID_FROM, "name": "Veritas"},
+                            "subject": subject,
+                            "content": [
+                                {"type": "text/plain", "value": plain},
+                                {"type": "text/html", "value": html_body}
+                            ],
+                        }
+                        with httpx.Client(timeout=12) as client:
+                            r = client.post(
+                                "https://api.sendgrid.com/v3/mail/send",
+                                headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                                json=payload,
+                            )
+                        if r.status_code not in (200, 202):
+                            log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=r.status_code, detail=r.text[:300])
+                    except Exception as e:
+                        log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=200, detail=repr(e))
+                st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
 
 # -------------------- Help --------------------
 with tabs[3]:
@@ -1252,6 +1344,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
