@@ -950,16 +950,16 @@ with tabs[0]:
         c1, c2, c3 = st.columns(3)
         with c1:
             div.stButton > button,
-.copy-btn {
-  background-color: #FF8C32 !important;
-  color: #111418 !important;
-  border: 1px solid #FF8C32 !important;
-  border-radius: .75rem !important;
-  padding: 0.60rem 1rem !important;
-  font-size: 0.95rem !important;
-  font-weight: 500 !important;
-  width: 100% !important;
-}
+            .copy-btn {
+              background-color: #FF8C32 !important;
+              color: #111418 !important;
+              border: 1px solid #FF8C32 !important;
+              border-radius: .75rem !important;
+              padding: 0.60rem 1rem !important;
+              font-size: 0.95rem !important;
+              font-weight: 500 !important;
+              width: 100% !important;
+            }
 
         with c2:
             if st.button("Clear Report"):
@@ -1330,6 +1330,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
