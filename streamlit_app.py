@@ -1047,10 +1047,6 @@ with tabs[0]:
         st.write("### Bias Report")
         st.markdown(st.session_state["last_reply"])
 
-        if st.session_state.get("last_reply"):
-    st.write("### Bias Report")
-    st.markdown(st.session_state["last_reply"])
-
     # HTML-only action bar (Copy, Download PDF, Clear) — consistent look
     import json as _json
     html_actions = f"""
@@ -1418,6 +1414,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
