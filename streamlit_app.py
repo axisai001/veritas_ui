@@ -1,8 +1,12 @@
-# streamlit_app.py — Veritas (Streamlit) — refreshed UI + admin panel
-# Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD is set)
-# History + Data Explorer live under Admin (email + password gate)
-# Copy/Clear/Download controls appear only after analysis; styled as orange links (HTML)
-# Session ID + TZ tracked internally (not shown in sidebar)
+# streamlit_app.py — Veritas (Streamlit) — Baseline
+# - Modern header (no extra top gap)
+# - Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
+# - Actions after analysis: Copy, Clear, Download (uniform orange-link style)
+# - Admin: gated by ADMIN_PASSWORD + admin email prompt; shows History + Data Explorer
+# - Support Tickets tracked; shown in Admin → Data Explorer
+# - Session ID + Timezone tracked internally (not in sidebar)
+# - CSV + SQLite; SendGrid email; login lockout (user app password optional)
+# - Full prompt preserved
 
 import os
 import io
@@ -35,6 +39,16 @@ try:
 except Exception:
     docx = None
 
+# ---------- PDF (ReportLab) for Download report ----------
+try:
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import inch
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+except Exception:
+    SimpleDocTemplate = None  # will error politely if missing
+
 # ================= Updated Config (via config.py) =================
 try:
     from config import load_settings
@@ -53,10 +67,6 @@ try:
     TEMPERATURE = float(os.environ.get("OPENAI_TEMPERATURE", "0.2"))
 except Exception:
     TEMPERATURE = 0.2
-
-# Admin env
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip()  # optional: if set, only this email can log in
 
 # --- Safe timezone loader ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
@@ -118,8 +128,12 @@ SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
 SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
 SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 
-# Password gate (optional) — main app gate (not admin)
+# Password gate (optional, for general app)
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
+
+# Admin gate (for Admin tab)
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+ADMIN_ALLOWLIST = set([e.strip().lower() for e in os.environ.get("ADMIN_ALLOWLIST", "").split(",") if e.strip()])
 
 # Lockout config
 LOCKOUT_THRESHOLD      = int(os.environ.get("LOCKOUT_THRESHOLD", "5"))       # failed attempts
@@ -576,72 +590,86 @@ _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 # ================= Streamlit UI =================
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
-# Query param hook for Clear action
-qp = st.query_params
-if "clear" in qp:
-    # Clear just the report + history
-    st.session_state["history"] = []
-    st.session_state["last_reply"] = ""
-    # remove the param and rerun
-    try:
-        st.experimental_set_query_params()
-    except Exception:
-        pass
-    st.experimental_rerun()
+# ====== Global CSS (no header gap, unified action links) ======
+PRIMARY = "#FF8C32"
+ACCENT = "#E97C25"
 
-# ====== Minimal CSS (orange action links + tidy form buttons) ======
-st.markdown("""
+st.markdown(f"""
 <style>
-/* Global font */
+/* Remove phantom top gap */
+section.main > div.block-container {{
+  padding-top: 0.5rem;
+}}
+/* Typography + base */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-html, body, [class*="css"] {
+html, body, [class*="css"] {{
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-}
-
-/* Card */
-.v-card {
-  background: rgba(255,255,255,0.02);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px;
-  padding: 18px;
-}
-
-/* Action link row (under the report) */
-.actions-row {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  margin: 0.25rem 0 0.75rem 0;
-}
-.actions-row a {
-  color: #FF8C32 !important;
-  text-decoration: none;
-  font-weight: 600;
-  cursor: pointer;
-}
-.actions-row a:hover {
-  text-decoration: underline;
-}
-
-/* Make primary app buttons consistent */
-div.stButton > button, .stForm [type="submit"], .stDownloadButton button {
-  background-color: #FF8C32 !important;
+}}
+/* Buttons (Streamlit defaults we also use) */
+div.stButton > button, .stDownloadButton button, .stForm [type="submit"] {{
+  background-color: {PRIMARY} !important;
   color: #111418 !important;
-  border: 1px solid #FF8C32 !important;
-  border-radius: .65rem !important;
+  border: 1px solid {PRIMARY} !important;
+  border-radius: .6rem !important;
   box-shadow: none !important;
   padding: 0.55rem 1rem !important;
   font-size: 0.95rem !important;
   font-weight: 500 !important;
-}
-div.stButton > button:hover, .stForm [type="submit"]:hover, .stDownloadButton button:hover {
-  background-color: #E97C25 !important;
-  border-color: #E97C25 !important;
-}
+}}
+div.stButton > button:hover, .stDownloadButton button:hover, .stForm [type="submit"]:hover {{
+  background-color: {ACCENT} !important;
+  border-color: {ACCENT} !important;
+}}
+/* Glassy cards */
+.v-card {{
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 18px;
+}}
+/* Header wrapper */
+.header-wrap {{
+  position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px);
+  background: rgba(0,0,0,0.30); border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 0.25rem 0 0.5rem 0; margin-bottom: 0.75rem;
+}}
+.header-title h1 {{ margin: 0; padding: .25rem 0; }}
+/* Inline orange action links */
+.actions-row {{
+  display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+  padding: .25rem 0 .5rem 0;
+}}
+.action-link {{
+  color: {PRIMARY}; text-decoration: none; font-weight: 600; cursor: pointer;
+}}
+.action-link:hover {{ color: {ACCENT}; text-decoration: underline; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ================= Session / Auth bootstrap =================
+# =========== Header (logo + centered title) ===========
+with st.container():
+    st.markdown('<div class="header-wrap">', unsafe_allow_html=True)
+    col_logo, col_title, col_spacer = st.columns([1, 7, 1])
+    with col_logo:
+        logo_path = None
+        if CURRENT_LOGO_FILENAME:
+            candidate = Path(UPLOAD_FOLDER) / CURRENT_LOGO_FILENAME
+            if candidate.is_file():
+                logo_path = candidate
+        if logo_path:
+            try:
+                st.image(logo_path.read_bytes(), use_container_width=True)
+            except Exception:
+                st.write("")
+    with col_title:
+        st.markdown("<div class='header-title'><h1>Veritas — Pilot Test</h1></div>", unsafe_allow_html=True)
+        if CURRENT_TAGLINE:
+            st.caption(CURRENT_TAGLINE)
+    with col_spacer:
+        st.write("")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------- Session/Auth bootstrap ----------------
 if "request_id" not in st.session_state:
     st.session_state["request_id"] = _gen_request_id()
 st.session_state.setdefault("authed", False)
@@ -651,7 +679,8 @@ st.session_state.setdefault("user_input_box", "")
 st.session_state.setdefault("_clear_text_box", False)
 st.session_state.setdefault("_fail_times", deque())
 st.session_state.setdefault("_locked_until", 0.0)
-st.session_state.setdefault("is_admin", False)
+st.session_state.setdefault("admin_authed", False)
+st.session_state.setdefault("admin_email", "")
 
 # Pilot countdown gate
 if not pilot_started():
@@ -722,14 +751,15 @@ elif not APP_PASSWORD:
 with st.sidebar:
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until","is_admin"):
+        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until","show_support","admin_authed","admin_email"):
             st.session_state.pop(k, None)
         st.rerun()
-    st.subheader("Navigation")
-    st.caption("")
+    st.subheader("Session")
+    st.caption(f"Started at (UTC): {STARTED_AT_ISO}")
+    # (No timezone / session id shown, tracked internally via _get_sid())
 
 # ================= Tabs =================
-tab_labels = ["🔍 Analyze", "🗳️ Feedback", "🛟 Support", "❓ Help"]
+tab_labels = ["🔍 Analyze", "🗣️ Feedback", "🛟 Support", "❓ Help"]
 if ADMIN_PASSWORD:
     tab_labels.append("🔐 Admin")
 
@@ -738,24 +768,6 @@ tabs = st.tabs(tab_labels)
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
     st.markdown('<div class="v-card">', unsafe_allow_html=True)
-
-    # Header with logo + title
-    col_logo, col_title = st.columns([1, 6])
-    with col_logo:
-        logo_path = None
-        if CURRENT_LOGO_FILENAME:
-            candidate = Path(UPLOAD_FOLDER) / CURRENT_LOGO_FILENAME
-            if candidate.is_file():
-                logo_path = candidate
-        if logo_path:
-            try:
-                st.image(logo_path.read_bytes(), use_container_width=True)
-            except Exception:
-                pass
-    with col_title:
-        st.markdown("<h1 style='margin:0;'>Veritas — Pilot Test</h1>", unsafe_allow_html=True)
-        if CURRENT_TAGLINE:
-            st.caption(CURRENT_TAGLINE)
 
     # Reset text box after completed run
     if st.session_state.get("_clear_text_box", False):
@@ -781,9 +793,10 @@ with tabs[0]:
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
             network_error(); st.stop()
 
-        # Gather inputs
+        prog = st.progress(0, text="Preparing…")
         user_text = st.session_state.get("user_input_box", "").strip()
         extracted = ""
+        prog.progress(10, text="Checking upload…")
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
             if size_mb > MAX_UPLOAD_MB:
@@ -800,20 +813,20 @@ with tabs[0]:
         if not final_input:
             st.error("Please enter some text or upload a document."); st.stop()
 
-        # Model call
         try:
-            with st.spinner("Analyzing…"):
-                client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
-                resp = client.chat.completions.create(
-                    model=MODEL,
-                    temperature=TEMPERATURE,
-                    messages=[
-                        {"role": "system", "content": IDENTITY_PROMPT},
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": final_input},
-                    ],
-                )
-                model_reply = resp.choices[0].message.content or ""
+            prog.progress(40, text="Contacting model…")
+            client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
+            resp = client.chat.completions.create(
+                model=MODEL,
+                temperature=TEMPERATURE,
+                messages=[
+                    {"role": "system", "content": IDENTITY_PROMPT},
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": final_input},
+                ],
+            )
+            model_reply = resp.choices[0].message.content or ""
+            prog.progress(85, text="Formatting report…")
         except Exception as e:
             log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
             network_error(); st.stop()
@@ -827,10 +840,11 @@ with tabs[0]:
 
         try:
             log_analysis(public_report_id, internal_report_id, decorated_reply)
-        except Exception:
-            pass
+        except Exception as e:
+            log_error_event(kind="ANALYSIS_LOG", route="/chat", http_status=200, detail=repr(e))
 
         st.session_state["_clear_text_box"] = True
+        prog.progress(100, text="Done ✓")
         st.rerun()
 
     # Show latest report (if any)
@@ -838,50 +852,129 @@ with tabs[0]:
         st.write("### Bias Report")
         st.markdown(st.session_state["last_reply"])
 
-        # Orange link actions (only appear after analysis)
-        # Copy (client-side), Clear (?clear=1), Download (client-side .txt)
-        actions_html = f"""
-<div class="actions-row">
-  <a id="copyReport" href="#">Copy report</a>
-  <a id="clearReport" href="?clear=1#top">Clear report</a>
-  <a id="downloadReport" href="#" download="veritas_report.txt">Download report</a>
-</div>
-<script>
-  (function() {{
-    const text = {json.dumps(st.session_state["last_reply"])};
-    const copy = document.getElementById('copyReport');
-    const dl = document.getElementById('downloadReport');
-    if (copy) {{
-      copy.addEventListener('click', function(e) {{
-        e.preventDefault();
-        try {{
-          navigator.clipboard.writeText(text);
-        }} catch (err) {{
-          const ta = document.createElement('textarea');
-          ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
-          document.body.appendChild(ta); ta.focus(); ta.select();
-          try {{ document.execCommand('copy'); }} catch (_e) {{}}
-          ta.remove();
-        }}
-        copy.textContent = 'Copied ✓';
-        setTimeout(() => copy.textContent = 'Copy report', 1200);
-      }});
-    }}
-    if (dl) {{
-      const blob = new Blob([text], {{type: 'text/plain'}});
-      const url = URL.createObjectURL(blob);
-      dl.setAttribute('href', url);
-    }}
-  }})();
-</script>
-"""
-        components.html(actions_html, height=40)
+        # ---- Inline orange text actions (only shown after analysis) ----
+        st.markdown('<div class="actions-row">', unsafe_allow_html=True)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+        # a) Copy Report (JS)
+        components.html(
+            f"""
+            <div class="actions-row">
+              <a id="copyRep" class="action-link" href="#">Copy Report</a>
+              <span id="copyNote" style="display:none;opacity:.8;font-size:.9rem;margin-left:.25rem;">Copied ✓</span>
+            </div>
+            <script>
+              const text = {json.dumps(st.session_state["last_reply"])};
+              const link = document.getElementById("copyRep");
+              const note = document.getElementById("copyNote");
+              link.addEventListener("click", async (e) => {{
+                e.preventDefault();
+                try {{
+                  await navigator.clipboard.writeText(text);
+                  note.style.display = "inline";
+                  setTimeout(() => note.style.display = "none", 1200);
+                }} catch (err) {{
+                  const ta = document.createElement("textarea");
+                  ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
+                  document.body.appendChild(ta); ta.focus(); ta.select();
+                  try {{ document.execCommand("copy"); }} catch (_e) {{}}
+                  ta.remove(); note.style.display = "inline";
+                  setTimeout(() => note.style.display = "none", 1200);
+                }}
+              }});
+            </script>
+            """,
+            height=36,
+        )
+
+        # b) Clear Report (Streamlit button disguised as link)
+        #    We use markdown link look by removing default button styles via a minimal trick:
+        clear = st.button("Clear Report", key="clear_report_as_link")
+        if clear:
+            st.session_state["history"] = []
+            st.session_state["last_reply"] = ""
+            st.rerun()
+        # Turn the just-rendered button into an orange link via CSS (scoped by label text)
+        st.markdown(
+            """
+            <style>
+            button[kind="secondary"] p, button[kind="primary"] p { color: #FF8C32 !important; font-weight: 600; }
+            button:has(p:contains("Clear Report")) {
+              background: transparent !important;
+              border: none !important;
+              box-shadow: none !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # c) Download Report (PDF) as orange link that triggers a Streamlit download
+        def build_pdf_bytes(content: str) -> bytes:
+            if SimpleDocTemplate is None:
+                raise RuntimeError("PDF engine not available. Install 'reportlab'.")
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buf, pagesize=letter,
+                leftMargin=0.8*inch, rightMargin=0.8*inch,
+                topMargin=0.9*inch, bottomMargin=0.9*inch
+            )
+            styles = getSampleStyleSheet()
+            base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
+            body = ParagraphStyle("Body", parent=base, fontSize=10)
+            h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
+            story = []
+            title = APP_TITLE + " — Bias Analysis Report"
+            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+            story.append(Paragraph(f"<b>{title}</b>", h))
+            story.append(Paragraph(f"<i>Generated {ts}</i>", base))
+            story.append(Spacer(1, 10))
+            for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
+                safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
+            def _header_footer(canvas, doc_):
+                canvas.saveState()
+                w, h = letter
+                footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
+                page = f"Page {doc_.page}"
+                canvas.setFont("Helvetica", 8)
+                canvas.drawString(0.8*inch, 0.55*inch, footer)
+                pw = stringWidth(page, "Helvetica", 8)
+                canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
+                canvas.restoreState()
+            doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+            buf.seek(0); return buf.read()
+
+        pdf_bytes = b""
+        try:
+            pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
+        except Exception as e:
+            log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
+
+        # A tiny download button; then restyle as orange link
+        st.download_button("Download Report", data=pdf_bytes, file_name="veritas_report.pdf", mime="application/pdf", key="dl_report_link")
+        st.markdown(
+            """
+            <style>
+            button:has(p:contains("Download Report")) {
+              background: transparent !important;
+              border: none !important;
+              box-shadow: none !important;
+            }
+            button:has(p:contains("Download Report")) p {
+              color: #FF8C32 !important; font-weight: 600;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.markdown('</div>', unsafe_allow_html=True)  # end actions-row
+
+    st.markdown('</div>', unsafe_allow_html=True)  # end v-card
 
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
-    st.write("### Feedback")
+    st.markdown("### Feedback")
     with st.form("feedback_form"):
         rating = st.slider("Your rating", min_value=1, max_value=5, value=5)
         email = st.text_input("Email (required)")
@@ -909,14 +1002,12 @@ with tabs[1]:
             conv_chars, transcript,
             "streamlit", "streamlit"
         ]
-        # CSV
         try:
             with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow(row)
         except Exception as e:
             log_error_event(kind="FEEDBACK", route="/feedback", http_status=500, detail=repr(e))
             network_error(); st.stop()
-        # DB
         try:
             _db_exec("""INSERT INTO feedback (timestamp_utc,rating,email,comments,conversation_chars,conversation,remote_addr,ua)
                         VALUES (?,?,?,?,?,?,?,?)""",
@@ -924,9 +1015,9 @@ with tabs[1]:
         except Exception as e:
             log_error_event(kind="FEEDBACK_DB", route="/feedback", http_status=200, detail=repr(e))
 
-        # ---- Email (optional) ----
+        # Email (optional)
         if not (SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM):
-            st.warning("Feedback saved locally. Configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to email feedback.")
+            st.warning("Feedback saved. (Email not sent — configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to enable email.)")
         else:
             try:
                 timestamp = ts_now
@@ -961,16 +1052,16 @@ with tabs[1]:
                     )
                 if r.status_code not in (200, 202):
                     log_error_event(kind="SENDGRID", route="/feedback", http_status=r.status_code, detail=r.text)
-                    st.warning("Feedback saved but email failed to send.")
+                    st.warning("Feedback saved, but email failed to send.")
                 else:
                     st.success("Thanks — feedback saved and emailed ✓")
             except Exception as e:
                 log_error_event(kind="SENDGRID_EXC", route="/feedback", http_status=200, detail=repr(e))
-                st.warning("Feedback saved but email failed to send.")
+                st.warning("Feedback saved, but email failed to send.")
 
 # -------------------- Support Tab --------------------
 with tabs[2]:
-    st.write("### Support")
+    st.markdown("### Support")
     with st.form("support_form"):
         full_name = st.text_input("Full name")
         email_sup = st.text_input("Email")
@@ -982,7 +1073,7 @@ with tabs[2]:
         with c2:
             cancel_support = st.form_submit_button("Cancel")
     if cancel_support:
-        st.rerun()
+        st.experimental_rerun()
     if submit_support:
         if not full_name.strip():
             st.error("Please enter your full name.")
@@ -996,7 +1087,6 @@ with tabs[2]:
             sid = st.session_state.get("sid") or _get_sid()
             login_id = st.session_state.get("login_id", "")
             ua = "streamlit"
-            # CSV
             try:
                 with open(SUPPORT_CSV, "a", newline="", encoding="utf-8") as f:
                     csv.writer(f).writerow([ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua])
@@ -1004,14 +1094,13 @@ with tabs[2]:
                 log_error_event(kind="SUPPORT_WRITE", route="/support", http_status=500, detail=repr(e))
                 st.error("We couldn't save your ticket. Please try again.")
             else:
-                # DB
                 try:
                     _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
                                 VALUES (?,?,?,?,?,?,?,?,?)""",
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
                 except Exception as e:
                     log_error_event(kind="SUPPORT_DB", route="/support", http_status=200, detail=repr(e))
-                # Email (optional)
+                # Optional email
                 if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
                     try:
                         subject = f"[Veritas Support] Ticket {ticket_id}"
@@ -1050,123 +1139,110 @@ with tabs[2]:
                     except Exception as e:
                         log_error_event(kind="SENDGRID_SUPPORT", route="/support", http_status=200, detail=repr(e))
                 st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
-                st.rerun()
 
 # -------------------- Help Tab --------------------
 with tabs[3]:
-    st.write("### Help")
-    st.markdown("""
-- Paste your academic text or upload a document, then click **Analyze** to generate a bias report.
-- Use the **Copy**, **Clear**, and **Download** links that appear below the report once analysis completes.
-- Use **Feedback** to rate the experience and leave comments.
-- Use **Support** for issues or to include a Bias Report ID.
-    """.strip())
+    st.markdown("### Help")
+    st.markdown(
+        """
+- **Analyze**: Paste text or upload a document (PDF, DOCX, TXT, MD, CSV). The app returns a Bias Report only.
+- **Feedback**: Rate your experience and leave comments; optionally emails the team if configured.
+- **Support**: Open a support ticket; optionally emails the team if configured.
+- **Privacy**: Only assistant replies are stored in history; user text isn’t re-rendered.
+        """
+    )
 
-# -------------------- Admin Tab (conditional) --------------------
-if ADMIN_PASSWORD and len(tabs) == 5:
+# -------------------- Admin Tab (optional) --------------------
+if ADMIN_PASSWORD:
     with tabs[4]:
-        st.write("### Admin")
-        if not st.session_state.get("is_admin", False):
-            with st.form("admin_login"):
-                admin_email = st.text_input("Admin Email", value="")
+        st.markdown("### Admin")
+        if not st.session_state.get("admin_authed", False):
+            with st.form("admin_login_form"):
+                admin_email = st.text_input("Admin Email", value=st.session_state.get("admin_email", ""))
                 admin_pwd = st.text_input("Admin Password", type="password")
-                submit_admin = st.form_submit_button("Enter Admin")
-            if submit_admin:
-                if (not ADMIN_EMAIL or admin_email.strip().lower() == ADMIN_EMAIL.lower()) and (admin_pwd == ADMIN_PASSWORD):
-                    st.session_state["is_admin"] = True
-                    st.success("Admin access granted.")
-                    st.rerun()
+                admin_login = st.form_submit_button("Enter Admin")
+            if admin_login:
+                ok_email = True if not ADMIN_ALLOWLIST else admin_email.strip().lower() in ADMIN_ALLOWLIST
+                if ok_email and admin_pwd == ADMIN_PASSWORD:
+                    st.session_state["admin_authed"] = True
+                    st.session_state["admin_email"] = admin_email.strip()
+                    st.success("Admin mode enabled.")
+                    st.experimental_rerun()
                 else:
                     st.error("Invalid admin credentials.")
         else:
-            # Admin content: History + Data Explorer
-            st.success("Admin mode")
-            sub = st.radio("Sections", ["History", "Data Explorer"], horizontal=True)
+            st.success(f"Admin mode — {st.session_state.get('admin_email','')}")
 
-            if sub == "History":
-                st.write("#### Previous Reports")
-                q = st.text_input("Search by Report ID or text (local DB)", placeholder="e.g., VER-2025… or a phrase…")
-                try:
-                    con = sqlite3.connect(DB_PATH)
-                    df = pd.read_sql_query("SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json FROM analyses ORDER BY id DESC LIMIT 500", con)
-                    con.close()
-                except Exception as e:
-                    df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
-                    log_error_event(kind="HISTORY_DB", route="/history", http_status=200, detail=repr(e))
-
-                if not df.empty:
-                    def extract_preview(js: str) -> str:
-                        try:
-                            return json.loads(js).get("assistant_reply","")[:220]
-                        except Exception:
-                            return ""
-                    df["preview"] = df["conversation_json"].apply(extract_preview)
-                    if q.strip():
-                        ql = q.lower()
-                        df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1)]
-                    st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
-                    sel = st.text_input("Load a report back into the viewer by Report ID (optional)")
-                    if st.button("Load Report"):
-                        row = df[df["public_report_id"] == sel]
-                        if len(row) == 1:
-                            try:
-                                txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
-                                st.session_state["last_reply"] = txt
-                                st.success("Loaded into Analyze tab.")
-                            except Exception:
-                                st.error("Could not load that report.")
-                        else:
-                            st.warning("Report ID not found in the current list.")
-                else:
-                    st.info("No reports yet. Run an analysis.")
-
-            else:
-                st.write("#### Data Explorer")
-                st.caption("Browse app data stored on this instance. Use the download buttons for backups.")
-
-                def _read_csv_safe(path: str) -> pd.DataFrame:
+            st.markdown("#### History")
+            try:
+                con = sqlite3.connect(DB_PATH)
+                dfh = pd.read_sql_query("SELECT id, timestamp_utc, public_report_id, internal_report_id, conversation_json FROM analyses ORDER BY id DESC LIMIT 500", con)
+                con.close()
+            except Exception as e:
+                dfh = pd.DataFrame(columns=["id","timestamp_utc","public_report_id","internal_report_id","conversation_json"])
+                log_error_event(kind="ADMIN_HISTORY_DB", route="/admin", http_status=200, detail=repr(e))
+            if not dfh.empty:
+                def extract_preview(js: str) -> str:
                     try:
-                        return pd.read_csv(path)
+                        return json.loads(js).get("assistant_reply","")[:220]
                     except Exception:
-                        return pd.DataFrame()
+                        return ""
+                dfh["preview"] = dfh["conversation_json"].apply(extract_preview)
+                st.dataframe(dfh[["id","timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
+            else:
+                st.info("No analyses yet.")
 
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.write("##### Auth Events")
-                    df_auth = _read_csv_safe(AUTH_CSV)
-                    st.dataframe(df_auth, use_container_width=True)
-                    if os.path.exists(AUTH_CSV):
-                        st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv")
+            st.markdown("#### Data Explorer")
+            def _read_csv_safe(path: str) -> pd.DataFrame:
+                try:
+                    return pd.read_csv(path)
+                except Exception:
+                    return pd.DataFrame()
 
-                    st.write("##### Errors")
-                    df_err = _read_csv_safe(ERRORS_CSV)
-                    st.dataframe(df_err, use_container_width=True)
-                    if os.path.exists(ERRORS_CSV):
-                        st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.write("##### Auth Events")
+                st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv")
+                except Exception:
+                    pass
 
-                    st.write("##### Support Tickets")
-                    df_sup = _read_csv_safe(SUPPORT_CSV)
-                    st.dataframe(df_sup, use_container_width=True)
-                    if os.path.exists(SUPPORT_CSV):
-                        st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv")
+                st.write("##### Errors")
+                st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv")
+                except Exception:
+                    pass
 
-                with c2:
-                    st.write("##### Analyses")
-                    df_an = _read_csv_safe(ANALYSES_CSV)
-                    st.dataframe(df_an, use_container_width=True)
-                    if os.path.exists(ANALYSES_CSV):
-                        st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv")
+                st.write("##### Support Tickets")
+                st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv")
+                except Exception:
+                    pass
 
-                    st.write("##### Feedback")
-                    df_fb = _read_csv_safe(FEEDBACK_CSV)
-                    st.dataframe(df_fb, use_container_width=True)
-                    if os.path.exists(FEEDBACK_CSV):
-                        st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv")
+            with c2:
+                st.write("##### Analyses")
+                st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv")
+                except Exception:
+                    pass
 
-            st.divider()
+                st.write("##### Feedback")
+                st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv")
+                except Exception:
+                    pass
+
+            st.markdown("---")
             if st.button("Exit Admin"):
-                st.session_state["is_admin"] = False
-                st.rerun()
+                st.session_state["admin_authed"] = False
+                st.session_state["admin_email"] = ""
+                st.experimental_rerun()
+
 
 
 
