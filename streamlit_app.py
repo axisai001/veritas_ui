@@ -60,7 +60,7 @@ except Exception:
     settings = _FallbackSettings()
 
 # ================= App constants from secrets/env =================
-APP_TITLE = os.environ.get("APP_TITLE", "Veritas — Pilot Test")
+APP_TITLE = os.environ.get("APP_TITLE", "Veritas")  # removed “— Pilot Test”
 MODEL = getattr(settings, "openai_model", os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo-0125"))
 try:
     TEMPERATURE = float(os.environ.get("OPENAI_TEMPERATURE", "0.2"))
@@ -645,8 +645,8 @@ st.markdown(f"""
 html, body, [class*="css"] {{
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }}
-/* Up-to-date container spacing */
-.block-container {{ padding-top: 1rem; }}
+/* Increased top padding so header doesn't get cut off */
+.block-container {{ padding-top: 2.5rem; }}
 
 /* Buttons (consistent) */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
@@ -666,6 +666,7 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 .stForm [type="submit"]:hover, [data-testid="baseButton-primary"]:hover {{
   background-color: {ACCENT} !important; border-color: {ACCENT} !important;
 }}
+
 /* Glassy cards */
 .v-card {{
   background: rgba(255,255,255,0.02);
@@ -673,23 +674,22 @@ div.stButton > button:hover, .stDownloadButton button:hover,
   border-radius: 16px;
   padding: 18px;
 }}
+
+/* Header spacing to avoid cut-off */
+.header-title {{ padding-top: .5rem; }}
 .header-title h1 {{ margin: 0; padding: .25rem 0; }}
 
-.copy-btn {{
-  width: 100%;
-  cursor: pointer;
-  background: {PRIMARY};
-  color: #111418;
-  border: 1px solid {PRIMARY};
-  padding: .55rem 1rem;
-  border-radius: .75rem;
-  font-size: .95rem;
-  font-weight: 500;
-  line-height: 1.6;
-  font-family: inherit;
+/* Simple white text links for the action bar */
+.v-actions {{
+  display: flex; gap: 1.25rem; align-items: center;
+  padding: .5rem .75rem; border-radius: 10px;
+  background: rgba(0,0,0,0.65);
 }}
-.copy-btn:hover {{ background:{ACCENT}; border-color:{ACCENT}; }}
-.copy-note {{ font-size: 12px; opacity: .75; margin-top: 6px; }}
+.v-actions a {{
+  color: #fff !important; text-decoration: none; font-weight: 600;
+}}
+.v-actions a:hover {{ text-decoration: underline; }}
+.v-actions .copy-note {{ color:#fff; opacity:.8; font-size:.85rem; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -708,7 +708,7 @@ with st.container():
             except Exception:
                 st.write("")
     with col_title:
-        st.markdown("<div class='header-title'><h1>Veritas — Pilot Test</h1></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='header-title'><h1>{APP_TITLE}</h1></div>", unsafe_allow_html=True)
         if CURRENT_TAGLINE:
             st.caption(CURRENT_TAGLINE)
 
@@ -865,7 +865,7 @@ with tabs[0]:
             except Exception:
                 prog.progress(40)
             client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
-            resp = client.chat_completions.create(  # OpenAI v1: alias works; fallback below if needed
+            resp = client.chat_completions.create(  # prefer v1 alias; falls back below if needed
                 model=MODEL,
                 temperature=TEMPERATURE,
                 messages=[
@@ -874,18 +874,15 @@ with tabs[0]:
                     {"role": "user", "content": final_input},
                 ],
             )
-            # If SDK version exposes .chat.completions.create instead:
             try:
                 model_reply = resp.choices[0].message.content or ""
             except Exception:
-                # fallback path for alt SDK attribute naming
                 model_reply = resp.choices[0].messages[0].content if resp and resp.choices else ""
             try:
                 prog.progress(85, text="Formatting report…")
             except Exception:
                 prog.progress(85)
         except Exception as e:
-            # Try alternate endpoint name if the first call fails due to SDK differences
             try:
                 client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
                 resp = client.chat.completions.create(
@@ -926,7 +923,7 @@ with tabs[0]:
         st.write("### Bias Report")
         st.markdown(st.session_state["last_reply"])
 
-        # ---- HTML action controls in three equal columns ----
+        # ---- Uniform action links in a simple bar ----
         def _build_pdf_inline(content: str) -> bytes:
             if SimpleDocTemplate is None:
                 return content.encode("utf-8")
@@ -966,67 +963,36 @@ with tabs[0]:
         pdf_bytes = _build_pdf_inline(st.session_state["last_reply"])
         pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
         uid = str(uuid.uuid4()).replace("-", "")
-        copy_id = f"copyBtn_{uid}"
+        copy_id = f"copyLink_{uid}"
         note_id = f"copyNote_{uid}"
 
-        colA, colB, colC = st.columns(3)
-        with colA:
-            components.html(f"""
+        components.html(f"""
 <div class="v-actions">
-  <button id="{copy_id}" class="copy-btn">Copy Report</button>
-  <div id="{note_id}" class="copy-note" style="display:none;">Copied ✓</div>
+  <a id="{copy_id}" href="javascript:void(0)">Copy Report</a>
+  <a id="download_{uid}" href="data:application/pdf;base64,{pdf_b64}" download="veritas_report.pdf">Download PDF</a>
+  <a id="clear_{uid}" href="?clear=1">Clear Report</a>
+  <span id="{note_id}" class="copy-note" style="display:none;">Copied ✓</span>
 </div>
 <script>
   const text_{uid} = {json.dumps(st.session_state["last_reply"])};
-  const btn_{uid} = document.getElementById("{copy_id}");
+  const copyEl_{uid} = document.getElementById("{copy_id}");
   const note_{uid} = document.getElementById("{note_id}");
-  btn_{uid}.addEventListener("click", async () => {{
+  copyEl_{uid}.addEventListener("click", async () => {{
     try {{
       await navigator.clipboard.writeText(text_{uid});
-      note_{uid}.style.display = "block";
+      note_{uid}.style.display = "inline";
       setTimeout(() => note_{uid}.style.display = "none", 1200);
     }} catch (e) {{
       const ta = document.createElement("textarea");
       ta.value = text_{uid}; ta.style.position="fixed"; ta.style.opacity="0";
       document.body.appendChild(ta); ta.focus(); ta.select();
       try {{ document.execCommand("copy"); }} catch (_e) {{}}
-      ta.remove(); note_{uid}.style.display="block";
+      ta.remove(); note_{uid}.style.display="inline";
       setTimeout(() => note_{uid}.style.display="none", 1200);
     }}
   }});
 </script>
-""", height=90)
-
-        with colB:
-            components.html(f"""
-<a
-  href="data:application/pdf;base64,{pdf_b64}"
-  download="veritas_report.pdf"
-  class="btn-like"
-  style="
-    display:block;text-align:center;width:100%;
-    background:#FF8C32;color:#111418;border:1px solid #FF8C32;
-    padding:.55rem 1rem;border-radius:.75rem;font-size:.95rem;font-weight:500;text-decoration:none;">
-Download PDF</a>
-<style>
-  .btn-like:hover {{ background:#E97C25 !important; border-color:#E97C25 !important; color:#111418 !important; }}
-</style>
-""", height=60)
-
-        with colC:
-            components.html("""
-<a
-  href="?clear=1"
-  class="btn-like"
-  style="
-    display:block;text-align:center;width:100%;
-    background:#FF8C32;color:#111418;border:1px solid #FF8C32;
-    padding:.55rem 1rem;border-radius:.75rem;font-size:.95rem;font-weight:500;text-decoration:none;">
-Clear Report</a>
-<style>
-  .btn-like:hover { background:#E97C25 !important; border-color:#E97C25 !important; color:#111418 !important; }
-</style>
-""", height=60)
+""", height=64)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -1195,7 +1161,7 @@ with tabs[3]:
     st.markdown(
         """
 - Paste text or upload a document, then click **Analyze**.
-- After the report appears, use **Copy**, **Download PDF**, or **Clear**.
+- After the report appears, use the action links (Copy / Download / Clear).
 - Use the **Feedback** tab to rate your experience and share comments.
 - Use the **Support** tab to submit any issues; include the Report ID if applicable.
         """
@@ -1308,6 +1274,13 @@ if ADMIN_PASSWORD:
                     except Exception:
                         pass
 
+                    # NEW: Support Tickets tracker
+                    st.write("##### Support Tickets")
+                    st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
+                    except Exception:
+                        pass
 
 
 
