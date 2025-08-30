@@ -869,8 +869,8 @@ with tabs[0]:
         st.session_state["_clear_text_box"] = True
         st.rerun()
 
-    # Show latest report (if any)
-    if st.session_state.get("last_reply"):
+    # -------------------- Show latest report (only after analysis) --------------------
+if st.session_state.get("last_reply"):
     st.write("### Bias Report")
     st.markdown(st.session_state["last_reply"])
 
@@ -897,6 +897,7 @@ with tabs[0]:
         for p in [p.strip() for p in st.session_state["last_reply"].split("\n\n") if p.strip()]:
             safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
+
         def _header_footer(canvas, doc_):
             canvas.saveState()
             w, h = letter
@@ -907,18 +908,21 @@ with tabs[0]:
             pw = stringWidth(page, "Helvetica", 8)
             canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
             canvas.restoreState()
-        doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-        buf.seek(0); return buf.read()
 
-    pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
+        doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+        buf.seek(0)
+        return buf.read()
+
     import base64
+    pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
     pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
     pdf_href = f'data:application/pdf;base64,{pdf_b64}'
     clear_href = "?clear=1"
 
     st.markdown('<div class="sticky-actions">', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1,1,1])
-    with c1:
+    col1, col2, col3 = st.columns([1, 1, 1])
+
+    with col1:
         components.html(
             f"""
 <div class="actions-row">
@@ -946,16 +950,19 @@ with tabs[0]:
 """,
             height=30,
         )
-    with c2:
+
+    with col2:
         st.markdown(
             f"""<div class="actions-row"><a class="action-link" download="veritas_report.pdf" href="{pdf_href}">Download report</a></div>""",
             unsafe_allow_html=True,
         )
-    with c3:
+
+    with col3:
         st.markdown(
             f"""<div class="actions-row"><a class="action-link" href="{clear_href}">Clear report</a></div>""",
             unsafe_allow_html=True,
         )
+
     st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Feedback Tab --------------------
@@ -1254,6 +1261,7 @@ if ADMIN_PASSWORD:
             st.markdown('</div>', unsafe_allow_html=True)
 
         st.markdown('</div>', unsafe_allow_html=True)
+
 
 
 
