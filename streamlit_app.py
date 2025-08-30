@@ -593,6 +593,107 @@ _prune_csv_by_ttl(ANALYSES_CSV, ANALYSES_LOG_TTL_DAYS)
 _prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 
+# ---- query param handlers for Clear + PDF download ----
+import base64
+
+def _build_pdf_bytes_reportlab(content: str) -> bytes:
+    # Re-uses your ReportLab builder (works even if you already have a similar function lower)
+    if SimpleDocTemplate is None:
+        raise RuntimeError("PDF engine not available. Install 'reportlab'.")
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=letter,
+        leftMargin=0.8*inch, rightMargin=0.8*inch,
+        topMargin=0.9*inch, bottomMargin=0.9*inch
+    )
+    styles = getSampleStyleSheet()
+    base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
+    body = ParagraphStyle("Body", parent=base, fontSize=10)
+    h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
+
+    story = []
+    title = APP_TITLE + " — Bias Analysis Report"
+    ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+    story.append(Paragraph(f"<b>{title}</b>", h))
+    story.append(Paragraph(f"<i>Generated {ts}</i>", base))
+    story.append(Spacer(1, 10))
+
+    for p in [p.strip() for p in (content or "").split("\n\n") if p.strip()]:
+        safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
+
+    def _header_footer(canvas, doc_):
+        canvas.saveState()
+        w, h = letter
+        footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
+        page = f"Page {doc_.page}"
+        canvas.setFont("Helvetica", 8)
+        canvas.drawString(0.8*inch, 0.55*inch, footer)
+        pw = stringWidth(page, "Helvetica", 8)
+        canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+    buf.seek(0)
+    return buf.read()
+
+# Handle ?clear=1 or ?pdf=1
+try:
+    params = st.experimental_get_query_params()  # (use st.query_params if you're on Streamlit >=1.31)
+    # Clear
+    if params.get("clear", ["0"])[0] == "1":
+        st.session_state["history"] = []
+        st.session_state["last_reply"] = ""
+        st.experimental_set_query_params()  # wipe querystring
+        st.rerun()
+
+    # PDF
+    if params.get("pdf", ["0"])[0] == "1":
+        # Only proceed if we have a report
+        if st.session_state.get("last_reply"):
+            try:
+                pdf_bytes = _build_pdf_bytes_reportlab(st.session_state["last_reply"])
+                b64 = base64.b64encode(pdf_bytes).decode("ascii")
+                # Return an HTML block that auto-downloads and then removes the querystring
+                components.html(f"""
+<!DOCTYPE html><html><body>
+<script>
+  (function() {{
+    const base64 = "{b64}";
+    const byteChars = atob(base64);
+    const byteNums = new Array(byteChars.length);
+    for (let i=0; i<byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+    const byteArray = new Uint8Array(byteNums);
+    const blob = new Blob([byteArray], {{type: 'application/pdf'}});
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'veritas_report.pdf';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {{
+      URL.revokeObjectURL(url);
+      // Clean the URL and go back to the main view
+      window.location.href = window.location.pathname;
+    }}, 300);
+  }})();
+</script>
+Downloading…
+</body></html>
+                """, height=50)
+                st.stop()  # prevent rest of app from rendering during this mini page
+            except Exception as e:
+                log_error_event(kind="PDF_AUTODL", route="/download", http_status=500, detail=repr(e))
+                st.error("PDF generation failed. Please try again.")
+                st.experimental_set_query_params()  # clean querystring even on failure
+                st.stop()
+        else:
+            # No report, just clean the URL and continue
+            st.experimental_set_query_params()
+except Exception:
+    pass
+
 # ================= Streamlit UI =================
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
@@ -946,38 +1047,59 @@ with tabs[0]:
         st.write("### Bias Report")
         st.markdown(st.session_state["last_reply"])
 
-        st.markdown('<div class="sticky-actions">', unsafe_allow_html=True)
-c1, c2, c3 = st.columns(3)
-
-# Copy Report button
-with c1:
-    if st.button("Copy Report"):
-        st.session_state["_copied"] = True
-    if st.session_state.get("_copied"):
-        st.info("Select & copy the text below:")
-        st.text_area("Report", value=st.session_state["last_reply"], height=160)
-
-# Clear Report button
-with c2:
-    if st.button("Clear Report"):
-        st.session_state["history"] = []
-        st.session_state["last_reply"] = ""
-        st.rerun()
-
-# Download PDF button
-with c3:
-    try:
         if st.session_state.get("last_reply"):
-            pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
-            st.download_button(
-                "Download Report (PDF)",
-                data=pdf_bytes,
-                file_name="veritas_report.pdf",
-                mime="application/pdf"
-            )
-    except Exception as e:
-        log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
-        st.error("network error")
+    st.write("### Bias Report")
+    st.markdown(st.session_state["last_reply"])
+
+    # HTML-only action bar (Copy, Download PDF, Clear) — consistent look
+    import json as _json
+    html_actions = f"""
+<div id="veritas-actions" style="position:sticky; top:64px; z-index:5; padding:.25rem 0 .5rem 0; background:rgba(0,0,0,.3); backdrop-filter:blur(6px); border-radius:12px;">
+  <style>
+    .vbtn {{
+      display:inline-block; width:100%; text-align:center; cursor:pointer;
+      background:#FF8C32; color:#111418; border:1px solid #FF8C32;
+      border-radius:12px; padding:10px 14px; font-size:15px; font-weight:600;
+      text-decoration:none;
+    }}
+    .vbtn:hover {{ background:#E97C25; border-color:#E97C25; }}
+    .vrow {{ display:flex; gap:12px; }}
+    .vcol {{ flex:1; }}
+    .vnote {{ font-size:12px; opacity:.75; margin-top:4px; display:none; }}
+  </style>
+
+  <div class="vrow">
+    <div class="vcol"><button id="copyBtn" class="vbtn">Copy Report</button></div>
+    <div class="vcol"><a id="pdfBtn" class="vbtn" href="?pdf=1">Download PDF</a></div>
+    <div class="vcol"><a id="clearBtn" class="vbtn" href="?clear=1">Clear Report</a></div>
+  </div>
+  <div id="copyNote" class="vnote">Copied ✓</div>
+
+  <script>
+    // The full report text from Python:
+    const text = {_json.dumps(st.session_state["last_reply"])};
+
+    // Copy
+    const copyBtn = document.getElementById('copyBtn');
+    const note = document.getElementById('copyNote');
+    copyBtn.addEventListener('click', async () => {{
+      try {{
+        await navigator.clipboard.writeText(text);
+        note.style.display='block';
+        setTimeout(()=>note.style.display='none',1200);
+      }} catch(e) {{
+        const ta=document.createElement('textarea');
+        ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+        document.body.appendChild(ta); ta.focus(); ta.select();
+        try {{ document.execCommand('copy'); }} catch(_e) {{}}
+        ta.remove(); note.style.display='block';
+        setTimeout(()=>note.style.display='none',1200);
+      }}
+    }});
+  </script>
+</div>
+"""
+    components.html(html_actions, height=120)
 
 # -------------------- Feedback --------------------
 with tabs[1]:
@@ -1065,7 +1187,6 @@ with tabs[1]:
                 log_error_event(kind="SENDGRID_EXC", route="/feedback", http_status=200, detail=repr(e))
                 st.error("Feedback saved but email failed to send.")
 
-# -------------------- Support --------------------
 # -------------------- Support --------------------
 with tabs[2]:
     st.markdown("### 🛟 Support")
@@ -1297,6 +1418,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
