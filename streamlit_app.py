@@ -951,32 +951,11 @@ c1, c2, c3 = st.columns(3)
 
 # Copy Report button
 with c1:
-    components.html(
-        f"""
-        <button id="copyBtn" class="copy-btn">Copy Report</button>
-        <div id="copyNote" class="copy-note" style="display:none;">Copied ✓</div>
-        <script>
-          const text = {json.dumps(st.session_state["last_reply"])};
-          const btn = document.getElementById("copyBtn");
-          const note = document.getElementById("copyNote");
-          btn.addEventListener("click", async () => {{
-            try {{
-              await navigator.clipboard.writeText(text);
-              note.style.display = "block";
-              setTimeout(() => note.style.display = "none", 1200);
-            }} catch (e) {{
-              const ta = document.createElement("textarea");
-              ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
-              document.body.appendChild(ta); ta.focus(); ta.select();
-              try {{ document.execCommand("copy"); }} catch (_e) {{}}
-              ta.remove(); note.style.display="block";
-              setTimeout(() => note.style.display="none", 1200);
-            }}
-          }});
-        </script>
-        """,
-        height=80,
-    )
+    if st.button("Copy Report"):
+        st.session_state["_copied"] = True
+    if st.session_state.get("_copied"):
+        st.info("Select & copy the text below:")
+        st.text_area("Report", value=st.session_state["last_reply"], height=160)
 
 # Clear Report button
 with c2:
@@ -1316,6 +1295,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
