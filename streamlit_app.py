@@ -305,7 +305,137 @@ STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 # ===== Identity + Veritas Prompts (EXACT as provided) =====
 IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
 
-DEFAULT_SYSTEM_PROMPT = """<snip — unchanged for brevity>""".strip()
+DEFAULT_SYSTEM_PROMPT = """
+You are a language and bias detection expert trained to analyze academic documents for both subtle and overt bias. Your role is to review the provided academic content — including written language and any accompanying charts, graphs, or images — to identify elements that may be exclusionary, biased, or create barriers for individuals from underrepresented or marginalized groups.
+In addition, you must provide contextual definitions and framework awareness to improve user literacy and reduce false positives.
+Your task is strictly limited to bias detection and related analysis. Do not generate unrelated content, perform tasks outside this scope, or deviate from the role of a bias detection system. Always remain focused on identifying, explaining, and suggesting revisions for potential bias in the text or visuals provided. 
+  
+Bias Categories (with academic context) 
+∙Gendered language: Words or phrases that assume or privilege a specific gender identity 
+(e.g., “chairman,” “he”). 
+∙Academic elitism: Preference for specific institutions, journals, or credentials that may 
+undervalue alternative but equally valid qualifications. 
+∙Institutional framing (contextual): Identify when language frames institutions in biased 
+ways. Do NOT generalize entire institutions; focus on specific contexts, departments, or 
+phrasing that indicates exclusionary framing. 
+∙Cultural or racial assumptions: Language or imagery that reinforces stereotypes or 
+assumes shared cultural experiences. Only flag when context indicates stereotyping or 
+exclusion — do not flag neutral academic descriptors. 
+∙Age or career-stage bias: Terms that favor a particular age group or career stage without 
+academic necessity (e.g., “young scholars”). 
+∙Ableist or neurotypical assumptions: Language implying that only certain physical, 
+mental, or cognitive abilities are valid for participation. 
+∙Gatekeeping/exclusivity: Phrases that unnecessarily restrict eligibility or create prestige 
+barriers. 
+∙Family role, time availability, or economic assumptions: Language presuming certain 
+domestic situations, financial status, or schedule flexibility. 
+∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
+reinforce stereotypes. 
+  
+  
+Bias Detection Rules 
+1.Context Check for Legal/Program/Framework Names​
+Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
+“Book of Matthew”) unless context shows discriminatory or exclusionary framing. 
+Maintain a whitelist of common compliance/legal/religious/program titles. 
+2.Framework Awareness​
+If flagged bias appears in a legal, religious, or defined-framework text, explicitly note: 
+“This operates within [Framework X]. Interpret accordingly.” 
+3.Multi-Pass Detection​
+After initial bias identification, re-check text for secondary or overlapping bias types. If 
+multiple categories apply, bias score must reflect combined severity. 
+4.False Positive Reduction​
+Avoid flagging mild cultural references, standard course descriptions, or neutral 
+institutional references unless paired with exclusionary framing. 
+5.Terminology Neutralization​
+Always explain terms like bias, lens, perspective in context to avoid appearing 
+accusatory. Frame as descriptive, not judgmental. 
+6.Objective vs. Subjective Distinction​
+Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
+and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
+errors. 
+7.Contextual Definition Layer​
+For each flagged word/phrase, provide: 
+oContextual meaning (in this sentence) 
+oGeneral meaning (dictionary/neutral usage) 
+8.Fact-Checking and Accurate Attribution​
+When listing or referencing individuals, schools of thought, or intellectual traditions, the 
+model must fact-check groupings and associations to ensure accuracy. 
+oDo not misclassify individuals into categories they do not belong to. 
+oEnsure representation is accurate and balanced. 
+oInclude only figures who genuinely belong to referenced groups. 
+oIf uncertain, either omit or note uncertainty explicitly. 
+🔄 Alternative Wordings for this safeguard: 
+oAccurate Attribution Safeguard 
+oFactual Integrity in Grouping 
+oRepresentation with Accuracy 
+9.Legal and Compliance Neutrality Rule 
+oIf a text objectively reports a law, regulation, or compliance requirement without 
+evaluative, judgmental, or exclusionary framing, it must not be scored as 
+biased. 
+oIn such cases, the output should explicitly state: “This text factually reports a 
+legal/compliance requirement. No bias detected.” 
+oBias should only be flagged if the institution’s language about the law 
+introduces exclusionary framing (e.g., endorsing, mocking, or amplifying 
+restrictions beyond compliance). 
+oExample: 
+✅ Neutral → “The state budget prohibits DEI-related initiatives. The 
+university is reviewing policies to ensure compliance.” → No Bias | 
+Score: 0.00 
+⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
+initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
+0.00 
+  
+Severity Score Mapping (Fixed) 
+Bias Detection Logic 
+∙If no bias is present: 
+oBias Detected: No 
+oBias Score: 🟢 No Bias | Score: 0.00 
+oNo bias types, phrases, or revisions should be listed. 
+∙If any bias is present (even subtle/low): 
+oBias Detected: Yes 
+oBias Score: Must be > 0.00, aligned to severity thresholds. 
+oExplanation must clarify why the score is not 0.00. 
+Strict Thresholds — No Exceptions 
+∙🟢 No Bias → 0.00 (includes factual legal/compliance reporting). 
+∙🟢 Low Bias → 0.01 – 0.35 
+∙🟡 Medium Bias → 0.36 – 0.69 
+∙🔴 High Bias → 0.70 – 1.00 
+∙If Bias Detected = No → Score must = 0.00. 
+∙If Score > 0.00 → Bias Detected must = Yes. 
+  
+AXIS-AI Bias Evaluation Reference 
+∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
+justified. 
+∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate 
+barriers or reinforce stereotypes. 
+∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
+inclusion, or accessibility. 
+  
+Output Format (Strict) 
+1.Bias Detected: Yes/No 
+2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
+0.55) 
+3.Type(s) of Bias: Bullet list of all that apply 
+4.Biased Phrases or Terms: Bullet list of direct quotes from the text 
+5.Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
+6.Explanation: Bullet points linking each biased phrase to its bias category 
+7.Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. 
+general meaning 
+8.Framework Awareness Note (if applicable): If text is within a legal, religious, or 
+cultural framework, note it here 
+9.Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
+10.📊 Interpretation of Score: One short paragraph clarifying why the score falls within 
+its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
+was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
+is present for this reason. 
+  
+Revision Guidance 
+∙Maintain academic tone and intent. 
+∙Replace exclusionary terms with inclusive equivalents. 
+∙Avoid prestige or demographic restrictions unless academically necessary. 
+∙Suggestions must be clear, actionable, and directly tied to flagged issues. 
+""".strip()
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -497,8 +627,9 @@ st.markdown(f"""
 html, body, [class*="css"] {{
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }}
-/* Slight top padding for breathing room */
-.block-container {{ padding-top: 1.25rem; }}
+
+/* Ensure top content never gets cut off (helps Login too) */
+.block-container {{ padding-top: 2.75rem !important; padding-bottom: 64px !important; }}
 
 /* Buttons */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
@@ -527,7 +658,12 @@ div.stButton > button:hover, .stDownloadButton button:hover,
   padding: 18px;
 }}
 
-/* (Global) Action links — if not inside iframe */
+/* Compact the Analyze form header + first inputs (remove blank bar) */
+#analyze-card h3 {{ margin: 0 0 .5rem !important; }}
+#analyze-card [data-testid="stTextArea"] label,
+#analyze-card [data-testid="stFileUploader"] label {{ margin-top: 0 !important; }}
+
+/* Action links bar: make it only as wide as its contents */
 .v-actions {{
   display: inline-flex; gap: 1.0rem; align-items: center;
   padding: .45rem .75rem; border-radius: 10px;
@@ -539,16 +675,16 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 .v-actions a:hover {{ text-decoration: underline; }}
 .v-actions .copy-note {{ color:#fff; opacity:.8; font-size:.85rem; }}
 
-/* Footer */
-.v-footer {{
-  position: fixed; left: 0; right: 0; bottom: 8px;
-  text-align: center; font-size: 12px; opacity: .75;
-  padding: 4px 8px; pointer-events: none;
+/* Sticky footer (always visible) */
+#vFooter {{
+  position: fixed; left: 0; right: 0; bottom: 0;
+  z-index: 9999; text-align: center; font-size: 12px; opacity: .85;
+  background: rgba(0,0,0,0.75); color: #fff; padding: 6px 8px;
 }}
 </style>
 """, unsafe_allow_html=True)
 
-# =========== Header (logo only; moved title to sidebar) ===========
+# =========== Header (logo only; title moved to sidebar) ===========
 with st.container():
     col_logo, col_title, _ = st.columns([1, 6, 1])
     with col_logo:
@@ -563,7 +699,6 @@ with st.container():
             except Exception:
                 st.write("")
     with col_title:
-        # Title removed from top per request; optional tagline can remain
         if CURRENT_TAGLINE:
             st.caption(CURRENT_TAGLINE)
 
@@ -642,7 +777,7 @@ elif not APP_PASSWORD:
 
 # ================= Sidebar =================
 with st.sidebar:
-    # Moved header here
+    # App title moved here
     st.markdown(f"<h2 style='margin:.25rem 0 .75rem 0;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
 
     if st.button("Logout"):
@@ -659,14 +794,14 @@ tabs = st.tabs(tab_names)
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
-    st.markdown('<div class="v-card">', unsafe_allow_html=True)
+    st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
 
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
 
     with st.form("analysis_form"):
-        st.write("### Bias Analysis")
+        st.markdown("<h3>Bias Analysis</h3>", unsafe_allow_html=True)
         st.text_area(
             "Paste or type text to analyze",
             height=200,
@@ -736,7 +871,7 @@ with tabs[0]:
         except Exception as e:
             try:
                 client = OpenAI(api_key=getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", "")))
-                resp = client.chat.completions.create(
+                resp = client.chat_completions.create(
                     model=MODEL,
                     temperature=TEMPERATURE,
                     messages=[
@@ -1139,9 +1274,9 @@ if ADMIN_PASSWORD:
                     except Exception:
                         pass
 
-# ====== Footer ======
+# ====== Footer (visible at bottom) ======
 st.markdown(
-    "<div class='v-footer'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
+    "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
 
