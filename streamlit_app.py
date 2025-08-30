@@ -67,6 +67,9 @@ try:
 except Exception:
     TEMPERATURE = 0.2
 
+# Use a stricter temp for analysis to enforce format
+ANALYSIS_TEMPERATURE = float(os.environ.get("ANALYSIS_TEMPERATURE", "0.0"))
+
 # ----- Streamlit bootstrap (place as the first Streamlit call) -----
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
 
@@ -437,6 +440,65 @@ Revision Guidance
 ∙Suggestions must be clear, actionable, and directly tied to flagged issues. 
 """.strip()
 
+# ===== Strict output template & helpers =====
+STRICT_OUTPUT_TEMPLATE = """
+1. Bias Detected: <Yes/No>
+2. Bias Score: <Emoji + label> | Score: <0.00–1.00 with two decimals>
+3. Type(s) of Bias:
+- <type 1>
+- <type 2>
+4. Biased Phrases or Terms:
+- "<exact quote 1>"
+- "<exact quote 2>"
+5. Bias Summary:
+<exactly 2–4 sentences>
+6. Explanation:
+- "<phrase>" → <bias type> — <why>
+7. Contextual Definitions:
+- <term> — Contextual: <meaning in passage> | General: <neutral definition>
+8. Framework Awareness Note:
+- <note or “None”>
+9. Suggested Revisions:
+- <suggestion 1>
+- <suggestion 2>
+10. 📊 Interpretation of Score:
+<one short paragraph clarifying why the score falls in its range>
+""".strip()
+
+SECTION_REGEXES = [
+    r"^\s*1\.\s*Bias Detected:\s*(Yes|No)",
+    r"^\s*2\.\s*Bias Score:\s*.+\|\s*Score:\s*\d+\.\d{2}",
+    r"^\s*3\.\s*Type\(s\) of Bias:",
+    r"^\s*4\.\s*Biased Phrases or Terms:",
+    r"^\s*5\.\s*Bias Summary:",
+    r"^\s*6\.\s*Explanation:",
+    r"^\s*7\.\s*Contextual Definitions:",
+    r"^\s*8\.\s*Framework Awareness Note:",
+    r"^\s*9\.\s*Suggested Revisions:",
+    r"^\s*10\.\s*📊\s*Interpretation of Score:",
+]
+
+def _looks_strict(md: str) -> bool:
+    text = md or ""
+    for rx in SECTION_REGEXES:
+        if re.search(rx, text, flags=re.MULTILINE) is None:
+            return False
+    return True
+
+def _build_user_instruction(input_text: str) -> str:
+    return (
+        "Analyze the TEXT below strictly using the rules above. "
+        "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
+        "Do not add any intro/outro or backticks. "
+        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’. "
+        "For sections 3, 4, and 9 in that case, write ‘(none)’. "
+        "Include section 10 even when no bias is present.\n\n"
+        "=== OUTPUT TEMPLATE (copy exactly) ===\n"
+        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
+        "=== TEXT TO ANALYZE (verbatim) ===\n"
+        f"{input_text}"
+    )
+
 # ================= Utilities =================
 def _get_sid() -> str:
     sid = st.session_state.get("sid")
@@ -777,7 +839,6 @@ elif not APP_PASSWORD:
 
 # ================= Sidebar =================
 with st.sidebar:
-    # App title moved here
     st.markdown(f"<h2 style='margin:.25rem 0 .75rem 0;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
 
     if st.button("Logout"):
@@ -847,11 +908,13 @@ with tabs[0]:
         if not final_input:
             st.error("Please enter some text or upload a document."); st.stop()
 
-        # --- OpenAI call (current SDK path) ---
+        # --- OpenAI call ---
         api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
         if not api_key:
             st.error("Missing OpenAI API key. Set OPENAI_API_KEY in environment or config.")
             st.stop()
+
+        user_instruction = _build_user_instruction(final_input)
 
         try:
             try:
@@ -861,16 +924,42 @@ with tabs[0]:
 
             client = OpenAI(api_key=api_key)
 
+            # Pass 1: do the analysis with strict instructions & template
             resp = client.chat.completions.create(
                 model=MODEL,
-                temperature=TEMPERATURE,
+                temperature=ANALYSIS_TEMPERATURE,
                 messages=[
                     {"role": "system", "content": IDENTITY_PROMPT},
                     {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": final_input},
+                    {"role": "user", "content": user_instruction},
                 ],
             )
             model_reply = (resp.choices[0].message.content or "").strip()
+
+            # Pass 2: if needed, strictly reformat/repair into exact 10-section template
+            if not _looks_strict(model_reply):
+                repair_msg = (
+                    "Reformat the ORIGINAL ANSWER to match EXACTLY the required 10-section template below. "
+                    "Do not add or remove substantive content; only coerce the structure and fill clearly missing items minimally. "
+                    "Always include all 10 sections in the same order and headings. "
+                    "If the original suggests no bias, set 1=No and 2=🟢 No Bias | Score: 0.00, and use “(none)” for sections 3, 4, and 9.\n\n"
+                    "=== REQUIRED TEMPLATE ===\n"
+                    f"{STRICT_OUTPUT_TEMPLATE}\n\n"
+                    "=== ORIGINAL ANSWER ===\n"
+                    f"{model_reply}"
+                )
+                resp2 = client.chat.completions.create(
+                    model=MODEL,
+                    temperature=0.0,
+                    messages=[
+                        {"role": "system", "content": "You are a meticulous formatter who outputs exactly the requested structure."},
+                        {"role": "user", "content": repair_msg},
+                    ],
+                )
+                fixed = (resp2.choices[0].message.content or "").strip()
+                if _looks_strict(fixed):
+                    model_reply = fixed  # adopt repaired version
+
             try:
                 prog.progress(85, text="Formatting report…")
             except Exception:
@@ -980,7 +1069,7 @@ with tabs[0]:
       ta.value = text_{uid}; ta.style.position="fixed"; ta.style.opacity="0";
       document.body.appendChild(ta); ta.focus(); ta.select();
       try {{ document.execCommand("copy"); }} catch (_e) {{}}
-      ta.remove(); note_{uid}.style.display="inline";
+      ta.remove(); note_{uid}.style.display = "inline";
       setTimeout(() => note_{uid}.style.display = "none", 1200);
     }}
   }});
@@ -1274,6 +1363,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
