@@ -949,32 +949,18 @@ with tabs[0]:
         st.markdown('<div class="sticky-actions">', unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1:
-            components.html(
-                f"""
-                <button id="copyBtn" class="copy-btn">Copy Report</button>
-                <div id="copyNote" class="copy-note" style="display:none;">Copied ✓</div>
-                <script>
-                  const text = {json.dumps(st.session_state["last_reply"])};
-                  const btn = document.getElementById("copyBtn");
-                  const note = document.getElementById("copyNote");
-                  btn.addEventListener("click", async () => {{
-                    try {{
-                      await navigator.clipboard.writeText(text);
-                      note.style.display = "block";
-                      setTimeout(() => note.style.display = "none", 1200);
-                    }} catch (e) {{
-                      const ta = document.createElement("textarea");
-                      ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
-                      document.body.appendChild(ta); ta.focus(); ta.select();
-                      try {{ document.execCommand("copy"); }} catch (_e) {{}}
-                      ta.remove(); note.style.display="block";
-                      setTimeout(() => note.style.display="none", 1200);
-                    }}
-                  }});
-                </script>
-                """,
-                height=80,
-            )
+            div.stButton > button,
+.copy-btn {
+  background-color: #FF8C32 !important;
+  color: #111418 !important;
+  border: 1px solid #FF8C32 !important;
+  border-radius: .75rem !important;
+  padding: 0.60rem 1rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 500 !important;
+  width: 100% !important;
+}
+
         with c2:
             if st.button("Clear Report"):
                 st.session_state["history"] = []
@@ -1344,6 +1330,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
