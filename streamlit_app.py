@@ -668,7 +668,7 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 .header-title {{ padding-top: .5rem; }}
 .header-title h1 {{ margin: 0; padding: .25rem 0; }}
 
-/* Simple white text links for the action bar */
+/* (Global) Simple white text links for the action bar (non-iframe fallback) */
 .v-actions {{
   display: flex; gap: 1.25rem; align-items: center;
   padding: .5rem .75rem; border-radius: 10px;
@@ -956,9 +956,22 @@ with tabs[0]:
         note_id = f"copyNote_{uid}"
 
         components.html(f"""
+<style>
+  .v-actions {{
+    display: flex; gap: 1.25rem; align-items: center;
+    padding: .5rem .75rem; border-radius: 10px;
+    background: rgba(0,0,0,0.65);
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }}
+  .v-actions a {{
+    color: #fff !important; text-decoration: none; font-weight: 600;
+  }}
+  .v-actions a:hover {{ text-decoration: underline; }}
+  .v-actions .copy-note {{ color:#fff; opacity:.8; font-size:.85rem; }}
+</style>
 <div class="v-actions">
   <a id="{copy_id}" href="javascript:void(0)">Copy Report</a>
-  <a id="download_{uid}" href="data:application/pdf;base64,{pdf_b64}" download="veritas_report.pdf">Download PDF</a>
+  <a id="download_{uid}" href="data:application/pdf;base64,{pdf_b64}" download="veritas_report.pdf">Download Report</a>
   <span id="{note_id}" class="copy-note" style="display:none;">Copied ✓</span>
 </div>
 <script>
