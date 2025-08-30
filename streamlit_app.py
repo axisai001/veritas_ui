@@ -850,51 +850,76 @@ with tabs[0]:
 
     # Show latest report (if any)
     if st.session_state.get("last_reply"):
-        st.write("### Bias Report")
-        st.markdown(st.session_state["last_reply"])
+    st.write("### Bias Report")
+    st.markdown(st.session_state["last_reply"])
 
-        # --- HTML-only actions (Copy / Download TXT / Clear) ---
-        report_text = st.session_state["last_reply"]
-        # Build a data: URI for .txt download (client-side, HTML-only)
-        data_txt = report_text.encode("utf-8")
-        b64 = base64.b64encode(data_txt).decode("utf-8")
-        href_download = f"data:text/plain;base64,{b64}"
+    # Orange link style
+    st.markdown("""
+    <style>
+    .orange-link {
+        color: #FF8C32 !important;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+    }
+    .orange-link:hover {
+        color: #E97C25 !important;
+        text-decoration: underline;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-        html_actions = f"""
-            <div class="btn-row">
-              <button id="copyBtn" class="btn" type="button">Copy Report</button>
-              <a class="btn" href="{href_download}" download="veritas_report.txt">Download Report</a>
-              <form method="GET" style="display:inline; width:100%;">
-                <input type="hidden" name="clear" value="1"/>
-                <button class="btn" type="submit">Clear Report</button>
-              </form>
-            </div>
-            <div id="copyNote" class="note" style="display:none;">Copied ✓</div>
-            <script>
-              const text = {json.dumps(report_text)};
-              const btn = document.getElementById("copyBtn");
-              const note = document.getElementById("copyNote");
-              if (btn) {{
-                btn.addEventListener("click", async () => {{
-                  try {{
-                    await navigator.clipboard.writeText(text);
-                    note.style.display = "block";
-                    setTimeout(() => note.style.display = "none", 1200);
-                  }} catch (e) {{
-                    const ta = document.createElement("textarea");
-                    ta.value = text; ta.style.position="fixed"; ta.style.opacity="0";
-                    document.body.appendChild(ta); ta.focus(); ta.select();
-                    try {{ document.execCommand("copy"); }} catch (_e) {{}}
-                    ta.remove(); note.style.display="block";
-                    setTimeout(() => note.style.display="none", 1200);
-                  }}
-                }});
-              }}
-            </script>
-        """
-        components.html(html_actions, height=120)
+    # Copy Report (JS)
+    components.html(f"""
+    <a class="orange-link" id="copyReport">📋 Copy Report</a>
+    <script>
+    const text = {json.dumps(st.session_state["last_reply"])};
+    document.getElementById("copyReport").onclick = async () => {{
+        try {{
+            await navigator.clipboard.writeText(text);
+            alert("Report copied ✓");
+        }} catch (err) {{
+            alert("Copy failed");
+        }}
+    }};
+    </script>
+    """, height=30)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Download Report (hidden Streamlit download button, styled as link)
+    pdf_bytes = None
+    try:
+        pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
+    except Exception:
+        pass
+    if pdf_bytes:
+        st.download_button(
+            "⬇️ Download Report",
+            data=pdf_bytes,
+            file_name="veritas_report.pdf",
+            mime="application/pdf",
+            key="download_report",
+            help="Download the report as PDF"
+        )
+
+    # Clear Report
+    if st.markdown('<a class="orange-link" href="#" id="clearReport">🗑️ Clear Report</a>', unsafe_allow_html=True):
+        pass
+    # JS hack to send clear action
+    components.html("""
+    <script>
+    const clear = document.getElementById("clearReport");
+    clear.onclick = () => {
+        window.parent.postMessage({type: "streamlit:clearReport"}, "*");
+    };
+    </script>
+    """, height=0)
+
+    # Capture Clear Report event
+    msg = st.experimental_get_query_params()
+    if "clearReport" in msg:
+        st.session_state["history"] = []
+        st.session_state["last_reply"] = ""
+        st.experimental_rerun()
 
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -1191,4 +1216,5 @@ if ADMIN_PASSWORD:
                     pass
 
             st.markdown('</div>', unsafe_allow_html=True)
+
 
