@@ -966,7 +966,9 @@ with c2:
 
 # Download PDF button
 with c3:
-    if st.session_state["last_reply"]:
+    # (inside with c3:)
+try:
+    if st.session_state.get("last_reply"):
         pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
         st.download_button(
             "Download Report (PDF)",
@@ -974,8 +976,9 @@ with c3:
             file_name="veritas_report.pdf",
             mime="application/pdf"
         )
-
-st.markdown('</div>', unsafe_allow_html=True)
+except Exception as e:
+    log_error_event(kind="PDF", route="/download", http_status=500, detail=repr(e))
+    st.error("network error")
 
 # -------------------- Feedback --------------------
 with tabs[1]:
@@ -1295,6 +1298,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
