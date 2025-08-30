@@ -1,7 +1,7 @@
 # streamlit_app.py — Veritas (Streamlit)
 # Modernized UI with tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # History + Data Explorer are moved to Admin, behind admin email+password login.
-# Copy/Download/Clear are HTML controls that appear only after an analysis is produced.
+# Copy/Download are HTML controls that appear only after an analysis is produced.
 # Session ID + pilot time zone tracked internally; not displayed in the sidebar.
 # Keeps your CSV + SQLite logging, lockout, SendGrid email, and the full prompt text.
 
@@ -60,7 +60,7 @@ except Exception:
     settings = _FallbackSettings()
 
 # ================= App constants from secrets/env =================
-APP_TITLE = os.environ.get("APP_TITLE", "Veritas")  # removed “— Pilot Test”
+APP_TITLE = os.environ.get("APP_TITLE", "Veritas")
 MODEL = getattr(settings, "openai_model", os.environ.get("OPENAI_MODEL", "gpt-3.5-turbo-0125"))
 try:
     TEMPERATURE = float(os.environ.get("OPENAI_TEMPERATURE", "0.2"))
@@ -624,17 +624,6 @@ _prune_csv_by_ttl(ANALYSES_CSV, ANALYSES_LOG_TTL_DAYS)
 _prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
 
-# ---------------- Query param: ?clear=1 ----------------
-try:
-    qparams = _get_query_params()
-    if "clear" in qparams:
-        st.session_state["history"] = []
-        st.session_state["last_reply"] = ""
-        _set_query_params()  # remove param
-        _safe_rerun()
-except Exception:
-    pass
-
 # ====== Global CSS (modern theme) ======
 PRIMARY = "#FF8C32"
 ACCENT = "#E97C25"
@@ -970,7 +959,6 @@ with tabs[0]:
 <div class="v-actions">
   <a id="{copy_id}" href="javascript:void(0)">Copy Report</a>
   <a id="download_{uid}" href="data:application/pdf;base64,{pdf_b64}" download="veritas_report.pdf">Download PDF</a>
-  <a id="clear_{uid}" href="?clear=1" target="_top">Clear Report</a>
   <span id="{note_id}" class="copy-note" style="display:none;">Copied ✓</span>
 </div>
 <script>
@@ -988,16 +976,7 @@ with tabs[0]:
       document.body.appendChild(ta); ta.focus(); ta.select();
       try {{ document.execCommand("copy"); }} catch (_e) {{}}
       ta.remove(); note_{uid}.style.display="inline";
-      setTimeout(() => note_{uid}.style.display="none", 1200);
-    }}
-  }});
-  const clearEl_{uid} = document.getElementById("clear_{uid}");
-  clearEl_{uid}.addEventListener("click", (e) => {{
-    try {{
-      e.preventDefault();
-      window.top.location.search = "?clear=1";
-    }} catch (_) {{
-      return true;
+      setTimeout(() => note_{uid}.style.display = "none", 1200);
     }}
   }});
 </script>
@@ -1170,7 +1149,7 @@ with tabs[3]:
     st.markdown(
         """
 - Paste text or upload a document, then click **Analyze**.
-- After the report appears, use the action links (Copy / Download / Clear).
+- After the report appears, use the action links (**Copy** / **Download**).
 - Use the **Feedback** tab to rate your experience and share comments.
 - Use the **Support** tab to submit any issues; include the Report ID if applicable.
         """
