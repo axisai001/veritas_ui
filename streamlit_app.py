@@ -78,14 +78,19 @@ def _safe_rerun():
     try:
         st.rerun()
     except Exception:
-        try: st.experimental_rerun()
-        except Exception: pass
+        try:
+            st.experimental_rerun()
+        except Exception:
+            pass
 
 def _get_query_params():
-    try: return dict(st.query_params)
+    try:
+        return dict(st.query_params)
     except Exception:
-        try: return st.experimental_get_query_params()
-        except Exception: return {}
+        try:
+            return st.experimental_get_query_params()
+        except Exception:
+            return {}
 
 def _set_query_params(**kwargs):
     try:
@@ -93,8 +98,10 @@ def _set_query_params(**kwargs):
         for k, v in kwargs.items():
             st.query_params[k] = v
     except Exception:
-        try: st.experimental_set_query_params(**kwargs)
-        except Exception: pass
+        try:
+            st.experimental_set_query_params(**kwargs)
+        except Exception:
+            pass
 
 # Admin controls
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
@@ -102,22 +109,26 @@ ADMIN_EMAIL_ALLOWED = os.environ.get("ADMIN_EMAIL_ALLOWED", "").strip()
 
 # --- Safe timezone ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
-    try: return ZoneInfo(name)
-    except Exception: return ZoneInfo(fallback)
+    try:
+        return ZoneInfo(name)
+    except Exception:
+        return ZoneInfo(fallback)
 
 PILOT_TZ_NAME = os.environ.get("VERITAS_TZ", "America/Denver")
 PILOT_TZ = _safe_zoneinfo(PILOT_TZ_NAME, "UTC")
 PILOT_START_AT = os.environ.get("PILOT_START_AT", "")
 
 def _parse_pilot_start_to_utc(s: str):
-    if not s: return None
+    if not s:
+        return None
     try:
         if "T" in s:
             if s.endswith("Z"):
                 dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
             else:
                 dt = datetime.fromisoformat(s)
-                if dt.tzinfo is None: dt = dt.replace(tzinfo=PILOT_TZ)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=PILOT_TZ)
         else:
             dt = datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=PILOT_TZ)
         return dt.astimezone(timezone.utc)
@@ -127,7 +138,8 @@ def _parse_pilot_start_to_utc(s: str):
 PILOT_START_UTC = _parse_pilot_start_to_utc(PILOT_START_AT)
 
 def pilot_started() -> bool:
-    if PILOT_START_UTC is None: return True
+    if PILOT_START_UTC is None:
+        return True
     return datetime.now(timezone.utc) >= PILOT_START_UTC
 
 # Rates / windows
@@ -549,7 +561,7 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
-# ---- Global rate limiter (FIXED: available to show_login and everywhere) ----
+# ---- Global rate limiter (used by login + analyze) ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
     dq = dq_map.get(key)
@@ -561,9 +573,13 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     while dq and dq[0] < cutoff:
         dq.popleft()
     if len(dq) >= limit:
-        # log but don't leak details to UI
+        # lightweight logging
         try:
-            _ = log_error_event(kind="RATE_LIMIT", route=key, http_status=429, detail=f"limit={limit}/{window_sec}s")
+            ts = datetime.now(timezone.utc).isoformat()
+            _db_exec("""INSERT INTO errors (timestamp_utc,error_id,request_id,route,kind,http_status,detail,session_id,login_id,remote_addr,user_agent)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                     (ts, _gen_error_id(), st.session_state.get("request_id",""), key, "RATE_LIMIT", 429,
+                      f"limit={limit}/{window_sec}s", _get_sid(), st.session_state.get("login_id",""), "streamlit", "streamlit"))
         except Exception:
             pass
         return False
@@ -589,6 +605,23 @@ def log_error_event(kind: str, route: str, http_status: int, detail: str):
     except Exception:
         return None
 
+def log_analysis(public_id: str, internal_id: str, assistant_text: str):
+    try:
+        ts = datetime.now(timezone.utc).isoformat()
+        sid = _get_sid()
+        login_id = st.session_state.get("login_id", "")
+        addr = "streamlit"; ua = "streamlit"
+        conv_obj = {"assistant_reply": assistant_text}
+        conv_json = json.dumps(conv_obj, ensure_ascii=False)
+        conv_chars = len(conv_json)
+        with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([ts, public_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json])
+        _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
+                    VALUES (?,?,?,?,?,?,?,?,?)""",
+                 (ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json))
+    except Exception:
+        pass
+
 def log_auth_event(event_type: str, success: bool, login_id: str = "", credential_label: str = "APP_PASSWORD", attempted_secret: Optional[str] = None):
     try:
         ts = datetime.now(timezone.utc).isoformat()
@@ -609,23 +642,6 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
     except Exception:
         return None
 
-def log_analysis(public_id: str, internal_id: str, assistant_text: str):
-    try:
-        ts = datetime.now(timezone.utc).isoformat()
-        sid = _get_sid()
-        login_id = st.session_state.get("login_id", "")
-        addr = "streamlit"; ua = "streamlit"
-        conv_obj = {"assistant_reply": assistant_text}
-        conv_json = json.dumps(conv_obj, ensure_ascii=False)
-        conv_chars = len(conv_json)
-        with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json])
-        _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
-                 (ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json))
-    except Exception:
-        pass
-
 def log_ack_event(acknowledged: bool):
     try:
         ts = datetime.now(timezone.utc).isoformat()
@@ -644,28 +660,36 @@ def log_ack_event(acknowledged: bool):
 # ---- Pruning helpers ----
 def _prune_csv_by_ttl(path: str, ttl_days: int):
     try:
-        if ttl_days <= 0 or not os.path.exists(path): return
+        if ttl_days <= 0 or not os.path.exists(path):
+            return
         cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
         with open(path, "r", encoding="utf-8", newline="") as f:
             rows = list(csv.reader(f))
-        if not rows: return
+        if not rows:
+            return
         header, data = rows[0], rows[1:]
         kept = []
         for row in data:
             try:
                 ts = datetime.fromisoformat(row[0])
-                if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
             except Exception:
-                kept.append(row); continue
-            if ts >= cutoff: kept.append(row)
+                kept.append(row)
+                continue
+            if ts >= cutoff:
+                kept.append(row)
         with open(path, "w", encoding="utf-8", newline="") as f:
-            w = csv.writer(f); w.writerow(header); w.writerows(kept)
+            w = csv.writer(f)
+            w.writerow(header)
+            w.writerows(kept)
     except Exception:
         pass
 
 def _prune_db_by_ttl(table: str, ts_col: str, ttl_days: int):
     try:
-        if ttl_days <= 0: return
+        if ttl_days <= 0:
+            return
         cutoff = (datetime.now(timezone.utc) - timedelta(days=ttl_days)).isoformat()
         con = sqlite3.connect(DB_PATH); cur = con.cursor()
         cur.execute(f"DELETE FROM {table} WHERE {ts_col} < ?", (cutoff,))
@@ -743,12 +767,16 @@ with st.container():
         logo_path = None
         if CURRENT_LOGO_FILENAME:
             candidate = Path(UPLOAD_FOLDER) / CURRENT_LOGO_FILENAME
-            if candidate.is_file(): logo_path = candidate
+            if candidate.is_file():
+                logo_path = candidate
         if logo_path:
-            try: st.image(logo_path.read_bytes(), use_container_width=True)
-            except Exception: st.write("")
+            try:
+                st.image(logo_path.read_bytes(), use_container_width=True)
+            except Exception:
+                st.write("")
     with col_title:
-        if CURRENT_TAGLINE: st.caption(CURRENT_TAGLINE)
+        if CURRENT_TAGLINE:
+            st.caption(CURRENT_TAGLINE)
 
 # ---------------- Session/Auth bootstrap ----------------
 if "request_id" not in st.session_state:
@@ -782,7 +810,8 @@ def _note_failed_login(attempted_secret: str = ""):
     now = time.time()
     dq = st.session_state["_fail_times"]
     cutoff = now - LOCKOUT_WINDOW_SEC
-    while dq and dq[0] < cutoff: dq.popleft()
+    while dq and dq[0] < cutoff:
+        dq.popleft()
     dq.append(now)
     log_auth_event("login_failed", False, login_id=(st.session_state.get("login_id","") or ""), credential_label="APP_PASSWORD", attempted_secret=attempted_secret)
     if len(dq) >= LOCKOUT_THRESHOLD:
@@ -819,7 +848,8 @@ if not st.session_state["authed"] and APP_PASSWORD:
 elif not APP_PASSWORD:
     # No password mode still records a "login" and allows the app
     _sid = _get_sid()
-    if "login_id" not in st.session_state: st.session_state["login_id"] = ""
+    if "login_id" not in st.session_state:
+        st.session_state["login_id"] = ""
     log_auth_event("login_success", True, login_id="", credential_label="NO_PASSWORD")
     st.session_state["authed"] = True
 
@@ -841,15 +871,18 @@ def _has_valid_ack(login_id: str, sid: str) -> bool:
                        WHERE acknowledged=1 AND (login_id=? OR session_id=?)
                        ORDER BY id DESC LIMIT 1""", (login_id or "", sid))
         row = cur.fetchone(); con.close()
-        if not row: return False
+        if not row:
+            return False
         ts = datetime.fromisoformat(row[0])
-        if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
         return ts >= cutoff_dt
     except Exception:
         return False
 
 def require_acknowledgment():
-    if st.session_state.get("ack_ok", False): return
+    if st.session_state.get("ack_ok", False):
+        return
     sid = _get_sid()
     login_id = st.session_state.get("login_id","")
     if _has_valid_ack(login_id, sid):
@@ -891,30 +924,6 @@ if ADMIN_PASSWORD:
 tabs = st.tabs(tab_names)
 
 # -------------------- Analyze Tab --------------------
-def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if ext == "pdf":
-        if PdfReader is None:
-            return ""
-        reader = PdfReader(io.BytesIO(file_bytes))
-        parts = []
-        for page in reader.pages:
-            try:
-                parts.append(page.extract_text() or "")
-            except Exception:
-                continue
-        return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
-    elif ext == "docx":
-        if docx is None:
-            return ""
-        buf = io.BytesIO(file_bytes)
-        doc_obj = docx.Document(buf)
-        text = "\n".join(p.text for p in doc_obj.paragraphs)
-        return text[:MAX_EXTRACT_CHARS]
-    elif ext in ("txt", "md", "csv"):
-        return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
-    return ""
-
 with tabs[0]:
     st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
 
@@ -941,13 +950,17 @@ with tabs[0]:
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
             st.error("network error"); st.stop()
 
-        try: prog = st.progress(0, text="Preparing…")
-        except TypeError: prog = st.progress(0)
+        try:
+            prog = st.progress(0, text="Preparing…")
+        except TypeError:
+            prog = st.progress(0)
 
         user_text = st.session_state.get("user_input_box", "").strip()
         extracted = ""
-        try: prog.progress(10)
-        except Exception: pass
+        try:
+            prog.progress(10)
+        except Exception:
+            pass
 
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
@@ -972,8 +985,10 @@ with tabs[0]:
         user_instruction = _build_user_instruction(final_input)
 
         try:
-            try: prog.progress(40, text="Contacting model…")
-            except Exception: prog.progress(40)
+            try:
+                prog.progress(40, text="Contacting model…")
+            except Exception:
+                prog.progress(40)
 
             client = OpenAI(api_key=api_key)
 
@@ -1010,8 +1025,10 @@ with tabs[0]:
                 if _looks_strict(fixed):
                     model_reply = fixed
 
-            try: prog.progress(85, text="Formatting report…")
-            except Exception: prog.progress(85)
+            try:
+                prog.progress(85, text="Formatting report…")
+            except Exception:
+                prog.progress(85)
         except Exception as e:
             log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
             st.error("Could not contact the language model. Check API key/model."); st.stop()
@@ -1022,12 +1039,16 @@ with tabs[0]:
 
         st.session_state["history"].append({"role":"assistant","content":decorated_reply})
         st.session_state["last_reply"] = decorated_reply
-        try: log_analysis(public_report_id, internal_report_id, decorated_reply)
-        except Exception: pass
+        try:
+            log_analysis(public_report_id, internal_report_id, decorated_reply)
+        except Exception:
+            pass
 
         st.session_state["_clear_text_box"] = True
-        try: prog.progress(100, text="Done ✓")
-        except Exception: prog.progress(100)
+        try:
+            prog.progress(100, text="Done ✓")
+        except Exception:
+            prog.progress(100)
         _safe_rerun()
 
     # Show latest report (if any)
@@ -1037,7 +1058,8 @@ with tabs[0]:
 
         # ---- Action links
         def _build_pdf_inline(content: str) -> bytes:
-            if SimpleDocTemplate is None: return content.encode("utf-8")
+            if SimpleDocTemplate is None:
+                return content.encode("utf-8")
             buf = io.BytesIO()
             doc = SimpleDocTemplate(
                 buf, pagesize=letter,
@@ -1144,7 +1166,8 @@ with tabs[1]:
             _db_exec("""INSERT INTO feedback (timestamp_utc,rating,email,comments,conversation_chars,conversation,remote_addr,ua)
                         VALUES (?,?,?,?,?,?,?,?)""",
                      (ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"))
-        except Exception: pass
+        except Exception:
+            pass
         # Email
         if not (SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM):
             st.warning("Feedback saved locally. Configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to email it.")
@@ -1199,7 +1222,8 @@ with tabs[2]:
             submit_support = st.form_submit_button("Submit Support Request")
         with c2:
             cancel_support = st.form_submit_button("Cancel")
-    if cancel_support: _safe_rerun()
+    if cancel_support:
+        _safe_rerun()
     if submit_support:
         if not full_name.strip():
             st.error("Please enter your full name.")
@@ -1225,7 +1249,8 @@ with tabs[2]:
                     _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
                                 VALUES (?,?,?,?,?,?,?,?,?)""",
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
-                except Exception: pass
+                except Exception:
+                    pass
                 if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
                     try:
                         subject = f"[Veritas Support] Ticket {ticket_id}"
@@ -1317,8 +1342,10 @@ if ADMIN_PASSWORD:
                     df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
                 if not df.empty:
                     def extract_preview(js: str) -> str:
-                        try: return json.loads(js).get("assistant_reply","")[:220]
-                        except Exception: return ""
+                        try:
+                            return json.loads(js).get("assistant_reply","")[:220]
+                        except Exception:
+                            return ""
                     df["preview"] = df["conversation_json"].apply(extract_preview)
                     if q.strip():
                         ql = q.lower()
@@ -1345,40 +1372,54 @@ if ADMIN_PASSWORD:
                 st.caption("Browse app data stored on this instance. Use the download buttons for backups.")
 
                 def _read_csv_safe(path: str) -> pd.DataFrame:
-                    try: return pd.read_csv(path)
-                    except Exception: return pd.DataFrame()
+                    try:
+                        return pd.read_csv(path)
+                    except Exception:
+                        return pd.DataFrame()
 
                 c1, c2 = st.columns(2)
                 with c1:
                     st.write("##### Auth Events")
                     st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
-                    try: st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
-                    except Exception: pass
+                    try:
+                        st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
+                    except Exception:
+                        pass
 
                     st.write("##### Errors")
                     st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
-                    try: st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
-                    except Exception: pass
+                    try:
+                        st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
+                    except Exception:
+                        pass
 
                     st.write("##### Acknowledgments")
                     st.dataframe(_read_csv_safe(ACK_CSV), use_container_width=True)
-                    try: st.download_button("Download ack_events.csv", data=open(ACK_CSV, "rb").read(), file_name="ack_events.csv", mime="text/csv")
-                    except Exception: pass
+                    try:
+                        st.download_button("Download ack_events.csv", data=open(ACK_CSV, "rb").read(), file_name="ack_events.csv", mime="text/csv")
+                    except Exception:
+                        pass
                 with c2:
                     st.write("##### Analyses")
                     st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
-                    try: st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
-                    except Exception: pass
+                    try:
+                        st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
+                    except Exception:
+                        pass
 
                     st.write("##### Feedback")
                     st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
-                    try: st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
-                    except Exception: pass
+                    try:
+                        st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
+                    except Exception:
+                        pass
 
                     st.write("##### Support Tickets")
                     st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
-                    try: st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
-                    except Exception: pass
+                    try:
+                        st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
+                    except Exception:
+                        pass
 
             # ---- Maintenance
             with sub3:
@@ -1414,6 +1455,31 @@ if ADMIN_PASSWORD:
                 confirm = st.text_input("Type PURGE to confirm")
                 if st.button("Wipe Selected Dataset"):
                     if confirm.strip().upper() == "PURGE":
+                        _wipe_db_table(target)
+                        # Also clear CSV file contents (keep header)
+                        csv_map = {
+                            "auth_events": AUTH_CSV, "errors": ERRORS_CSV, "ack_events": ACK_CSV,
+                            "analyses": ANALYSES_CSV, "feedback": FEEDBACK_CSV, "support_tickets": SUPPORT_CSV
+                        }
+                        path = csv_map.get(target)
+                        if path and os.path.exists(path):
+                            hdr = []
+                            try:
+                                with open(path, "r", encoding="utf-8", newline="") as f:
+                                    rdr = csv.reader(f); hdr = next(rdr, [])
+                            except Exception:
+                                pass
+                            with open(path, "w", encoding="utf-8", newline="") as f:
+                                if hdr:
+                                    csv.writer(f).writerow(hdr)
+                        st.success(f"Wiped: {target}")
+                    else:
+                        st.error("Confirmation failed. Type PURGE to proceed.")
 
+# ====== Footer ======
+st.markdown(
+    "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
+    unsafe_allow_html=True
+)
 
 
