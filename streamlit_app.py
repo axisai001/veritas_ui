@@ -965,7 +965,7 @@ with c2:
         st.rerun()
 
 # Download PDF button
-    with c3:
+with c3:
     try:
         if st.session_state.get("last_reply"):
             pdf_bytes = build_pdf_bytes(st.session_state["last_reply"])
@@ -1297,6 +1297,7 @@ if admin_enabled:
             st.session_state["is_admin"] = False
             st.session_state["admin_email"] = ""
             st.rerun()
+
 
 
 
