@@ -448,16 +448,8 @@ general meaning
 8.Framework Awareness Note (if applicable): If text is within a legal, religious, or 
 cultural framework, note it here 
 9.Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
-10.📊 Interpretation of Score: One short paragraph clarifying why the score falls within 
-its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
-was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
-is present for this reason. 
-  
-Revision Guidance 
-∙Maintain academic tone and intent. 
-∙Replace exclusionary terms with inclusive equivalents. 
-∙Avoid prestige or demographic restrictions unless academically necessary. 
-∙Suggestions must be clear, actionable, and directly tied to flagged issues.
+10.📊 Interpretation of Score:
+<one short paragraph clarifying why the score falls in its range>
 """.strip()
 
 # ===== Strict output template & helpers =====
@@ -720,7 +712,7 @@ st.markdown(f"""
 html, body, [class*="css"] {{ font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
 .block-container {{ padding-top: 2.75rem !important; padding-bottom: 64px !important; }}
 
-/* Buttons (original look) */
+/* Buttons (original look, prevent wrapping & set sane width) */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
 button[kind="primary"], button[kind="secondary"],
@@ -729,6 +721,7 @@ button[kind="primary"], button[kind="secondary"],
   border: 1px solid {PRIMARY} !important; border-radius: .75rem !important;
   box-shadow: none !important; padding: 0.60rem 1rem !important;
   font-size: 0.95rem !important; font-weight: 500 !important;
+  white-space: nowrap !important; min-width: 130px !important; line-height: 1.2 !important;
 }}
 div.stButton > button:hover, .stDownloadButton button:hover,
 .stForm [type="submit"]:hover, [data-testid="baseButton-primary"]:hover {{
@@ -986,14 +979,13 @@ with tabs[0]:
             key="doc_file"
         )
 
-        # Button layout: Analyze (left) and New Analysis (right-opposite corner)
-        c_left, c_mid, c_right = st.columns([1, 8, 1])
+        # Wider edge columns so buttons don't wrap; keep opposite corners.
+        c_left, c_mid, c_right = st.columns([3, 6, 3])
         with c_left:
             submitted = st.form_submit_button("Analyze")
         with c_right:
             new_analysis = st.form_submit_button("New Analysis", help="Clear inputs and report for a fresh run")
 
-    # Handle New Analysis action
     if 'new_analysis' not in st.session_state:
         st.session_state['new_analysis'] = False
     if 'doc_file' not in st.session_state:
@@ -1618,3 +1610,4 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
