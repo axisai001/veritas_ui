@@ -761,19 +761,16 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 
 # ====== Background image injection (smarter) ======
 def _find_local_bg_file() -> Optional[Path]:
-    # prefer exact 'bg.ext' in STATIC_DIR
     for ext in ("svg","png","jpg","jpeg","webp"):
         p = Path(STATIC_DIR) / f"bg.{ext}"
         if p.exists():
             return p
-    # otherwise first bg.* found
     for p in Path(STATIC_DIR).glob("bg.*"):
         if p.suffix.lower().lstrip(".") in ("svg","png","jpg","jpeg","webp"):
             return p
     return None
 
 def _inject_bg():
-    """Set .stApp background using either static/bg.* (preferred) or BG_URL (secret/env)."""
     try:
         p = _find_local_bg_file()
         if p and p.exists():
@@ -795,7 +792,6 @@ def _inject_bg():
             </style>
             """, unsafe_allow_html=True)
         elif BG_URL:
-            # Use externally hosted image (e.g., GitHub RAW)
             safe_url = BG_URL.replace('"','%22')
             st.markdown(f"""
             <style>
@@ -805,7 +801,6 @@ def _inject_bg():
             }}
             </style>
             """, unsafe_allow_html=True)
-        # else: no background; keep default
     except Exception:
         pass
 
@@ -988,9 +983,30 @@ with tabs[0]:
         doc = st.file_uploader(
             f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False
+            accept_multiple_files=False,
+            key="doc_file"  # <-- key so we can reset it from 'New Analysis'
         )
-        submitted = st.form_submit_button("Analyze")
+        # --- side-by-side actions
+        ca, cb = st.columns([1,1])
+        with ca:
+            submitted = st.form_submit_button("Analyze")
+        with cb:
+            new_analysis = st.form_submit_button("New Analysis", help="Clear the current report and inputs")
+
+    # --- Handle "New Analysis"
+    if 'new_analysis' not in st.session_state:
+        st.session_state['new_analysis'] = False
+    if new_analysis:
+        st.session_state['new_analysis'] = True
+        st.session_state["last_reply"] = ""
+        st.session_state["history"] = []
+        st.session_state["_clear_text_box"] = True
+        # reset uploader
+        try:
+            st.session_state["doc_file"] = None
+        except Exception:
+            pass
+        _safe_rerun()
 
     if submitted:
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
@@ -1014,7 +1030,6 @@ with tabs[0]:
                 st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB."); st.stop()
             try:
                 with st.spinner("Extracting document…"):
-                    # local helper
                     def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
                         if ext == "pdf":
@@ -1372,6 +1387,7 @@ with tabs[3]:
     st.markdown(
         """
 - Paste text or upload a document, then click **Analyze**.
+- Use **New Analysis** to instantly clear the page for a fresh run.
 - After the report appears, use the action links (**Copy** / **Download**).
 - Use the **Feedback** tab to rate your experience and share comments.
 - Use the **Support** tab to submit any issues; include the Report ID if applicable.
@@ -1556,7 +1572,6 @@ if ADMIN_PASSWORD:
             # ---- Branding (Background uploader)
             with sub4:
                 st.write("#### Branding: Background Image")
-                # current status
                 current_bg = _find_local_bg_file()
                 if current_bg:
                     st.success(f"Current local background: `{current_bg.name}` in `/static`.")
@@ -1576,11 +1591,9 @@ if ADMIN_PASSWORD:
                             if ext not in BG_ALLOWED_EXTENSIONS:
                                 st.error("Unsupported file type.")
                             else:
-                                # delete existing bg.*
                                 for p in Path(STATIC_DIR).glob("bg.*"):
                                     try: p.unlink()
                                     except Exception: pass
-                                # write new file
                                 out = Path(STATIC_DIR) / f"bg.{ext}"
                                 out.write_bytes(up.getvalue())
                                 st.success(f"Saved background to `static/{out.name}`.")
@@ -1605,10 +1618,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
-
-
-
 
 
 
