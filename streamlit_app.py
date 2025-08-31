@@ -452,10 +452,10 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
-# ---------- SendGrid Email Helpers ----------
+# ---------- SendGrid Email Helpers (fixed) ----------
 try:
     from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail, Email, To, ReplyTo
+    from sendgrid.helpers.mail import Mail, Email, To, ReplyTo, Category
 except Exception:
     SendGridAPIClient = None
 
@@ -477,7 +477,8 @@ def send_simple_email(
     custom_args: Optional[dict] = None,
 ) -> int | str:
     """
-    Returns 202 on success, otherwise an error string.
+    Returns 202 on success, otherwise an error string that includes the
+    HTTP status code and SendGrid error body (when available).
     """
     sg = _sg_client()
     if not sg:
@@ -492,16 +493,19 @@ def send_simple_email(
         )
         if reply_to:
             mail.reply_to = ReplyTo(reply_to)
+
         if category:
-            mail.add_category(category)
+            mail.add_category(Category(category))
+
         if custom_args:
-            for k, v in custom_args.items():
-                mail.add_custom_arg({k: str(v)})
+            mail.custom_args = {str(k): str(v) for k, v in custom_args.items()}
 
         resp = sg.send(mail)
         return resp.status_code
     except Exception as e:
-        return f"{type(e).__name__}: {e}"
+        status = getattr(e, "status_code", None)
+        body = getattr(e, "body", None) or getattr(e, "message", None) or str(e)
+        return f"SendGridError status={status} body={body}"
 
 def send_internal_and_ack(
     *,
@@ -1291,7 +1295,7 @@ with tabs[1]:
             result = send_internal_and_ack(
                 flow="feedback",
                 user_email=email.strip(),
-                user_name=None,  # add a name field later if desired
+                user_name=None,  # optional
                 user_message=(comments or "").strip(),
                 bias_report_id=None
             )
@@ -1300,7 +1304,7 @@ with tabs[1]:
             if ok_internal and ok_ack:
                 st.success("Thanks — feedback saved and emailed ✓ (confirmation sent to your inbox)")
             elif ok_internal and not ok_ack:
-                st.warning("Feedback sent to our team, but the confirmation email to you failed.")
+                st.warning(f"Feedback sent to our team, but the confirmation email to you failed. Details: {result.get('ack')}")
             else:
                 st.error(f"Feedback saved, but email failed to send: {result}")
 
@@ -1360,9 +1364,9 @@ with tabs[2]:
                         )
                         ok_internal = str(result.get("internal","")).startswith("2")
                         if not ok_internal:
-                            st.warning("Ticket saved; email notification failed.")
-                    except Exception:
-                        st.warning("Ticket saved; email notification failed.")
+                            st.warning(f"Ticket saved; email notification failed. Details: {result.get('internal')}")
+                    except Exception as e:
+                        st.warning(f"Ticket saved; email notification failed. Error: {e}")
                 else:
                     st.warning("Ticket saved locally; email delivery is not configured.")
 
@@ -1604,3 +1608,4 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
