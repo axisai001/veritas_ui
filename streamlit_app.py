@@ -1,5 +1,3 @@
-can now integrate and update the current code with this updated information? This is the current code:
-
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
@@ -1499,4 +1497,5 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
