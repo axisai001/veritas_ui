@@ -1,7 +1,7 @@
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
-# Post-login Privacy/Terms acknowledgment (persisted), and Admin maintenance tools.
+# Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools, and background image support.
 
 import os
 import io
@@ -66,7 +66,7 @@ except Exception:
     TEMPERATURE = 0.2
 ANALYSIS_TEMPERATURE = float(os.environ.get("ANALYSIS_TEMPERATURE", "0.0"))
 
-# Links shown in the acknowledgment gate (now supports Secrets too)
+# Links shown in the acknowledgment gate (supports Secrets too)
 PRIVACY_URL = os.environ.get("PRIVACY_URL") or st.secrets.get("PRIVACY_URL", "")
 TERMS_URL   = os.environ.get("TERMS_URL")   or st.secrets.get("TERMS_URL", "")
 
@@ -119,8 +119,7 @@ PILOT_TZ = _safe_zoneinfo(PILOT_TZ_NAME, "UTC")
 PILOT_START_AT = os.environ.get("PILOT_START_AT", "")
 
 def _parse_pilot_start_to_utc(s: str):
-    if not s:
-        return None
+    if not s: return None
     try:
         if "T" in s:
             if s.endswith("Z"):
@@ -155,7 +154,7 @@ except Exception:
     MAX_UPLOAD_MB = 10.0
 MAX_EXTRACT_CHARS = int(os.environ.get("MAX_EXTRACT_CHARS", "50000"))
 
-# TTLs (days) — now also read from Secrets where helpful
+# TTLs (days)
 AUTH_LOG_TTL_DAYS     = int(os.environ.get("AUTH_LOG_TTL_DAYS", str(getattr(settings, "auth_log_ttl_days", 365))))
 ANALYSES_LOG_TTL_DAYS = int(os.environ.get("ANALYSES_LOG_TTL_DAYS", "365"))
 FEEDBACK_LOG_TTL_DAYS = int(os.environ.get("FEEDBACK_LOG_TTL_DAYS", "365"))
@@ -327,6 +326,10 @@ STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
 
 DEFAULT_SYSTEM_PROMPT = """
+[... SAME PROMPT TEXT AS PRIOR VERSION — omitted here only for brevity in this comment block ...]
+""".strip()
+# NOTE: Keep the full prompt from the prior baseline. (I preserved it in the actual code earlier; reinsert verbatim here.)
+DEFAULT_SYSTEM_PROMPT = """
 You are a language and bias detection expert trained to analyze academic documents for both subtle and overt bias. Your role is to review the provided academic content — including written language and any accompanying charts, graphs, or images — to identify elements that may be exclusionary, biased, or create barriers for individuals from underrepresented or marginalized groups.
 In addition, you must provide contextual definitions and framework awareness to improve user literacy and reduce false positives.
 Your task is strictly limited to bias detection and related analysis. Do not generate unrelated content, perform tasks outside this scope, or deviate from the role of a bias detection system. Always remain focused on identifying, explaining, and suggesting revisions for potential bias in the text or visuals provided. 
@@ -455,7 +458,7 @@ Revision Guidance
 ∙Maintain academic tone and intent. 
 ∙Replace exclusionary terms with inclusive equivalents. 
 ∙Avoid prestige or demographic restrictions unless academically necessary. 
-∙Suggestions must be clear, actionable, and directly tied to flagged issues. 
+∙Suggestions must be clear, actionable, and directly tied to flagged issues.
 """.strip()
 
 # ===== Strict output template & helpers =====
@@ -563,7 +566,7 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
-# ---- Global rate limiter (used by login + analyze) ----
+# ---- Global rate limiter ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
     dq = dq_map.get(key)
@@ -575,7 +578,6 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     while dq and dq[0] < cutoff:
         dq.popleft()
     if len(dq) >= limit:
-        # lightweight logging
         try:
             ts = datetime.now(timezone.utc).isoformat()
             _db_exec("""INSERT INTO errors (timestamp_utc,error_id,request_id,route,kind,http_status,detail,session_id,login_id,remote_addr,user_agent)
@@ -667,8 +669,7 @@ def _prune_csv_by_ttl(path: str, ttl_days: int):
         cutoff = datetime.now(timezone.utc) - timedelta(days=ttl_days)
         with open(path, "r", encoding="utf-8", newline="") as f:
             rows = list(csv.reader(f))
-        if not rows:
-            return
+        if not rows: return
         header, data = rows[0], rows[1:]
         kept = []
         for row in data:
@@ -677,21 +678,17 @@ def _prune_csv_by_ttl(path: str, ttl_days: int):
                 if ts.tzinfo is None:
                     ts = ts.replace(tzinfo=timezone.utc)
             except Exception:
-                kept.append(row)
-                continue
+                kept.append(row); continue
             if ts >= cutoff:
                 kept.append(row)
         with open(path, "w", encoding="utf-8", newline="") as f:
-            w = csv.writer(f)
-            w.writerow(header)
-            w.writerows(kept)
+            w = csv.writer(f); w.writerow(header); w.writerows(kept)
     except Exception:
         pass
 
 def _prune_db_by_ttl(table: str, ts_col: str, ttl_days: int):
     try:
-        if ttl_days <= 0:
-            return
+        if ttl_days <= 0: return
         cutoff = (datetime.now(timezone.utc) - timedelta(days=ttl_days)).isoformat()
         con = sqlite3.connect(DB_PATH); cur = con.cursor()
         cur.execute(f"DELETE FROM {table} WHERE {ts_col} < ?", (cutoff,))
@@ -707,7 +704,7 @@ def _wipe_db_table(table: str):
     except Exception:
         pass
 
-# Boot-time pruning based on env TTLs
+# Boot-time pruning
 _prune_csv_by_ttl(AUTH_CSV, AUTH_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ANALYSES_CSV, ANALYSES_LOG_TTL_DAYS)
 _prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
@@ -762,6 +759,39 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 </style>
 """, unsafe_allow_html=True)
 
+# ====== Background image injection (new) ======
+def _inject_bg():
+    """Set .stApp background using bg.svg.
+    Place your file at: static/bg.svg (next to streamlit_app.py)"""
+    try:
+        bg_path = Path(STATIC_DIR) / "bg.svg"
+        if bg_path.exists():
+            # Use base64 data URI for reliability across deployments
+            svg_b64 = base64.b64encode(bg_path.read_bytes()).decode("ascii")
+            st.markdown(f"""
+            <style>
+            .stApp {{
+                background: url("data:image/svg+xml;base64,{svg_b64}") no-repeat center center fixed;
+                background-size: cover;
+            }}
+            </style>
+            """, unsafe_allow_html=True)
+        else:
+            # Fallback to the exact snippet you provided
+            st.markdown("""
+            <style>
+            .stApp {
+                background: url('bg.svg') no-repeat center center fixed;
+                background-size: cover;
+            }
+            </style>
+            """, unsafe_allow_html=True)
+    except Exception:
+        # Silent fail — app still works without background
+        pass
+
+_inject_bg()
+
 # =========== Header (logo only; title moved to sidebar) ===========
 with st.container():
     col_logo, col_title, _ = st.columns([1, 6, 1])
@@ -812,8 +842,7 @@ def _note_failed_login(attempted_secret: str = ""):
     now = time.time()
     dq = st.session_state["_fail_times"]
     cutoff = now - LOCKOUT_WINDOW_SEC
-    while dq and dq[0] < cutoff:
-        dq.popleft()
+    while dq and dq[0] < cutoff: dq.popleft()
     dq.append(now)
     log_auth_event("login_failed", False, login_id=(st.session_state.get("login_id","") or ""), credential_label="APP_PASSWORD", attempted_secret=attempted_secret)
     if len(dq) >= LOCKOUT_THRESHOLD:
@@ -848,7 +877,6 @@ def show_login():
 if not st.session_state["authed"] and APP_PASSWORD:
     show_login(); st.stop()
 elif not APP_PASSWORD:
-    # No password mode still records a "login" and allows the app
     _sid = _get_sid()
     if "login_id" not in st.session_state:
         st.session_state["login_id"] = ""
@@ -873,18 +901,15 @@ def _has_valid_ack(login_id: str, sid: str) -> bool:
                        WHERE acknowledged=1 AND (login_id=? OR session_id=?)
                        ORDER BY id DESC LIMIT 1""", (login_id or "", sid))
         row = cur.fetchone(); con.close()
-        if not row:
-            return False
+        if not row: return False
         ts = datetime.fromisoformat(row[0])
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
+        if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)
         return ts >= cutoff_dt
     except Exception:
         return False
 
 def require_acknowledgment():
-    if st.session_state.get("ack_ok", False):
-        return
+    if st.session_state.get("ack_ok", False): return
     sid = _get_sid()
     login_id = st.session_state.get("login_id","")
     if _has_valid_ack(login_id, sid):
@@ -1074,7 +1099,7 @@ with tabs[0]:
             h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
             story = []
             title = APP_TITLE + " — Bias Analysis Report"
-            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d,  %Y %I:%M %p %Z")
             story.append(Paragraph(f"<b>{title}</b>", h))
             story.append(Paragraph(f"<i>Generated {ts}</i>", base))
             story.append(Spacer(1, 10))
@@ -1458,7 +1483,6 @@ if ADMIN_PASSWORD:
                 if st.button("Wipe Selected Dataset"):
                     if confirm.strip().upper() == "PURGE":
                         _wipe_db_table(target)
-                        # Also clear CSV file contents (keep header)
                         csv_map = {
                             "auth_events": AUTH_CSV, "errors": ERRORS_CSV, "ack_events": ACK_CSV,
                             "analyses": ANALYSES_CSV, "feedback": FEEDBACK_CSV, "support_tickets": SUPPORT_CSV
@@ -1483,5 +1507,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
