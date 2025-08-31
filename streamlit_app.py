@@ -172,6 +172,20 @@ SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
 SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
 SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 
+# === ADDITIVE: Hydrate SENDGRID_* from st.secrets if missing; add helper & clearer status ===
+def _read_secret(name: str, default: str = "") -> str:
+    """Prefer environment variable, else fall back to st.secrets if available."""
+    try:
+        return os.environ.get(name) or st.secrets.get(name, default)
+    except Exception:
+        return os.environ.get(name, default)
+
+if not SENDGRID_API_KEY or not SENDGRID_TO or not SENDGRID_FROM:
+    SENDGRID_API_KEY = _read_secret("SENDGRID_API_KEY", SENDGRID_API_KEY)
+    SENDGRID_TO      = _read_secret("SENDGRID_TO", SENDGRID_TO)
+    SENDGRID_FROM    = _read_secret("SENDGRID_FROM", SENDGRID_FROM)
+    SENDGRID_SUBJECT = _read_secret("SENDGRID_SUBJECT", SENDGRID_SUBJECT)
+
 # Password gate
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
@@ -441,13 +455,11 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
-# ---- NEW: safe widget clearing helper (prevents StreamlitAPIException) ----
+# ---- NEW (previous fix): safe widget clearing helper ----
 def _safe_clear_textbox(key: str):
     try:
         st.session_state[key] = ""
     except Exception:
-        # If Streamlit disallows changing the widget this run,
-        # fall back to next-run clearing via flag.
         pass
 
 # ---- Global rate limiter ----
@@ -867,7 +879,10 @@ def _email_status(context: str):
     if _email_is_configured():
         st.success(f"Email delivery is enabled for {context}.")
     else:
-        st.warning(f"Email delivery is NOT configured. Set SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to enable {context} emails.")
+        st.warning(
+            "Email delivery is NOT configured. Set SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO "
+            "in environment variables or `st.secrets`."
+        )
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
@@ -901,9 +916,9 @@ with tabs[0]:
 
     # Handle "New Analysis" first (clears inputs + last report)
     if 'new_analysis' in locals() and new_analysis:
-        _safe_clear_textbox("user_input_box")     # <-- safe immediate attempt
+        _safe_clear_textbox("user_input_box")
         st.session_state["last_reply"] = ""
-        st.session_state["_clear_text_box"] = True  # ensure clearing on next run
+        st.session_state["_clear_text_box"] = True
         _safe_rerun()
 
     if 'submitted' in locals() and submitted:
