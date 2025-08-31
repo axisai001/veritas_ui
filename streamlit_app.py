@@ -43,6 +43,7 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
+    from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.pdfmetrics import stringWidth
 except Exception:
     SimpleDocTemplate = None
@@ -1189,9 +1190,10 @@ with tabs[0]:
                 w, h = letter
                 footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
                 page = f"Page {doc_.page}"
+                from reportlab.pdfbase.pdfmetrics import stringWidth as _sw
                 canvas.setFont("Helvetica", 8)
                 canvas.drawString(0.8*inch, 0.55*inch, footer)
-                pw = stringWidth(page, "Helvetica", 8)
+                pw = _sw(page, "Helvetica", 8)
                 canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
                 canvas.restoreState()
             doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
@@ -1253,24 +1255,28 @@ with tabs[1]:
         if not email or not EMAIL_RE.match(email):
             st.error("Please enter a valid email."); st.stop()
         lines = []
-        for m in st.session_state["history"]]:
+        # ✅ FIXED: removed stray ']' and used a colon
+        for m in st.session_state["history"]:
             if m["role"] == "assistant":
                 lines.append("Assistant: " + m["content"])
         transcript = "\n\n".join(lines)[:100000]
         conv_chars = len(transcript)
         ts_now = datetime.now(timezone.utc).isoformat()
+        # CSV
         try:
             with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow([ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"])
         except Exception as e:
             log_error_event(kind="FEEDBACK", route="/feedback", http_status=500, detail=repr(e))
             st.error("network error"); st.stop()
+        # DB
         try:
             _db_exec("""INSERT INTO feedback (timestamp_utc,rating,email,comments,conversation_chars,conversation,remote_addr,ua)
                         VALUES (?,?,?,?,?,?,?,?)""",
                      (ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"))
         except Exception:
             pass
+        # Email
         if not (SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM):
             st.warning("Feedback saved locally. Configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to email it.")
         else:
@@ -1349,7 +1355,7 @@ with tabs[2]:
             else:
                 try:
                     _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
-                                VALUES (?,?,?,?,?,?,?,?,?)""",
+                                VALUES (?,?,?,?,?,?,?, ?,?)""",
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
                 except Exception:
                     pass
@@ -1626,3 +1632,4 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
