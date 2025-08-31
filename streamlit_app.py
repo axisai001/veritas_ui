@@ -1,8 +1,8 @@
 # streamlit_app.py — Veritas (Streamlit)
-# Modern UI with tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
-# Login + Privacy/Terms acknowledgment; CSV+SQLite logging; SendGrid email;
-# Background image via local static file or BG_URL; White action links (Copy/Download);
-# Sticky footer; Centered Login and Analyze sections.
+# Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
+# Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
+# Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
+# and robust background image support (local static file OR external URL).
 
 import os
 import io
@@ -45,7 +45,7 @@ try:
     from reportlab.lib.units import inch
     from reportlab.pdfbase.pdfmetrics import stringWidth
 except Exception:
-    SimpleDocTemplate = None  # graceful fallback
+    SimpleDocTemplate = None
 
 # ================= Updated Config (via config.py) =================
 try:
@@ -67,7 +67,7 @@ except Exception:
     TEMPERATURE = 0.2
 ANALYSIS_TEMPERATURE = float(os.environ.get("ANALYSIS_TEMPERATURE", "0.0"))
 
-# Links for acknowledgment gate
+# Links shown in the acknowledgment gate
 PRIVACY_URL = os.environ.get("PRIVACY_URL") or st.secrets.get("PRIVACY_URL", "")
 TERMS_URL   = os.environ.get("TERMS_URL")   or st.secrets.get("TERMS_URL", "")
 # Background image external URL (optional; e.g., GitHub RAW)
@@ -108,9 +108,9 @@ def _set_query_params(**kwargs):
 
 # Admin controls
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
-ADMIN_EMAIL_ALLOWED = os.environ.get("ADMIN_EMAIL_ALLOWED", "").strip()  # optional whitelist single email
+ADMIN_EMAIL_ALLOWED = os.environ.get("ADMIN_EMAIL_ALLOWED", "").strip()
 
-# --- Safe timezone loader ---
+# --- Safe timezone ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
     try:
         return ZoneInfo(name)
@@ -119,6 +119,30 @@ def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
 
 PILOT_TZ_NAME = os.environ.get("VERITAS_TZ", "America/Denver")
 PILOT_TZ = _safe_zoneinfo(PILOT_TZ_NAME, "UTC")
+PILOT_START_AT = os.environ.get("PILOT_START_AT", "")
+
+def _parse_pilot_start_to_utc(s: str):
+    if not s: return None
+    try:
+        if "T" in s:
+            if s.endswith("Z"):
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+            else:
+                dt = datetime.fromisoformat(s)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=PILOT_TZ)
+        else:
+            dt = datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=PILOT_TZ)
+        return dt.astimezone(timezone.utc)
+    except Exception:
+        return None
+
+PILOT_START_UTC = _parse_pilot_start_to_utc(PILOT_START_AT)
+
+def pilot_started() -> bool:
+    if PILOT_START_UTC is None:
+        return True
+    return datetime.now(timezone.utc) >= PILOT_START_UTC
 
 # Rates / windows
 RATE_LIMIT_LOGIN   = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
@@ -142,19 +166,19 @@ SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
 ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
 if ACK_TTL_DAYS < 0: ACK_TTL_DAYS = 0
 
-# SendGrid (email)
+# SendGrid
 SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
 SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
 SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
 SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 
-# Password gate (optional) for general app access
+# Password gate
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 
 # Lockout config
-LOCKOUT_THRESHOLD      = int(os.environ.get("LOCKOUT_THRESHOLD", "5"))       # failed attempts
-LOCKOUT_WINDOW_SEC     = int(os.environ.get("LOCKOUT_WINDOW_SEC", "900"))    # 15 min
-LOCKOUT_DURATION_SEC   = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800")) # 30 min
+LOCKOUT_THRESHOLD      = int(os.environ.get("LOCKOUT_THRESHOLD", "5"))
+LOCKOUT_WINDOW_SEC     = int(os.environ.get("LOCKOUT_WINDOW_SEC", "900"))
+LOCKOUT_DURATION_SEC   = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800"))
 
 # Storage / branding
 BASE_DIR      = os.path.dirname(__file__)
@@ -306,8 +330,135 @@ STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
 
 DEFAULT_SYSTEM_PROMPT = """
-You are a language and bias detection expert trained to analyze academic documents for both subtle and overt bias. ...
-[TRUNCATED HERE FOR BREVITY — keep your full original prompt text exactly as before]
+You are a language and bias detection expert trained to analyze academic documents for both subtle and overt bias. Your role is to review the provided academic content — including written language and any accompanying charts, graphs, or images — to identify elements that may be exclusionary, biased, or create barriers for individuals from underrepresented or marginalized groups.
+In addition, you must provide contextual definitions and framework awareness to improve user literacy and reduce false positives.
+Your task is strictly limited to bias detection and related analysis. Do not generate unrelated content, perform tasks outside this scope, or deviate from the role of a bias detection system. Always remain focused on identifying, explaining, and suggesting revisions for potential bias in the text or visuals provided. 
+  
+Bias Categories (with academic context) 
+∙Gendered language: Words or phrases that assume or privilege a specific gender identity 
+(e.g., “chairman,” “he”). 
+∙Academic elitism: Preference for specific institutions, journals, or credentials that may 
+undervalue alternative but equally valid qualifications. 
+∙Institutional framing (contextual): Identify when language frames institutions in biased 
+ways. Do NOT generalize entire institutions; focus on specific contexts, departments, or 
+phrasing that indicates exclusionary framing. 
+∙Cultural or racial assumptions: Language or imagery that reinforces stereotypes or 
+assumes shared cultural experiences. Only flag when context indicates stereotyping or 
+exclusion — do not flag neutral academic descriptors. 
+∙Age or career-stage bias: Terms that favor a particular age group or career stage without 
+academic necessity (e.g., “young scholars”). 
+∙Ableist or neurotypical assumptions: Language implying that only certain physical, 
+mental, or cognitive abilities are valid for participation. 
+∙Gatekeeping/exclusivity: Phrases that unnecessarily restrict eligibility or create prestige 
+barriers. 
+∙Family role, time availability, or economic assumptions: Language presuming certain 
+domestic situations, financial status, or schedule flexibility. 
+∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
+reinforce stereotypes. 
+  
+  
+Bias Detection Rules 
+1.Context Check for Legal/Program/Framework Names​
+Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
+“Book of Matthew”) unless context shows discriminatory or exclusionary framing. 
+Maintain a whitelist of common compliance/legal/religious/program titles. 
+2.Framework Awareness​
+If flagged bias appears in a legal, religious, or defined-framework text, explicitly note: 
+“This operates within [Framework X]. Interpret accordingly.” 
+3.Multi-Pass Detection​
+After initial bias identification, re-check text for secondary or overlapping bias types. If 
+multiple categories apply, bias score must reflect combined severity. 
+4.False Positive Reduction​
+Avoid flagging mild cultural references, standard course descriptions, or neutral 
+institutional references unless paired with exclusionary framing. 
+5.Terminology Neutralization​
+Always explain terms like bias, lens, perspective in context to avoid appearing 
+accusatory. Frame as descriptive, not judgmental. 
+6.Objective vs. Subjective Distinction​
+Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
+and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
+errors. 
+7.Contextual Definition Layer​
+For each flagged word/phrase, provide: 
+oContextual meaning (in this sentence) 
+oGeneral meaning (dictionary/neutral usage) 
+8.Fact-Checking and Accurate Attribution​
+When listing or referencing individuals, schools of thought, or intellectual traditions, the 
+model must fact-check groupings and associations to ensure accuracy. 
+oDo not misclassify individuals into categories they do not belong to. 
+oEnsure representation is accurate and balanced. 
+oInclude only figures who genuinely belong to referenced groups. 
+oIf uncertain, either omit or note uncertainty explicitly. 
+🔄 Alternative Wordings for this safeguard: 
+oAccurate Attribution Safeguard 
+oFactual Integrity in Grouping 
+oRepresentation with Accuracy 
+9.Legal and Compliance Neutrality Rule 
+oIf a text objectively reports a law, regulation, or compliance requirement without 
+evaluative, judgmental, or exclusionary framing, it must not be scored as 
+biased. 
+oIn such cases, the output should explicitly state: “This text factually reports a 
+legal/compliance requirement. No bias detected.” 
+oBias should only be flagged if the institution’s language about the law 
+introduces exclusionary framing (e.g., endorsing, mocking, or amplifying 
+restrictions beyond compliance). 
+oExample: 
+✅ Neutral → “The state budget prohibits DEI-related initiatives. The 
+university is reviewing policies to ensure compliance.” → No Bias | 
+Score: 0.00 
+⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
+initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
+0.00 
+  
+Severity Score Mapping (Fixed) 
+Bias Detection Logic 
+∙If no bias is present: 
+oBias Detected: No 
+oBias Score: 🟢 No Bias | Score: 0.00 
+oNo bias types, phrases, or revisions should be listed. 
+∙If any bias is present (even subtle/low): 
+oBias Detected: Yes 
+oBias Score: Must be > 0.00, aligned to severity thresholds. 
+oExplanation must clarify why the score is not 0.00. 
+Strict Thresholds — No Exceptions 
+∙🟢 No Bias → 0.00 (includes factual legal/compliance reporting). 
+∙🟢 Low Bias → 0.01 – 0.35 
+∙🟡 Medium Bias → 0.36 – 0.69 
+∙🔴 High Bias → 0.70 – 1.00 
+∙If Bias Detected = No → Score must = 0.00. 
+∙If Score > 0.00 → Bias Detected must = Yes. 
+  
+AXIS-AI Bias Evaluation Reference 
+∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
+justified. 
+∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate 
+barriers or reinforce stereotypes. 
+∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
+inclusion, or accessibility. 
+  
+Output Format (Strict) 
+1.Bias Detected: Yes/No 
+2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
+0.55) 
+3.Type(s) of Bias: Bullet list of all that apply 
+4.Biased Phrases or Terms: Bullet list of direct quotes from the text 
+5.Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
+6.Explanation: Bullet points linking each biased phrase to its bias category 
+7.Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. 
+general meaning 
+8.Framework Awareness Note (if applicable): If text is within a legal, religious, or 
+cultural framework, note it here 
+9.Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
+10.📊 Interpretation of Score: One short paragraph clarifying why the score falls within 
+its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
+was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
+is present for this reason. 
+  
+Revision Guidance 
+∙Maintain academic tone and intent. 
+∙Replace exclusionary terms with inclusive equivalents. 
+∙Avoid prestige or demographic restrictions unless academically necessary. 
+∙Suggestions must be clear, actionable, and directly tied to flagged issues.
 """.strip()
 
 # ===== Strict output template & helpers =====
@@ -435,7 +586,7 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
                       f"limit={limit}/{window_sec}s", _get_sid(), st.session_state.get("login_id",""), "streamlit", "streamlit"))
         except Exception:
             pass
-        # still allow the action to avoid hard blocks in demo
+        return False
     dq.append(now)
     return True
 
@@ -458,7 +609,7 @@ def log_error_event(kind: str, route: str, http_status: int, detail: str):
     except Exception:
         return None
 
-def log_analysis(public_report_id: str, internal_report_id: str, assistant_text: str):
+def log_analysis(public_id: str, internal_id: str, assistant_text: str):
     try:
         ts = datetime.now(timezone.utc).isoformat()
         sid = _get_sid()
@@ -468,10 +619,10 @@ def log_analysis(public_report_id: str, internal_report_id: str, assistant_text:
         conv_json = json.dumps(conv_obj, ensure_ascii=False)
         conv_chars = len(conv_json)
         with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, public_report_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json])
+            csv.writer(f).writerow([ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json])
         _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
                     VALUES (?,?,?,?,?,?,?,?,?)""",
-                 (ts, public_report_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json))
+                 (ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json))
     except Exception:
         pass
 
@@ -568,7 +719,6 @@ st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 html, body, [class*="css"] {{ font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
-/* Prevent top cutoff and add bottom space for footer */
 .block-container {{ padding-top: 2.75rem !important; padding-bottom: 64px !important; }}
 
 /* Buttons */
@@ -590,10 +740,6 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 .v-card {{ background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px; padding: 18px; }}
 
-/* Centering helpers for main forms and report */
-.v-center {{ max-width: 760px; margin-left: auto; margin-right: auto; }}
-.v-narrow {{ max-width: 520px; margin-left: auto; margin-right: auto; }}
-
 /* Analyze card spacing */
 #analyze-card h3 {{ margin: 0 0 .5rem !important; }}
 #analyze-card [data-testid="stTextArea"] label,
@@ -613,23 +759,32 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 </style>
 """, unsafe_allow_html=True)
 
-# ====== Background image injection ======
+# ====== Background image injection (smarter) ======
 def _find_local_bg_file() -> Optional[Path]:
+    # prefer exact 'bg.ext' in STATIC_DIR
     for ext in ("svg","png","jpg","jpeg","webp"):
         p = Path(STATIC_DIR) / f"bg.{ext}"
         if p.exists():
             return p
+    # otherwise first bg.* found
     for p in Path(STATIC_DIR).glob("bg.*"):
         if p.suffix.lower().lstrip(".") in ("svg","png","jpg","jpeg","webp"):
             return p
     return None
 
 def _inject_bg():
+    """Set .stApp background using either static/bg.* (preferred) or BG_URL (secret/env)."""
     try:
         p = _find_local_bg_file()
         if p and p.exists():
             ext = p.suffix.lower().lstrip(".")
-            mime = {"svg": "image/svg+xml","png": "image/png","jpg":"image/jpeg","jpeg":"image/jpeg","webp":"image/webp"}.get(ext, "application/octet-stream")
+            mime = {
+                "svg": "image/svg+xml",
+                "png": "image/png",
+                "jpg": "image/jpeg",
+                "jpeg":"image/jpeg",
+                "webp":"image/webp",
+            }.get(ext, "application/octet-stream")
             b64 = base64.b64encode(p.read_bytes()).decode("ascii")
             st.markdown(f"""
             <style>
@@ -640,6 +795,7 @@ def _inject_bg():
             </style>
             """, unsafe_allow_html=True)
         elif BG_URL:
+            # Use externally hosted image (e.g., GitHub RAW)
             safe_url = BG_URL.replace('"','%22')
             st.markdown(f"""
             <style>
@@ -649,6 +805,7 @@ def _inject_bg():
             }}
             </style>
             """, unsafe_allow_html=True)
+        # else: no background; keep default
     except Exception:
         pass
 
@@ -676,7 +833,7 @@ with st.container():
 if "request_id" not in st.session_state:
     st.session_state["request_id"] = _gen_request_id()
 st.session_state.setdefault("authed", False)
-st.session_state.setdefault("history", [])     # assistant messages only
+st.session_state.setdefault("history", [])
 st.session_state.setdefault("last_reply", "")
 st.session_state.setdefault("user_input_box", "")
 st.session_state.setdefault("_clear_text_box", False)
@@ -685,6 +842,18 @@ st.session_state.setdefault("_locked_until", 0.0)
 st.session_state.setdefault("is_admin", False)
 st.session_state.setdefault("ack_ok", False)
 
+# Pilot countdown gate
+if not pilot_started():
+    st.info("Pilot hasn’t started yet.")
+    if PILOT_START_UTC:
+        now = datetime.now(timezone.utc)
+        remaining = PILOT_START_UTC - now
+        secs = int(max(0, remaining.total_seconds()))
+        dd = secs // 86400; hh = (secs % 86400) // 3600; mm = (secs % 3600) // 60; ss = secs % 60
+        local_str = PILOT_START_UTC.astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+        st.write(f"Opens on **{local_str}** · Countdown: **{dd}d {hh:02}:{mm:02}:{ss:02}**")
+        st.stop()
+
 def _is_locked() -> bool:
     return time.time() < st.session_state["_locked_until"]
 
@@ -692,8 +861,7 @@ def _note_failed_login(attempted_secret: str = ""):
     now = time.time()
     dq = st.session_state["_fail_times"]
     cutoff = now - LOCKOUT_WINDOW_SEC
-    while dq and dq[0] < cutoff:
-        dq.popleft()
+    while dq and dq[0] < cutoff: dq.popleft()
     dq.append(now)
     log_auth_event("login_failed", False, login_id=(st.session_state.get("login_id","") or ""), credential_label="APP_PASSWORD", attempted_secret=attempted_secret)
     if len(dq) >= LOCKOUT_THRESHOLD:
@@ -701,34 +869,29 @@ def _note_failed_login(attempted_secret: str = ""):
         log_auth_event("login_lockout", False, login_id=(st.session_state.get("login_id","") or ""), credential_label="APP_PASSWORD")
 
 def show_login():
-    # Centered login (middle column; narrow width)
-    left, mid, right = st.columns([1, 1.2, 1])
-    with mid:
-        st.markdown('<div class="v-card v-narrow">', unsafe_allow_html=True)
-        with st.form("login_form"):
-            st.subheader("Login")
-            login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
-            pwd = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Enter")
-            if submit:
-                if _is_locked():
-                    remaining = int(st.session_state["_locked_until"] - time.time())
-                    mins = max(0, remaining // 60); secs = max(0, remaining % 60)
-                    st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
-                    st.stop()
-                if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
-                    st.error("network error"); st.stop()
-                if pwd == APP_PASSWORD:
-                    st.session_state["authed"] = True
-                    st.session_state["login_id"] = (login_id or "").strip()
-                    st.session_state["_fail_times"].clear()
-                    st.session_state["_locked_until"] = 0.0
-                    log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
-                    st.success("Logged in."); _safe_rerun()
-                else:
-                    _note_failed_login(attempted_secret=pwd)
-                    st.error("Incorrect password")
-        st.markdown('</div>', unsafe_allow_html=True)
+    with st.form("login_form"):
+        st.subheader("Login")
+        login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
+        pwd = st.text_input("Password", type="password")
+        submit = st.form_submit_button("Enter")
+        if submit:
+            if _is_locked():
+                remaining = int(st.session_state["_locked_until"] - time.time())
+                mins = max(0, remaining // 60); secs = max(0, remaining % 60)
+                st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
+                st.stop()
+            if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
+                st.error("network error"); st.stop()
+            if pwd == APP_PASSWORD:
+                st.session_state["authed"] = True
+                st.session_state["login_id"] = (login_id or "").strip()
+                st.session_state["_fail_times"].clear()
+                st.session_state["_locked_until"] = 0.0
+                log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
+                st.success("Logged in."); _safe_rerun()
+            else:
+                _note_failed_login(attempted_secret=pwd)
+                st.error("Incorrect password")
 
 if not st.session_state["authed"] and APP_PASSWORD:
     show_login(); st.stop()
@@ -772,26 +935,20 @@ def require_acknowledgment():
         st.session_state["ack_ok"] = True
         return
 
-    # Centered acknowledgment card
-    left, mid, right = st.columns([1, 1.4, 1])
-    with mid:
-        with st.form("ack_form", clear_on_submit=False):
-            st.markdown('<div class="v-card v-narrow">', unsafe_allow_html=True)
-            st.markdown("### Privacy & Terms Acknowledgment")
-            st.write(
-                "Before using Veritas, please confirm you have read and agree to the "
-                f"[Privacy Policy]({PRIVACY_URL or '#'}) and "
-                f"[Terms of Use]({TERMS_URL or '#'})."
-            )
-            c1 = st.checkbox("I have read the Privacy Policy")
-            c2 = st.checkbox("I agree to the Terms of Use")
-            ccol1, ccol2 = st.columns([1,1])
-            with ccol1:
-                submitted = st.form_submit_button("I acknowledge")
-            with ccol2:
-                cancel = st.form_submit_button("Cancel")
-            st.markdown('</div>', unsafe_allow_html=True)
-
+    with st.form("ack_form", clear_on_submit=False):
+        st.markdown("### Privacy & Terms Acknowledgment")
+        st.write(
+            "Before using Veritas, please confirm you have read and agree to the "
+            f"[Privacy Policy]({PRIVACY_URL or '#'}) and "
+            f"[Terms of Use]({TERMS_URL or '#'})."
+        )
+        c1 = st.checkbox("I have read the Privacy Policy")
+        c2 = st.checkbox("I agree to the Terms of Use")
+        ccol1, ccol2 = st.columns([1,1])
+        with ccol1:
+            submitted = st.form_submit_button("I acknowledge")
+        with ccol2:
+            cancel = st.form_submit_button("Cancel")
         if cancel:
             st.warning("You must acknowledge to continue."); st.stop()
         if submitted:
@@ -812,220 +969,213 @@ if ADMIN_PASSWORD:
     tab_names.append("🛡️ Admin")
 tabs = st.tabs(tab_names)
 
-# -------------------- Analyze Tab (CENTERED) --------------------
+# -------------------- Analyze Tab --------------------
 with tabs[0]:
-    # Center the entire analyze card
-    st.markdown('<div class="v-card v-center" id="analyze-card">', unsafe_allow_html=True)
+    st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
 
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
 
-    # Use a middle column to constrain form width further if desired
-    left, mid, right = st.columns([1, 1.6, 1])
-    with mid:
-        with st.form("analysis_form"):
-            st.markdown("<h3>Bias Analysis</h3>", unsafe_allow_html=True)
-            st.text_area(
-                "Paste or type text to analyze",
-                height=200,
-                key="user_input_box",
-                help="Your pasted content is used for analysis but won’t be printed below—only the bias report appears."
-            )
-            doc = st.file_uploader(
-                f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
-                type=list(DOC_ALLOWED_EXTENSIONS),
-                accept_multiple_files=False
-            )
-            submitted = st.form_submit_button("Analyze")
+    with st.form("analysis_form"):
+        st.markdown("<h3>Bias Analysis</h3>", unsafe_allow_html=True)
+        st.text_area(
+            "Paste or type text to analyze",
+            height=200,
+            key="user_input_box",
+            help="Your pasted content is used for analysis but won’t be printed below—only the bias report appears."
+        )
+        doc = st.file_uploader(
+            f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+            type=list(DOC_ALLOWED_EXTENSIONS),
+            accept_multiple_files=False
+        )
+        submitted = st.form_submit_button("Analyze")
 
-        if submitted:
-            if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-                st.error("network error"); st.stop()
+    if submitted:
+        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+            st.error("network error"); st.stop()
 
+        try:
+            prog = st.progress(0, text="Preparing…")
+        except TypeError:
+            prog = st.progress(0)
+
+        user_text = st.session_state.get("user_input_box", "").strip()
+        extracted = ""
+        try:
+            prog.progress(10)
+        except Exception:
+            pass
+
+        if doc is not None:
+            size_mb = doc.size / (1024 * 1024)
+            if size_mb > MAX_UPLOAD_MB:
+                st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB."); st.stop()
             try:
-                prog = st.progress(0, text="Preparing…")
-            except TypeError:
-                prog = st.progress(0)
-
-            user_text = st.session_state.get("user_input_box", "").strip()
-            extracted = ""
-            try:
-                prog.progress(10)
-            except Exception:
-                pass
-
-            if doc is not None:
-                size_mb = doc.size / (1024 * 1024)
-                if size_mb > MAX_UPLOAD_MB:
-                    st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB."); st.stop()
-                try:
-                    with st.spinner("Extracting document…"):
-                        def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-                            ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-                            if ext == "pdf":
-                                if PdfReader is None:
-                                    return ""
-                                reader = PdfReader(io.BytesIO(file_bytes))
-                                parts = []
-                                for page in reader.pages:
+                with st.spinner("Extracting document…"):
+                    # local helper
+                    def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+                        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                        if ext == "pdf":
+                            if PdfReader is None:
+                                return ""
+                            reader = PdfReader(io.BytesIO(file_bytes))
+                            parts = []
+                            for page in reader.pages:
+                                try:
+                                    parts.append(page.extract_text() or "")
+                                except Exception:
+                                    continue
+                            return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
+                        elif ext == "docx":
+                            if docx is None:
+                                return ""
+                            buf = io.BytesIO(file_bytes)
+                            doc_obj = docx.Document(buf)
+                            text = "\n".join(p.text for p in doc_obj.paragraphs)
+                            return text[:MAX_EXTRACT_CHARS]
+                        elif ext in ("txt", "md", "csv"):
+                            def _safe_decode(b: bytes) -> str:
+                                for enc in ("utf-8", "utf-16", "latin-1"):
                                     try:
-                                        parts.append(page.extract_text() or "")
+                                        return b.decode(enc)
                                     except Exception:
                                         continue
-                                return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
-                            elif ext == "docx":
-                                if docx is None:
-                                    return ""
-                                buf = io.BytesIO(file_bytes)
-                                doc_obj = docx.Document(buf)
-                                text = "\n".join(p.text for p in doc_obj.paragraphs)
-                                return text[:MAX_EXTRACT_CHARS]
-                            elif ext in ("txt", "md", "csv"):
-                                def _safe_decode(b: bytes) -> str:
-                                    for enc in ("utf-8", "utf-16", "latin-1"):
-                                        try:
-                                            return b.decode(enc)
-                                        except Exception:
-                                            continue
-                                    return b.decode("utf-8", errors="ignore")
-                                return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
-                            return ""
-                        extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
-                except Exception as e:
-                    log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
-                    st.error("network error"); st.stop()
+                                return b.decode("utf-8", errors="ignore")
+                            return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
+                        return ""
+                    extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
+            except Exception as e:
+                log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
+                st.error("network error"); st.stop()
 
-            final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-            if not final_input:
-                st.error("Please enter some text or upload a document."); st.stop()
+        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+        if not final_input:
+            st.error("Please enter some text or upload a document."); st.stop()
 
-            # --- OpenAI call ---
-            api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-            if not api_key:
-                st.error("Missing OpenAI API key. Set OPENAI_API_KEY."); st.stop()
+        # --- OpenAI call ---
+        api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+        if not api_key:
+            st.error("Missing OpenAI API key. Set OPENAI_API_KEY."); st.stop()
 
-            user_instruction = _build_user_instruction(final_input)
+        user_instruction = _build_user_instruction(final_input)
 
+        try:
             try:
-                try:
-                    prog.progress(40, text="Contacting model…")
-                except Exception:
-                    prog.progress(40)
+                prog.progress(40, text="Contacting model…")
+            except Exception:
+                prog.progress(40)
 
-                client = OpenAI(api_key=api_key)
+            client = OpenAI(api_key=api_key)
 
-                resp = client.chat.completions.create(
-                    model=MODEL,
-                    temperature=ANALYSIS_TEMPERATURE,
+            # Pass 1: strict analysis
+            resp = client.chat.completions.create(
+                model=MODEL,
+                temperature=ANALYSIS_TEMPERATURE,
+                messages=[
+                    {"role": "system", "content": IDENTITY_PROMPT},
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_instruction},
+                ],
+            )
+            model_reply = (resp.choices[0].message.content or "").strip()
+
+            # Pass 2: repair if needed
+            if not _looks_strict(model_reply):
+                repair_msg = (
+                    "Reformat the ORIGINAL ANSWER to exactly match the 10-section template below. "
+                    "Only fix structure; keep substance. Include all sections in the same order.\n\n"
+                    "=== TEMPLATE ===\n"
+                    f"{STRICT_OUTPUT_TEMPLATE}\n\n"
+                    "=== ORIGINAL ANSWER ===\n"
+                    f"{model_reply}"
+                )
+                resp2 = client.chat.completions.create(
+                    model=MODEL, temperature=0.0,
                     messages=[
-                        {"role": "system", "content": IDENTITY_PROMPT},
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_instruction},
+                        {"role": "system", "content": "You output exactly the requested structure."},
+                        {"role": "user", "content": repair_msg},
                     ],
                 )
-                model_reply = (resp.choices[0].message.content or "").strip()
+                fixed = (resp2.choices[0].message.content or "").strip()
+                if _looks_strict(fixed):
+                    model_reply = fixed
 
-                if not _looks_strict(model_reply):
-                    repair_msg = (
-                        "Reformat the ORIGINAL ANSWER to exactly match the 10-section template below. "
-                        "Only fix structure; keep substance. Include all sections in the same order.\n\n"
-                        "=== TEMPLATE ===\n"
-                        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
-                        "=== ORIGINAL ANSWER ===\n"
-                        f"{model_reply}"
-                    )
-                    resp2 = client.chat.completions.create(
-                        model=MODEL, temperature=0.0,
-                        messages=[
-                            {"role": "system", "content": "You output exactly the requested structure."},
-                            {"role": "user", "content": repair_msg},
-                        ],
-                    )
-                    fixed = (resp2.choices[0].message.content or "").strip()
-                    if _looks_strict(fixed):
-                        model_reply = fixed
-
-                try:
-                    prog.progress(85, text="Formatting report…")
-                except Exception:
-                    prog.progress(85)
-            except Exception as e:
-                log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
-                st.error("Could not contact the language model. Check API key/model."); st.stop()
-
-            public_report_id = _gen_public_report_id()
-            internal_report_id = _gen_internal_report_id()
-            decorated_reply = f"📄 Report ID: {public_report_id}\n\n{model_reply}".strip()
-
-            st.session_state["history"].append({"role":"assistant","content":decorated_reply})
-            st.session_state["last_reply"] = decorated_reply
             try:
-                log_analysis(public_report_id, internal_report_id, decorated_reply)
+                prog.progress(85, text="Formatting report…")
             except Exception:
-                pass
+                prog.progress(85)
+        except Exception as e:
+            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
+            st.error("Could not contact the language model. Check API key/model."); st.stop()
 
-            st.session_state["_clear_text_box"] = True
-            try:
-                prog.progress(100, text="Done ✓")
-            except Exception:
-                prog.progress(100)
-            _safe_rerun()
+        public_report_id = _gen_public_report_id()
+        internal_report_id = _gen_internal_report_id()
+        decorated_reply = f"📄 Report ID: {public_report_id}\n\n{model_reply}".strip()
 
-    # Show latest report (CENTERED)
+        st.session_state["history"].append({"role":"assistant","content":decorated_reply})
+        st.session_state["last_reply"] = decorated_reply
+        try:
+            log_analysis(public_report_id, internal_report_id, decorated_reply)
+        except Exception:
+            pass
+
+        st.session_state["_clear_text_box"] = True
+        try:
+            prog.progress(100, text="Done ✓")
+        except Exception:
+            prog.progress(100)
+        _safe_rerun()
+
+    # Show latest report (if any)
     if st.session_state.get("last_reply"):
-        # center the report and actions within a narrower column
-        st.markdown('</div>', unsafe_allow_html=True)  # close v-card wrapper above
-        left, mid, right = st.columns([1, 1.6, 1])
-        with mid:
-            st.markdown('<div class="v-card v-center">', unsafe_allow_html=True)
-            st.write("### Bias Report")
-            st.markdown(st.session_state["last_reply"])
+        st.write("### Bias Report")
+        st.markdown(st.session_state["last_reply"])
 
-            # ---- HTML action controls (Copy / Download) ----
-            def _build_pdf_inline(content: str) -> bytes:
-                if SimpleDocTemplate is None:
-                    return content.encode("utf-8")
-                buf = io.BytesIO()
-                doc = SimpleDocTemplate(
-                    buf, pagesize=letter,
-                    leftMargin=0.8*inch, rightMargin=0.8*inch,
-                    topMargin=0.9*inch, bottomMargin=0.9*inch
-                )
-                styles = getSampleStyleSheet()
-                base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
-                body = ParagraphStyle("Body", parent=base, fontSize=10)
-                h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
-                story = []
-                title = APP_TITLE + " — Bias Analysis Report"
-                ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-                story.append(Paragraph(f"<b>{title}</b>", h))
-                story.append(Paragraph(f"<i>Generated {ts}</i>", base))
-                story.append(Spacer(1, 10))
-                for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
-                    safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                    story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
-                def _header_footer(canvas, doc_):
-                    canvas.saveState()
-                    w, h = letter
-                    footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
-                    page = f"Page {doc_.page}"
-                    canvas.setFont("Helvetica", 8)
-                    canvas.drawString(0.8*inch, 0.55*inch, footer)
-                    pw = stringWidth(page, "Helvetica", 8)
-                    canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
-                    canvas.restoreState()
-                doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-                buf.seek(0)
-                return buf.read()
+        # ---- Action links
+        def _build_pdf_inline(content: str) -> bytes:
+            if SimpleDocTemplate is None:
+                return content.encode("utf-8")
+            buf = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buf, pagesize=letter,
+                leftMargin=0.8*inch, rightMargin=0.8*inch,
+                topMargin=0.9*inch, bottomMargin=0.9*inch
+            )
+            styles = getSampleStyleSheet()
+            base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
+            body = ParagraphStyle("Body", parent=base, fontSize=10)
+            h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
+            story = []
+            title = APP_TITLE + " — Bias Analysis Report"
+            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
+            story.append(Paragraph(f"<b>{title}</b>", h))
+            story.append(Paragraph(f"<i>Generated {ts}</i>", base))
+            story.append(Spacer(1, 10))
+            for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
+                safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
+            def _header_footer(canvas, doc_):
+                canvas.saveState()
+                w, h = letter
+                footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
+                page = f"Page {doc_.page}"
+                canvas.setFont("Helvetica", 8)
+                canvas.drawString(0.8*inch, 0.55*inch, footer)
+                pw = stringWidth(page, "Helvetica", 8)
+                canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
+                canvas.restoreState()
+            doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
+            buf.seek(0); return buf.read()
 
-            pdf_bytes = _build_pdf_inline(st.session_state["last_reply"])
-            pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
-            uid = str(uuid.uuid4()).replace("-", "")
-            copy_id = f"copyLink_{uid}"
-            note_id = f"copyNote_{uid}"
+        pdf_bytes = _build_pdf_inline(st.session_state["last_reply"])
+        pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+        uid = str(uuid.uuid4()).replace("-", "")
+        copy_id = f"copyLink_{uid}"
+        note_id = f"copyNote_{uid}"
 
-            components.html(f"""
+        components.html(f"""
 <style>
   .v-actions {{ display: inline-flex; gap: 1.0rem; align-items: center;
     padding: .45rem .75rem; border-radius: 10px; background: rgba(0,0,0,0.65);
@@ -1059,7 +1209,8 @@ with tabs[0]:
   }});
 </script>
 """, height=64)
-            st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -1080,18 +1231,21 @@ with tabs[1]:
         transcript = "\n\n".join(lines)[:100000]
         conv_chars = len(transcript)
         ts_now = datetime.now(timezone.utc).isoformat()
+        # CSV
         try:
             with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow([ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"])
         except Exception as e:
             log_error_event(kind="FEEDBACK", route="/feedback", http_status=500, detail=repr(e))
             st.error("network error"); st.stop()
+        # DB
         try:
             _db_exec("""INSERT INTO feedback (timestamp_utc,rating,email,comments,conversation_chars,conversation,remote_addr,ua)
                         VALUES (?,?,?,?,?,?,?,?)""",
                      (ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"))
         except Exception:
             pass
+        # Email
         if not (SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM):
             st.warning("Feedback saved locally. Configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to email it.")
         else:
@@ -1232,25 +1386,20 @@ if ADMIN_PASSWORD:
         st.write("### Admin")
 
         if not st.session_state.get("is_admin", False):
-            # Center the admin login lightly
-            left, mid, right = st.columns([1, 1.2, 1])
-            with mid:
-                with st.form("admin_login_form", clear_on_submit=False):
-                    st.markdown('<div class="v-card v-narrow">', unsafe_allow_html=True)
-                    admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
-                    admin_pwd = st.text_input("Admin Password", type="password")
-                    submit_admin = st.form_submit_button("Login")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                if submit_admin:
-                    if not admin_email.strip():
-                        st.error("Please enter your admin email.")
-                    elif ADMIN_EMAIL_ALLOWED and admin_email.strip().lower() != ADMIN_EMAIL_ALLOWED.lower():
-                        st.error("This email is not authorized for admin access.")
-                    elif admin_pwd != ADMIN_PASSWORD:
-                        st.error("Incorrect admin password.")
-                    else:
-                        st.session_state["is_admin"] = True
-                        st.success("Admin access granted."); _safe_rerun()
+            with st.form("admin_login_form", clear_on_submit=False):
+                admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
+                admin_pwd = st.text_input("Admin Password", type="password")
+                submit_admin = st.form_submit_button("Login")
+            if submit_admin:
+                if not admin_email.strip():
+                    st.error("Please enter your admin email.")
+                elif ADMIN_EMAIL_ALLOWED and admin_email.strip().lower() != ADMIN_EMAIL_ALLOWED.lower():
+                    st.error("This email is not authorized for admin access.")
+                elif admin_pwd != ADMIN_PASSWORD:
+                    st.error("Incorrect admin password.")
+                else:
+                    st.session_state["is_admin"] = True
+                    st.success("Admin access granted."); _safe_rerun()
             st.stop()
         else:
             if st.button("Exit Admin"):
@@ -1407,15 +1556,7 @@ if ADMIN_PASSWORD:
             # ---- Branding (Background uploader)
             with sub4:
                 st.write("#### Branding: Background Image")
-                def _find_local_bg_file():
-                    for ext in ("svg","png","jpg","jpeg","webp"):
-                        p = Path(STATIC_DIR) / f"bg.{ext}"
-                        if p.exists(): return p
-                    for p in Path(STATIC_DIR).glob("bg.*"):
-                        if p.suffix.lower().lstrip(".") in ("svg","png","jpg","jpeg","webp"):
-                            return p
-                    return None
-
+                # current status
                 current_bg = _find_local_bg_file()
                 if current_bg:
                     st.success(f"Current local background: `{current_bg.name}` in `/static`.")
@@ -1435,9 +1576,11 @@ if ADMIN_PASSWORD:
                             if ext not in BG_ALLOWED_EXTENSIONS:
                                 st.error("Unsupported file type.")
                             else:
+                                # delete existing bg.*
                                 for p in Path(STATIC_DIR).glob("bg.*"):
                                     try: p.unlink()
                                     except Exception: pass
+                                # write new file
                                 out = Path(STATIC_DIR) / f"bg.{ext}"
                                 out.write_bytes(up.getvalue())
                                 st.success(f"Saved background to `static/{out.name}`.")
@@ -1462,6 +1605,10 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
+
+
+
 
 
 
