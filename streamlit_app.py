@@ -66,9 +66,9 @@ except Exception:
     TEMPERATURE = 0.2
 ANALYSIS_TEMPERATURE = float(os.environ.get("ANALYSIS_TEMPERATURE", "0.0"))
 
-# Links shown in the acknowledgment gate
-PRIVACY_URL = os.environ.get("PRIVACY_URL", "")
-TERMS_URL   = os.environ.get("TERMS_URL", "")
+# Links shown in the acknowledgment gate (now supports Secrets too)
+PRIVACY_URL = os.environ.get("PRIVACY_URL") or st.secrets.get("PRIVACY_URL", "")
+TERMS_URL   = os.environ.get("TERMS_URL")   or st.secrets.get("TERMS_URL", "")
 
 # ----- Streamlit bootstrap -----
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
@@ -155,13 +155,15 @@ except Exception:
     MAX_UPLOAD_MB = 10.0
 MAX_EXTRACT_CHARS = int(os.environ.get("MAX_EXTRACT_CHARS", "50000"))
 
-# TTLs (days)
+# TTLs (days) — now also read from Secrets where helpful
 AUTH_LOG_TTL_DAYS     = int(os.environ.get("AUTH_LOG_TTL_DAYS", str(getattr(settings, "auth_log_ttl_days", 365))))
 ANALYSES_LOG_TTL_DAYS = int(os.environ.get("ANALYSES_LOG_TTL_DAYS", "365"))
 FEEDBACK_LOG_TTL_DAYS = int(os.environ.get("FEEDBACK_LOG_TTL_DAYS", "365"))
 ERRORS_LOG_TTL_DAYS   = int(os.environ.get("ERRORS_LOG_TTL_DAYS", "365"))
 SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
-ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS", "365"))
+ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
+if ACK_TTL_DAYS < 0:
+    ACK_TTL_DAYS = 0
 
 # SendGrid
 SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
@@ -615,7 +617,7 @@ def log_analysis(public_id: str, internal_id: str, assistant_text: str):
         conv_json = json.dumps(conv_obj, ensure_ascii=False)
         conv_chars = len(conv_json)
         with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, public_id, internal_report_id, sid, login_id, addr, ua, conv_chars, conv_json])
+            csv.writer(f).writerow([ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json])
         _db_exec("""INSERT INTO analyses (timestamp_utc,public_report_id,internal_report_id,session_id,login_id,remote_addr,user_agent,conversation_chars,conversation_json)
                     VALUES (?,?,?,?,?,?,?,?,?)""",
                  (ts, public_id, internal_id, sid, login_id, addr, ua, conv_chars, conv_json))
@@ -1264,7 +1266,7 @@ with tabs[2]:
                             f"Session: {sid}\nLogin: {login_id}\n"
                         )
                         html_body = (
-                            f"<h3>New Support Ticket</h3>"
+                            f"<h3>New Veritas Support Ticket</h3>"
                             f"<p><strong>Ticket ID:</strong> {ticket_id}</p>"
                             f"<p><strong>Time (UTC):</strong> {ts}</p>"
                             f"<p><strong>From:</strong> {full_name} &lt;{email_sup}&gt;</p>"
@@ -1429,22 +1431,22 @@ if ADMIN_PASSWORD:
                 st.write("**Prune by TTL (days)**")
                 cpa, cpb, cpc = st.columns(3)
                 with cpa:
-                    ttl_auth = st.number_input("Auth Events TTL", min_value=1, value=AUTH_LOG_TTL_DAYS, step=1)
-                    ttl_err  = st.number_input("Errors TTL", min_value=1, value=ERRORS_LOG_TTL_DAYS, step=1)
-                    ttl_ack  = st.number_input("Ack Events TTL", min_value=1, value=ACK_TTL_DAYS, step=1)
+                    ttl_auth = st.number_input("Auth Events TTL",   min_value=0, value=max(0, AUTH_LOG_TTL_DAYS),     step=1)
+                    ttl_err  = st.number_input("Errors TTL",        min_value=0, value=max(0, ERRORS_LOG_TTL_DAYS),  step=1)
+                    ttl_ack  = st.number_input("Ack Events TTL",    min_value=0, value=max(0, ACK_TTL_DAYS),         step=1)
                 with cpb:
-                    ttl_ana  = st.number_input("Analyses TTL", min_value=1, value=ANALYSES_LOG_TTL_DAYS, step=1)
-                    ttl_fb   = st.number_input("Feedback TTL", min_value=1, value=FEEDBACK_LOG_TTL_DAYS, step=1)
-                    ttl_sup  = st.number_input("Support TTL", min_value=1, value=SUPPORT_LOG_TTL_DAYS, step=1)
+                    ttl_ana  = st.number_input("Analyses TTL",      min_value=0, value=max(0, ANALYSES_LOG_TTL_DAYS),step=1)
+                    ttl_fb   = st.number_input("Feedback TTL",      min_value=0, value=max(0, FEEDBACK_LOG_TTL_DAYS),step=1)
+                    ttl_sup  = st.number_input("Support TTL",       min_value=0, value=max(0, SUPPORT_LOG_TTL_DAYS), step=1)
                 with cpc:
                     st.markdown("&nbsp;")
                     if st.button("Run Prune Now (CSV + DB)"):
-                        _prune_csv_by_ttl(AUTH_CSV, ttl_auth);   _prune_db_by_ttl("auth_events", "timestamp_utc", ttl_auth)
-                        _prune_csv_by_ttl(ERRORS_CSV, ttl_err);  _prune_db_by_ttl("errors", "timestamp_utc", ttl_err)
-                        _prune_csv_by_ttl(ACK_CSV, ttl_ack);     _prune_db_by_ttl("ack_events", "timestamp_utc", ttl_ack)
-                        _prune_csv_by_ttl(ANALYSES_CSV, ttl_ana);_prune_db_by_ttl("analyses", "timestamp_utc", ttl_ana)
-                        _prune_csv_by_ttl(FEEDBACK_CSV, ttl_fb); _prune_db_by_ttl("feedback", "timestamp_utc", ttl_fb)
-                        _prune_csv_by_ttl(SUPPORT_CSV, ttl_sup); _prune_db_by_ttl("support_tickets", "timestamp_utc", ttl_sup)
+                        _prune_csv_by_ttl(AUTH_CSV, ttl_auth);    _prune_db_by_ttl("auth_events", "timestamp_utc", ttl_auth)
+                        _prune_csv_by_ttl(ERRORS_CSV, ttl_err);   _prune_db_by_ttl("errors", "timestamp_utc", ttl_err)
+                        _prune_csv_by_ttl(ACK_CSV, ttl_ack);      _prune_db_by_ttl("ack_events", "timestamp_utc", ttl_ack)
+                        _prune_csv_by_ttl(ANALYSES_CSV, ttl_ana); _prune_db_by_ttl("analyses", "timestamp_utc", ttl_ana)
+                        _prune_csv_by_ttl(FEEDBACK_CSV, ttl_fb);  _prune_db_by_ttl("feedback", "timestamp_utc", ttl_fb)
+                        _prune_csv_by_ttl(SUPPORT_CSV, ttl_sup);  _prune_db_by_ttl("support_tickets", "timestamp_utc", ttl_sup)
                         st.success("Prune complete.")
 
                 st.write("---")
