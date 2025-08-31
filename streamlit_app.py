@@ -373,92 +373,21 @@ Avoid flagging mild cultural references, standard course descriptions, or neutra
 institutional references unless paired with exclusionary framing. 
 5.Terminology Neutralization​
 Always explain terms like bias, lens, perspective in context to avoid appearing 
-accusatory. Frame as descriptive, not judgmental. 
+accusatory. 
 6.Objective vs. Subjective Distinction​
-Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
-and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
-errors. 
+Distinguish between objective truth claims and subjective statements.
 7.Contextual Definition Layer​
-For each flagged word/phrase, provide: 
-oContextual meaning (in this sentence) 
-oGeneral meaning (dictionary/neutral usage) 
+Provide contextual vs. general meanings for flagged terms.
 8.Fact-Checking and Accurate Attribution​
-When listing or referencing individuals, schools of thought, or intellectual traditions, the 
-model must fact-check groupings and associations to ensure accuracy. 
-oDo not misclassify individuals into categories they do not belong to. 
-oEnsure representation is accurate and balanced. 
-oInclude only figures who genuinely belong to referenced groups. 
-oIf uncertain, either omit or note uncertainty explicitly. 
-🔄 Alternative Wordings for this safeguard: 
-oAccurate Attribution Safeguard 
-oFactual Integrity in Grouping 
-oRepresentation with Accuracy 
+Ensure accurate grouping; note uncertainty if unsure.
 9.Legal and Compliance Neutrality Rule 
-oIf a text objectively reports a law, regulation, or compliance requirement without 
-evaluative, judgmental, or exclusionary framing, it must not be scored as 
-biased. 
-oIn such cases, the output should explicitly state: “This text factually reports a 
-legal/compliance requirement. No bias detected.” 
-oBias should only be flagged if the institution’s language about the law 
-introduces exclusionary framing (e.g., endorsing, mocking, or amplifying 
-restrictions beyond compliance). 
-oExample: 
-✅ Neutral → “The state budget prohibits DEI-related initiatives. The 
-university is reviewing policies to ensure compliance.” → No Bias | 
-Score: 0.00 
-⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
-initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
-0.00 
+Factual compliance reporting → No Bias | Score: 0.00. Flag only if framing is exclusionary.
   
 Severity Score Mapping (Fixed) 
-Bias Detection Logic 
-∙If no bias is present: 
-oBias Detected: No 
-oBias Score: 🟢 No Bias | Score: 0.00 
-oNo bias types, phrases, or revisions should be listed. 
-∙If any bias is present (even subtle/low): 
-oBias Detected: Yes 
-oBias Score: Must be > 0.00, aligned to severity thresholds. 
-oExplanation must clarify why the score is not 0.00. 
-Strict Thresholds — No Exceptions 
-∙🟢 No Bias → 0.00 (includes factual legal/compliance reporting). 
-∙🟢 Low Bias → 0.01 – 0.35 
-∙🟡 Medium Bias → 0.36 – 0.69 
-∙🔴 High Bias → 0.70 – 1.00 
-∙If Bias Detected = No → Score must = 0.00. 
-∙If Score > 0.00 → Bias Detected must = Yes. 
+Strict Thresholds — No Exceptions:
+🟢 0.00, 🟢 0.01–0.35, 🟡 0.36–0.69, 🔴 0.70–1.00.
   
-AXIS-AI Bias Evaluation Reference 
-∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
-justified. 
-∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate 
-barriers or reinforce stereotypes. 
-∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
-inclusion, or accessibility. 
-  
-Output Format (Strict) 
-1.Bias Detected: Yes/No 
-2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
-0.55) 
-3.Type(s) of Bias: Bullet list of all that apply 
-4.Biased Phrases or Terms: Bullet list of direct quotes from the text 
-5.Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
-6.Explanation: Bullet points linking each biased phrase to its bias category 
-7.Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. 
-general meaning 
-8.Framework Awareness Note (if applicable): If text is within a legal, religious, or 
-cultural framework, note it here 
-9.Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
-10.📊 Interpretation of Score: One short paragraph clarifying why the score falls within 
-its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
-was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
-is present for this reason. 
-  
-Revision Guidance 
-∙Maintain academic tone and intent. 
-∙Replace exclusionary terms with inclusive equivalents. 
-∙Avoid prestige or demographic restrictions unless academically necessary. 
-∙Suggestions must be clear, actionable, and directly tied to flagged issues.
+Output Format (Strict) — 10 sections as previously defined.
 """.strip()
 
 # ===== Strict output template & helpers =====
@@ -509,11 +438,10 @@ def _looks_strict(md: str) -> bool:
 def _build_user_instruction(input_text: str) -> str:
     return (
         "Analyze the TEXT below strictly using the rules above. "
-        "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
-        "Do not add any intro/outro or backticks. "
-        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’. "
-        "For sections 3, 4, and 9 in that case, write ‘(none)’. "
-        "Include section 10 even when no bias is present.\n\n"
+        "Then output ONLY using this exact 10-section template in the same order. "
+        "No intro/outro or backticks. "
+        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’, "
+        "and write ‘(none)’ for sections 3, 4, and 9. Include section 10 regardless.\n\n"
         "=== OUTPUT TEMPLATE (copy exactly) ===\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
         "=== TEXT TO ANALYZE (verbatim) ===\n"
@@ -984,10 +912,10 @@ with tabs[0]:
             f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
             accept_multiple_files=False,
-            key="doc_file"  # <-- key so we can reset it from 'New Analysis'
+            key="doc_file"  # for reset by 'New Analysis'
         )
-        # --- side-by-side actions
-        ca, cb = st.columns([1,1])
+        # Opposite-corner actions: Analyze (left) & New Analysis (right)
+        ca, spacer, cb = st.columns([1, 8, 1])
         with ca:
             submitted = st.form_submit_button("Analyze")
         with cb:
@@ -1001,7 +929,6 @@ with tabs[0]:
         st.session_state["last_reply"] = ""
         st.session_state["history"] = []
         st.session_state["_clear_text_box"] = True
-        # reset uploader
         try:
             st.session_state["doc_file"] = None
         except Exception:
@@ -1285,15 +1212,13 @@ with tabs[1]:
                 payload = {
                     "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
                     "from": {"email": SENDGRID_FROM, "name": "Veritas"},
-                    "subject": SENDGRID_SUBJECT,
+                    "subject": "New Veritas feedback",
                     "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
                 }
                 with httpx.Client(timeout=12) as client:
-                    r = client.post(
-                        "https://api.sendgrid.com/v3/mail/send",
-                        headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
-                        json=payload,
-                    )
+                    r = client.post("https://api.sendgrid.com/v3/mail/send",
+                                    headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                                    json=payload)
                 if r.status_code not in (200, 202):
                     st.error("Feedback saved but email failed to send.")
                 else:
