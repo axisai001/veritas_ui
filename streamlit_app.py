@@ -605,10 +605,8 @@ button[kind="primary"], button[kind="secondary"],
   border: 1px solid {PRIMARY} !important; border-radius: .75rem !important;
   box-shadow: none !important; padding: 0.60rem 1rem !important;
   font-size: 0.95rem !important; font-weight: 500 !important;
-}}
-div.stButton > button:hover, .stDownloadButton button:hover,
-.stForm [type="submit"]:hover, [data-testid="baseButton-primary"]:hover {{
-  background-color: {ACCENT} !important; border-color: {ACCENT} !important;
+  white-space: nowrap !important;           /* NEW: prevent wrapping */
+  min-width: 140px !important;              /* NEW: give enough width */
 }}
 
 /* Glassy cards */
@@ -871,8 +869,8 @@ with tabs[0]:
             accept_multiple_files=False
         )
 
-        # >>> Buttons: Analyze + New Analysis side-by-side (close together)
-        bcol1, bcol2, _spacer = st.columns([1,1,6])
+        # >>> Buttons: Analyze + New Analysis side-by-side (with proper width)
+        bcol1, bcol2, _spacer = st.columns([2,2,6])  # UPDATED from [1,1,6]
         with bcol1:
             submitted = st.form_submit_button("Analyze")
         with bcol2:
@@ -1497,5 +1495,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
+
 
 
