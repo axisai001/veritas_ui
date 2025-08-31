@@ -1,3 +1,5 @@
+can now integrate and update the current code with this updated information? This is the current code:
+
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
@@ -166,19 +168,8 @@ SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
 ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
 if ACK_TTL_DAYS < 0: ACK_TTL_DAYS = 0
 
-# -------------------- SendGrid Configuration --------------------
-SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "") or st.secrets.get("SENDGRID_API_KEY", "")
-
-# AXIS Labs mailboxes (both are sender and internal receiver by design)
-SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL", "support@axislabs.ai")
-SUPPORT_TO    = os.environ.get("SUPPORT_TO",    "support@axislabs.ai")
-
-FEEDBACK_EMAIL = os.environ.get("FEEDBACK_EMAIL", "feedback@axislabs.ai")
-FEEDBACK_TO    = os.environ.get("FEEDBACK_TO",    "feedback@axislabs.ai")
-
-ORG_NAME = os.environ.get("ORG_NAME", "") or st.secrets.get("ORG_NAME", "AXIS Labs / Veritas")
-
-# (Legacy vars kept for compatibility; not used anymore)
+# SendGrid
+SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
 SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
 SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
 SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
@@ -451,140 +442,6 @@ def _safe_decode(b: bytes) -> str:
         except Exception:
             continue
     return b.decode("utf-8", errors="ignore")
-
-# ---------- SendGrid Email Helpers (fixed) ----------
-try:
-    from sendgrid import SendGridAPIClient
-    from sendgrid.helpers.mail import Mail, Email, To, ReplyTo, Category
-except Exception:
-    SendGridAPIClient = None
-
-def _sg_client() -> Optional["SendGridAPIClient"]:
-    if not SENDGRID_API_KEY or SendGridAPIClient is None:
-        return None
-    try:
-        return SendGridAPIClient(SENDGRID_API_KEY)
-    except Exception:
-        return None
-
-def send_simple_email(
-    subject: str,
-    text: str,
-    from_email: str,
-    to_email: str,
-    reply_to: Optional[str] = None,
-    category: Optional[str] = None,
-    custom_args: Optional[dict] = None,
-) -> int | str:
-    """
-    Returns 202 on success, otherwise an error string that includes the
-    HTTP status code and SendGrid error body (when available).
-    """
-    sg = _sg_client()
-    if not sg:
-        return "SendGrid client not available or API key missing"
-
-    try:
-        mail = Mail(
-            from_email=Email(from_email),
-            to_emails=To(to_email),
-            subject=subject,
-            plain_text_content=text
-        )
-        if reply_to:
-            mail.reply_to = ReplyTo(reply_to)
-
-        if category:
-            mail.add_category(Category(category))
-
-        if custom_args:
-            mail.custom_args = {str(k): str(v) for k, v in custom_args.items()}
-
-        resp = sg.send(mail)
-        return resp.status_code
-    except Exception as e:
-        status = getattr(e, "status_code", None)
-        body = getattr(e, "body", None) or getattr(e, "message", None) or str(e)
-        return f"SendGridError status={status} body={body}"
-
-def send_internal_and_ack(
-    *,
-    flow: str,  # "support" | "feedback"
-    user_email: str,
-    user_name: Optional[str],
-    user_message: str,
-    bias_report_id: Optional[str] = None,
-) -> dict:
-    """
-    Sends two emails:
-      (1) Internal notification to the flow's inbox
-      (2) Auto-acknowledgment to the user
-    Returns dict with 'internal' and 'ack' status.
-    """
-    if flow == "support":
-        from_addr = SUPPORT_EMAIL
-        to_internal = SUPPORT_TO
-        category = "support"
-        internal_subject = "New Support Request"
-        ack_subject = "We received your support request"
-    elif flow == "feedback":
-        from_addr = FEEDBACK_EMAIL
-        to_internal = FEEDBACK_TO
-        category = "feedback"
-        internal_subject = "New Feedback Submission"
-        ack_subject = "Thanks for your feedback!"
-    else:
-        return {"error": "Unsupported flow"}
-
-    ts_now = datetime.now(timezone.utc).isoformat()
-
-    # Internal notification body
-    internal_lines = [
-        f"{internal_subject}",
-        f"Organization: {ORG_NAME}",
-        f"Time (UTC): {ts_now}",
-        f"From user: {user_name or 'Unknown'} <{user_email or 'unknown'}>",
-    ]
-    if bias_report_id:
-        internal_lines.append(f"Bias Report ID: {bias_report_id}")
-    internal_lines += ["", "Message:", user_message or "(empty)"]
-    internal_text = "\n".join(internal_lines)
-
-    args = {"flow": flow}
-    if bias_report_id:
-        args["bias_report_id"] = bias_report_id
-
-    internal_status = send_simple_email(
-        subject=internal_subject,
-        text=internal_text,
-        from_email=from_addr,
-        to_email=to_internal,
-        reply_to=user_email or None,  # lets the team reply straight to user
-        category=category,
-        custom_args=args
-    )
-
-    # Acknowledgment body
-    ack_text = (
-        f"Hi{f' {user_name}' if user_name else ''},\n\n"
-        f"Thanks for reaching out to {ORG_NAME}. "
-        f"We’ve received your {'support request' if flow=='support' else 'feedback'}"
-        f"{f' (Bias Report ID: {bias_report_id})' if bias_report_id else ''} and our team will review it.\n\n"
-        f"If you need to add details, just reply to this email.\n\n"
-        f"— {ORG_NAME} Team"
-    )
-
-    ack_status = send_simple_email(
-        subject=ack_subject,
-        text=ack_text,
-        from_email=from_addr,
-        to_email=user_email,
-        reply_to=from_addr,
-        category=f"{category}-ack",
-        custom_args=args
-    )
-
-    return {"internal": internal_status, "ack": ack_status}
 
 # ---- Global rate limiter ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
@@ -984,22 +841,15 @@ if ADMIN_PASSWORD:
     tab_names.append("🛡️ Admin")
 tabs = st.tabs(tab_names)
 
-# -------- Email configured helpers (per flow) --------
-def _email_is_configured_support() -> bool:
-    return bool(SENDGRID_API_KEY and SUPPORT_EMAIL and SUPPORT_TO and (SendGridAPIClient is not None))
-
-def _email_is_configured_feedback() -> bool:
-    return bool(SENDGRID_API_KEY and FEEDBACK_EMAIL and FEEDBACK_TO and (SendGridAPIClient is not None))
+# Helper: email configured?
+def _email_is_configured() -> bool:
+    return bool(SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM)
 
 def _email_status(context: str):
-    if context == "support":
-        ok = _email_is_configured_support()
-    else:
-        ok = _email_is_configured_feedback()
-    if ok:
+    if _email_is_configured():
         st.success(f"Email delivery is enabled for {context}.")
     else:
-        st.warning(f"Email delivery is NOT configured for {context}. Check SENDGRID_API_KEY and {context.upper()} addresses.")
+        st.warning(f"Email delivery is NOT configured. Set SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to enable {context} emails.")
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
@@ -1288,30 +1138,51 @@ with tabs[1]:
                      (ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"))
         except Exception:
             pass
-        # Email via SendGrid helpers (internal + auto-ack)
-        if not _email_is_configured_feedback():
+        # Email
+        if not _email_is_configured():
             st.warning("Feedback saved locally; email delivery is not configured.")
         else:
-            result = send_internal_and_ack(
-                flow="feedback",
-                user_email=email.strip(),
-                user_name=None,  # optional
-                user_message=(comments or "").strip(),
-                bias_report_id=None
-            )
-            ok_internal = str(result.get("internal","")).startswith("2")
-            ok_ack = str(result.get("ack","")).startswith("2")
-            if ok_internal and ok_ack:
-                st.success("Thanks — feedback saved and emailed ✓ (confirmation sent to your inbox)")
-            elif ok_internal and not ok_ack:
-                st.warning(f"Feedback sent to our team, but the confirmation email to you failed. Details: {result.get('ack')}")
-            else:
-                st.error(f"Feedback saved, but email failed to send: {result}")
+            try:
+                conv_preview = transcript[:2000]
+                plain = (
+                    f"New Veritas feedback\nTime (UTC): {ts_now}\nRating: {rating}/5\n"
+                    f"From user email: {email}\nComments:\n{comments}\n\n"
+                    f"--- Report (first 2,000 chars) ---\n{conv_preview}\n\n"
+                    f"IP: streamlit\nUser-Agent: streamlit\n"
+                )
+                html_body = (
+                    f"<h3>New Veritas feedback</h3>"
+                    f"<p><strong>Time (UTC):</strong> {ts_now}</p>"
+                    f"<p><strong>Rating:</strong> {rating}/5</p>"
+                    f"<p><strong>From user email:</strong> {email}</p>"
+                    f"<p><strong>Comments:</strong><br>{(comments or '').replace(chr(10), '<br>')}</p>"
+                    f"<hr><p><strong>Report (first 2,000 chars):</strong><br>"
+                    f"<pre style='white-space:pre-wrap'>{conv_preview}</pre></p>"
+                    f"<hr><p><strong>IP:</strong> streamlit<br><strong>User-Agent:</strong> streamlit</p>"
+                )
+                payload = {
+                    "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
+                    "from": {"email": SENDGRID_FROM, "name": "Veritas"},
+                    "subject": SENDGRID_SUBJECT,
+                    "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
+                }
+                with httpx.Client(timeout=12) as client:
+                    r = client.post(
+                        "https://api.sendgrid.com/v3/mail/send",
+                        headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                        json=payload,
+                    )
+                if r.status_code not in (200, 202):
+                    st.error("Feedback saved but email failed to send.")
+                else:
+                    st.success("Thanks — feedback saved and emailed ✓")
+            except Exception:
+                st.error("Feedback saved but email failed to send.")
 
 # -------------------- Support Tab --------------------
 with tabs[2]:
     st.write("### Support")
-    _email_status("support")
+    _email_status("support tickets")
 
     with st.form("support_form"):
         full_name = st.text_input("Full name")
@@ -1352,21 +1223,41 @@ with tabs[2]:
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
                 except Exception:
                     pass
-                # Email via SendGrid helpers (internal + auto-ack)
-                if _email_is_configured_support():
+                if _email_is_configured():
                     try:
-                        result = send_internal_and_ack(
-                            flow="support",
-                            user_email=email_sup.strip(),
-                            user_name=full_name.strip(),
-                            user_message=f"[Ticket {ticket_id}] {issue_text.strip()}",
-                            bias_report_id=(bias_report_id or "").strip() or None
+                        subject = f"[Veritas Support] Ticket {ticket_id}"
+                        plain = (
+                            f"New Support Ticket\n"
+                            f"Ticket ID: {ticket_id}\n"
+                            f"Time (UTC): {ts}\n"
+                            f"From: {full_name} <{email_sup}>\n"
+                            f"Bias Report ID: {bias_report_id}\n\n"
+                            f"Issue:\n{issue_text}\n\n"
+                            f"Session: {sid}\nLogin: {login_id}\n"
                         )
-                        ok_internal = str(result.get("internal","")).startswith("2")
-                        if not ok_internal:
-                            st.warning(f"Ticket saved; email notification failed. Details: {result.get('internal')}")
-                    except Exception as e:
-                        st.warning(f"Ticket saved; email notification failed. Error: {e}")
+                        html_body = (
+                            f"<h3>New Veritas Support Ticket</h3>"
+                            f"<p><strong>Ticket ID:</strong> {ticket_id}</p>"
+                            f"<p><strong>Time (UTC):</strong> {ts}</p>"
+                            f"<p><strong>From:</strong> {full_name} &lt;{email_sup}&gt;</p>"
+                            f"<p><strong>Bias Report ID:</strong> {bias_report_id or '(none)'}"
+                            f"<p><strong>Issue:</strong><br><pre style='white-space:pre-wrap'>{issue_text}</pre></p>"
+                            f"<hr><p><strong>Session:</strong> {sid}<br><strong>Login:</strong> {login_id}</p>"
+                        )
+                        payload = {
+                            "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
+                            "from": {"email": SENDGRID_FROM, "name": "Veritas"},
+                            "subject": subject,
+                            "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
+                        }
+                        with httpx.Client(timeout=12) as client:
+                            r = client.post("https://api.sendgrid.com/v3/mail/send",
+                                            headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                                            json=payload)
+                        if r.status_code not in (200, 202):
+                            st.warning("Ticket saved; email notification failed.")
+                    except Exception:
+                        st.warning("Ticket saved; email notification failed.")
                 else:
                     st.warning("Ticket saved locally; email delivery is not configured.")
 
