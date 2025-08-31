@@ -605,8 +605,21 @@ button[kind="primary"], button[kind="secondary"],
   border: 1px solid {PRIMARY} !important; border-radius: .75rem !important;
   box-shadow: none !important; padding: 0.60rem 1rem !important;
   font-size: 0.95rem !important; font-weight: 500 !important;
-  white-space: nowrap !important;           /* NEW: prevent wrapping */
-  min-width: 140px !important;              /* NEW: give enough width */
+}}
+
+/* ===== NEW: enforce single-line labels & sane sizing inside forms ===== */
+.stForm button[type="submit"],
+.stForm [data-testid="baseButton-primary"],
+.stForm [data-testid="baseButton-secondary"] {{
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow: visible !important;
+  width: auto !important;
+  min-width: 180px !important;     /* give the label room */
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }}
 
 /* Glassy cards */
@@ -869,8 +882,8 @@ with tabs[0]:
             accept_multiple_files=False
         )
 
-        # >>> Buttons: Analyze + New Analysis side-by-side (with proper width)
-        bcol1, bcol2, _spacer = st.columns([2,2,6])  # UPDATED from [1,1,6]
+        # >>> Buttons: Analyze + New Analysis (unchanged Python; visual fix done via CSS)
+        bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
             submitted = st.form_submit_button("Analyze")
         with bcol2:
@@ -1495,6 +1508,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
