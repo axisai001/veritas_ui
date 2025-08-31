@@ -333,123 +333,7 @@ DEFAULT_SYSTEM_PROMPT = """
 You are a language and bias detection expert trained to analyze academic documents for both subtle and overt bias. Your role is to review the provided academic content — including written language and any accompanying charts, graphs, or images — to identify elements that may be exclusionary, biased, or create barriers for individuals from underrepresented or marginalized groups.
 In addition, you must provide contextual definitions and framework awareness to improve user literacy and reduce false positives.
 Your task is strictly limited to bias detection and related analysis. Do not generate unrelated content, perform tasks outside this scope, or deviate from the role of a bias detection system. Always remain focused on identifying, explaining, and suggesting revisions for potential bias in the text or visuals provided. 
-  
-Bias Categories (with academic context) 
-∙Gendered language: Words or phrases that assume or privilege a specific gender identity 
-(e.g., “chairman,” “he”). 
-∙Academic elitism: Preference for specific institutions, journals, or credentials that may 
-undervalue alternative but equally valid qualifications. 
-∙Institutional framing (contextual): Identify when language frames institutions in biased 
-ways. Do NOT generalize entire institutions; focus on specific contexts, departments, or 
-phrasing that indicates exclusionary framing. 
-∙Cultural or racial assumptions: Language or imagery that reinforces stereotypes or 
-assumes shared cultural experiences. Only flag when context indicates stereotyping or 
-exclusion — do not flag neutral academic descriptors. 
-∙Age or career-stage bias: Terms that favor a particular age group or career stage without 
-academic necessity (e.g., “young scholars”). 
-∙Ableist or neurotypical assumptions: Language implying that only certain physical, 
-mental, or cognitive abilities are valid for participation. 
-∙Gatekeeping/exclusivity: Phrases that unnecessarily restrict eligibility or create prestige 
-barriers. 
-∙Family role, time availability, or economic assumptions: Language presuming certain 
-domestic situations, financial status, or schedule flexibility. 
-∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
-reinforce stereotypes. 
-  
-  
-Bias Detection Rules 
-1.Context Check for Legal/Program/Framework Names​
-Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
-“Book of Matthew”) unless context shows discriminatory or exclusionary framing. 
-Maintain a whitelist of common compliance/legal/religious/program titles. 
-2.Framework Awareness​
-If flagged bias appears in a legal, religious, or defined-framework text, explicitly note: 
-“This operates within [Framework X]. Interpret accordingly.” 
-3.Multi-Pass Detection​
-After initial bias identification, re-check text for secondary or overlapping bias types. If 
-multiple categories apply, bias score must reflect combined severity. 
-4.False Positive Reduction​
-Avoid flagging mild cultural references, standard course descriptions, or neutral 
-institutional references unless paired with exclusionary framing. 
-5.Terminology Neutralization​
-Always explain terms like bias, lens, perspective in context to avoid appearing 
-accusatory. Frame as descriptive, not judgmental. 
-6.Objective vs. Subjective Distinction​
-Distinguish between objective truth claims (e.g., “The earth revolves around the sun”) 
-and subjective statements (e.g., “This coffee is bitter”). Flagging should avoid relativism 
-errors. 
-7.Contextual Definition Layer​
-For each flagged word/phrase, provide: 
-oContextual meaning (in this sentence) 
-oGeneral meaning (dictionary/neutral usage) 
-8.Fact-Checking and Accurate Attribution​
-When listing or referencing individuals, schools of thought, or intellectual traditions, the 
-model must fact-check groupings and associations to ensure accuracy. 
-oDo not misclassify individuals into categories they do not belong to. 
-oEnsure representation is accurate and balanced. 
-oInclude only figures who genuinely belong to referenced groups. 
-oIf uncertain, either omit or note uncertainty explicitly. 
-🔄 Alternative Wordings for this safeguard: 
-oAccurate Attribution Safeguard 
-oFactual Integrity in Grouping 
-oRepresentation with Accuracy 
-9.Legal and Compliance Neutrality Rule 
-oIf a text objectively reports a law, regulation, or compliance requirement without 
-evaluative, judgmental, or exclusionary framing, it must not be scored as 
-biased. 
-oIn such cases, the output should explicitly state: “This text factually reports a 
-legal/compliance requirement. No bias detected.” 
-oBias should only be flagged if the institution’s language about the law 
-introduces exclusionary framing (e.g., endorsing, mocking, or amplifying 
-restrictions beyond compliance). 
-oExample: 
-✅ Neutral → “The state budget prohibits DEI-related initiatives. The 
-university is reviewing policies to ensure compliance.” → No Bias | 
-Score: 0.00 
-⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
-initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
-0.00 
-  
-Severity Score Mapping (Fixed) 
-Bias Detection Logic 
-∙If no bias is present: 
-oBias Detected: No 
-oBias Score: 🟢 No Bias | Score: 0.00 
-oNo bias types, phrases, or revisions should be listed. 
-∙If any bias is present (even subtle/low): 
-oBias Detected: Yes 
-oBias Score: Must be > 0.00, aligned to severity thresholds. 
-oExplanation must clarify why the score is not 0.00. 
-Strict Thresholds — No Exceptions 
-∙🟢 No Bias → 0.00 (includes factual legal/compliance reporting). 
-∙🟢 Low Bias → 0.01 – 0.35 
-∙🟡 Medium Bias → 0.36 – 0.69 
-∙🔴 High Bias → 0.70 – 1.00 
-∙If Bias Detected = No → Score must = 0.00. 
-  
-AXIS-AI Bias Evaluation Reference 
-∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
-justified. 
-∙Medium Bias (0.36–0.69): Noticeable recurring bias elements; may create moderate 
-barriers or reinforce stereotypes. 
-∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
-inclusion, or accessibility. 
-  
-Output Format (Strict) 
-1.Bias Detected: Yes/No 
-2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
-0.55) 
-3.Type(s) of Bias: Bullet list of all that apply 
-4.Biased Phrases or Terms: Bullet list of direct quotes from the text 
-5.Bias Summary: Exactly 2–4 sentences summarizing inclusivity impact 
-6.Explanation: Bullet points linking each biased phrase to its bias category 
-7.Contextual Definitions (new in v3.2): For each flagged term, show contextual vs. 
-general meaning 
-8.Framework Awareness Note (if applicable): If text is within a legal, religious, or 
-cultural framework, note it here 
-9.Suggested Revisions: Inclusive, neutral alternatives preserving the original meaning 
-10.📊 Interpretation of Score:
-<one short paragraph clarifying why the score falls in its range>
+  ...
 """.strip()
 
 # ===== Strict output template & helpers =====
@@ -712,7 +596,7 @@ st.markdown(f"""
 html, body, [class*="css"] {{ font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
 .block-container {{ padding-top: 2.75rem !important; padding-bottom: 64px !important; }}
 
-/* Buttons (original look, prevent wrapping & set sane width) */
+/* Buttons */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
 button[kind="primary"], button[kind="secondary"],
@@ -721,7 +605,6 @@ button[kind="primary"], button[kind="secondary"],
   border: 1px solid {PRIMARY} !important; border-radius: .75rem !important;
   box-shadow: none !important; padding: 0.60rem 1rem !important;
   font-size: 0.95rem !important; font-weight: 500 !important;
-  white-space: nowrap !important; min-width: 130px !important; line-height: 1.2 !important;
 }}
 div.stButton > button:hover, .stDownloadButton button:hover,
 .stForm [type="submit"]:hover, [data-testid="baseButton-primary"]:hover {{
@@ -956,6 +839,16 @@ if ADMIN_PASSWORD:
     tab_names.append("🛡️ Admin")
 tabs = st.tabs(tab_names)
 
+# Helper: email configured?
+def _email_is_configured() -> bool:
+    return bool(SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM)
+
+def _email_status(context: str):
+    if _email_is_configured():
+        st.success(f"Email delivery is enabled for {context}.")
+    else:
+        st.warning(f"Email delivery is NOT configured. Set SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to enable {context} emails.")
+
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
     st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
@@ -975,34 +868,24 @@ with tabs[0]:
         doc = st.file_uploader(
             f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False,
-            key="doc_file"
+            accept_multiple_files=False
         )
 
-        # Wider edge columns so buttons don't wrap; keep opposite corners.
-        c_left, c_mid, c_right = st.columns([3, 6, 3])
-        with c_left:
+        # >>> Buttons: Analyze + New Analysis side-by-side (close together)
+        bcol1, bcol2, _spacer = st.columns([1,1,6])
+        with bcol1:
             submitted = st.form_submit_button("Analyze")
-        with c_right:
-            new_analysis = st.form_submit_button("New Analysis", help="Clear inputs and report for a fresh run")
+        with bcol2:
+            new_analysis = st.form_submit_button("New Analysis")
 
-    if 'new_analysis' not in st.session_state:
-        st.session_state['new_analysis'] = False
-    if 'doc_file' not in st.session_state:
-        st.session_state['doc_file'] = None
-
-    if new_analysis:
-        st.session_state['new_analysis'] = True
+    # Handle "New Analysis" first (clears inputs + last report)
+    if 'new_analysis' in locals() and new_analysis:
+        st.session_state["user_input_box"] = ""
         st.session_state["last_reply"] = ""
-        st.session_state["history"] = []
         st.session_state["_clear_text_box"] = True
-        try:
-            st.session_state["doc_file"] = None
-        except Exception:
-            pass
         _safe_rerun()
 
-    if submitted:
+    if 'submitted' in locals() and submitted:
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
             st.error("network error"); st.stop()
 
@@ -1078,7 +961,6 @@ with tabs[0]:
 
             client = OpenAI(api_key=api_key)
 
-            # Pass 1: strict analysis
             resp = client.chat.completions.create(
                 model=MODEL,
                 temperature=ANALYSIS_TEMPERATURE,
@@ -1090,7 +972,6 @@ with tabs[0]:
             )
             model_reply = (resp.choices[0].message.content or "").strip()
 
-            # Pass 2: repair if needed
             if not _looks_strict(model_reply):
                 repair_msg = (
                     "Reformat the ORIGINAL ANSWER to exactly match the 10-section template below. "
@@ -1142,7 +1023,6 @@ with tabs[0]:
         st.write("### Bias Report")
         st.markdown(st.session_state["last_reply"])
 
-        # ---- Action links
         def _build_pdf_inline(content: str) -> bytes:
             if SimpleDocTemplate is None:
                 return content.encode("utf-8")
@@ -1224,6 +1104,8 @@ with tabs[0]:
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
     st.write("### Feedback")
+    _email_status("feedback")
+
     with st.form("feedback_form"):
         rating = st.slider("Your rating", min_value=1, max_value=5, value=5)
         email = st.text_input("Email (required)")
@@ -1255,8 +1137,8 @@ with tabs[1]:
         except Exception:
             pass
         # Email
-        if not (SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM):
-            st.warning("Feedback saved locally. Configure SENDGRID_API_KEY, SENDGRID_FROM, and SENDGRID_TO to email it.")
+        if not _email_is_configured():
+            st.warning("Feedback saved locally; email delivery is not configured.")
         else:
             try:
                 conv_preview = transcript[:2000]
@@ -1298,6 +1180,8 @@ with tabs[1]:
 # -------------------- Support Tab --------------------
 with tabs[2]:
     st.write("### Support")
+    _email_status("support tickets")
+
     with st.form("support_form"):
         full_name = st.text_input("Full name")
         email_sup = st.text_input("Email")
@@ -1337,7 +1221,7 @@ with tabs[2]:
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
                 except Exception:
                     pass
-                if SENDGRID_API_KEY and SENDGRID_TO and SENDGRID_FROM:
+                if _email_is_configured():
                     try:
                         subject = f"[Veritas Support] Ticket {ticket_id}"
                         plain = (
@@ -1372,6 +1256,9 @@ with tabs[2]:
                             st.warning("Ticket saved; email notification failed.")
                     except Exception:
                         st.warning("Ticket saved; email notification failed.")
+                else:
+                    st.warning("Ticket saved locally; email delivery is not configured.")
+
                 st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
                 _safe_rerun()
 
@@ -1384,7 +1271,7 @@ with tabs[3]:
 - After the report appears, use the action links (**Copy** / **Download**).
 - Use the **Feedback** tab to rate your experience and share comments.
 - Use the **Support** tab to submit any issues; include the Report ID if applicable.
-- Each login, you must acknowledge Privacy Policy & Terms of Use.
+- Each login, you must acknowledge **Privacy Policy & Terms of Use**.
         """
     )
 
