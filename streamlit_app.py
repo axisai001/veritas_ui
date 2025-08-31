@@ -1,7 +1,8 @@
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
-# Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools, and background image support.
+# Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
+# and robust background image support (local static file OR external URL).
 
 import os
 import io
@@ -44,7 +45,7 @@ try:
     from reportlab.lib.units import inch
     from reportlab.pdfbase.pdfmetrics import stringWidth
 except Exception:
-    SimpleDocTemplate = None  # fallback to plain text bytes
+    SimpleDocTemplate = None
 
 # ================= Updated Config (via config.py) =================
 try:
@@ -66,9 +67,11 @@ except Exception:
     TEMPERATURE = 0.2
 ANALYSIS_TEMPERATURE = float(os.environ.get("ANALYSIS_TEMPERATURE", "0.0"))
 
-# Links shown in the acknowledgment gate (supports Secrets too)
+# Links shown in the acknowledgment gate
 PRIVACY_URL = os.environ.get("PRIVACY_URL") or st.secrets.get("PRIVACY_URL", "")
 TERMS_URL   = os.environ.get("TERMS_URL")   or st.secrets.get("TERMS_URL", "")
+# Background image external URL (optional; e.g., GitHub RAW)
+BG_URL      = os.environ.get("BG_URL")      or st.secrets.get("BG_URL", "")
 
 # ----- Streamlit bootstrap -----
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
@@ -161,8 +164,7 @@ FEEDBACK_LOG_TTL_DAYS = int(os.environ.get("FEEDBACK_LOG_TTL_DAYS", "365"))
 ERRORS_LOG_TTL_DAYS   = int(os.environ.get("ERRORS_LOG_TTL_DAYS", "365"))
 SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
 ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
-if ACK_TTL_DAYS < 0:
-    ACK_TTL_DAYS = 0
+if ACK_TTL_DAYS < 0: ACK_TTL_DAYS = 0
 
 # SendGrid
 SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
@@ -181,7 +183,7 @@ LOCKOUT_DURATION_SEC   = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800"))
 # Storage / branding
 BASE_DIR      = os.path.dirname(__file__)
 STATIC_DIR    = os.path.join(BASE_DIR, "static")
-UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
+UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")  # logos only
 DATA_DIR      = os.path.join(BASE_DIR, "data")
 DB_PATH       = os.path.join(DATA_DIR, "veritas.db")
 FEEDBACK_CSV  = os.path.join(DATA_DIR, "feedback.csv")
@@ -192,9 +194,11 @@ SUPPORT_CSV   = os.path.join(DATA_DIR, "support_tickets.csv")
 ACK_CSV       = os.path.join(DATA_DIR, "ack_events.csv")
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
 
-ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}
-DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
+ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}           # logo types
+DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}      # upload types
+BG_ALLOWED_EXTENSIONS  = {"svg", "png", "jpg", "jpeg", "webp"}    # background types
 
 # ---------- SQLite setup ----------
 def _init_db():
@@ -325,10 +329,6 @@ STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 # ===== Identity + Veritas Prompts (EXACT as provided) =====
 IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
 
-DEFAULT_SYSTEM_PROMPT = """
-[... SAME PROMPT TEXT AS PRIOR VERSION — omitted here only for brevity in this comment block ...]
-""".strip()
-# NOTE: Keep the full prompt from the prior baseline. (I preserved it in the actual code earlier; reinsert verbatim here.)
 DEFAULT_SYSTEM_PROMPT = """
 You are a language and bias detection expert trained to analyze academic documents for both subtle and overt bias. Your role is to review the provided academic content — including written language and any accompanying charts, graphs, or images — to identify elements that may be exclusionary, biased, or create barriers for individuals from underrepresented or marginalized groups.
 In addition, you must provide contextual definitions and framework awareness to improve user literacy and reduce false positives.
@@ -759,35 +759,54 @@ div.stButton > button:hover, .stDownloadButton button:hover,
 </style>
 """, unsafe_allow_html=True)
 
-# ====== Background image injection (new) ======
+# ====== Background image injection (smarter) ======
+def _find_local_bg_file() -> Optional[Path]:
+    # prefer exact 'bg.ext' in STATIC_DIR
+    for ext in ("svg","png","jpg","jpeg","webp"):
+        p = Path(STATIC_DIR) / f"bg.{ext}"
+        if p.exists():
+            return p
+    # otherwise first bg.* found
+    for p in Path(STATIC_DIR).glob("bg.*"):
+        if p.suffix.lower().lstrip(".") in ("svg","png","jpg","jpeg","webp"):
+            return p
+    return None
+
 def _inject_bg():
-    """Set .stApp background using bg.svg.
-    Place your file at: static/bg.svg (next to streamlit_app.py)"""
+    """Set .stApp background using either static/bg.* (preferred) or BG_URL (secret/env)."""
     try:
-        bg_path = Path(STATIC_DIR) / "bg.svg"
-        if bg_path.exists():
-            # Use base64 data URI for reliability across deployments
-            svg_b64 = base64.b64encode(bg_path.read_bytes()).decode("ascii")
+        p = _find_local_bg_file()
+        if p and p.exists():
+            ext = p.suffix.lower().lstrip(".")
+            mime = {
+                "svg": "image/svg+xml",
+                "png": "image/png",
+                "jpg": "image/jpeg",
+                "jpeg":"image/jpeg",
+                "webp":"image/webp",
+            }.get(ext, "application/octet-stream")
+            b64 = base64.b64encode(p.read_bytes()).decode("ascii")
             st.markdown(f"""
             <style>
             .stApp {{
-                background: url("data:image/svg+xml;base64,{svg_b64}") no-repeat center center fixed;
+                background: url("data:{mime};base64,{b64}") no-repeat center center fixed;
                 background-size: cover;
             }}
             </style>
             """, unsafe_allow_html=True)
-        else:
-            # Fallback to the exact snippet you provided
-            st.markdown("""
+        elif BG_URL:
+            # Use externally hosted image (e.g., GitHub RAW)
+            safe_url = BG_URL.replace('"','%22')
+            st.markdown(f"""
             <style>
-            .stApp {
-                background: url('bg.svg') no-repeat center center fixed;
+            .stApp {{
+                background: url("{safe_url}") no-repeat center center fixed;
                 background-size: cover;
-            }
+            }}
             </style>
             """, unsafe_allow_html=True)
+        # else: no background; keep default
     except Exception:
-        # Silent fail — app still works without background
         pass
 
 _inject_bg()
@@ -995,6 +1014,37 @@ with tabs[0]:
                 st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB."); st.stop()
             try:
                 with st.spinner("Extracting document…"):
+                    # local helper
+                    def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+                        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                        if ext == "pdf":
+                            if PdfReader is None:
+                                return ""
+                            reader = PdfReader(io.BytesIO(file_bytes))
+                            parts = []
+                            for page in reader.pages:
+                                try:
+                                    parts.append(page.extract_text() or "")
+                                except Exception:
+                                    continue
+                            return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
+                        elif ext == "docx":
+                            if docx is None:
+                                return ""
+                            buf = io.BytesIO(file_bytes)
+                            doc_obj = docx.Document(buf)
+                            text = "\n".join(p.text for p in doc_obj.paragraphs)
+                            return text[:MAX_EXTRACT_CHARS]
+                        elif ext in ("txt", "md", "csv"):
+                            def _safe_decode(b: bytes) -> str:
+                                for enc in ("utf-8", "utf-16", "latin-1"):
+                                    try:
+                                        return b.decode(enc)
+                                    except Exception:
+                                        continue
+                                return b.decode("utf-8", errors="ignore")
+                            return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
+                        return ""
                     extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
             except Exception as e:
                 log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
@@ -1099,7 +1149,7 @@ with tabs[0]:
             h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
             story = []
             title = APP_TITLE + " — Bias Analysis Report"
-            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d,  %Y %I:%M %p %Z")
+            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
             story.append(Paragraph(f"<b>{title}</b>", h))
             story.append(Paragraph(f"<i>Generated {ts}</i>", base))
             story.append(Spacer(1, 10))
@@ -1326,6 +1376,7 @@ with tabs[3]:
 - Use the **Feedback** tab to rate your experience and share comments.
 - Use the **Support** tab to submit any issues; include the Report ID if applicable.
 - After login, you must acknowledge Privacy & Terms once every `ACK_TTL_DAYS`.
+- **Background image:** add `static/bg.svg` (or .png/.jpg/.webp) to repo, or set a `BG_URL` secret, or use Admin → 🎨 Branding.
         """
     )
 
@@ -1355,7 +1406,7 @@ if ADMIN_PASSWORD:
                 st.session_state["is_admin"] = False
                 _safe_rerun()
 
-            sub1, sub2, sub3 = st.tabs(["🕘 History", "📂 Data Explorer", "🧹 Maintenance"])
+            sub1, sub2, sub3, sub4 = st.tabs(["🕘 History", "📂 Data Explorer", "🧹 Maintenance", "🎨 Branding"])
 
             # ---- History
             with sub1:
@@ -1502,11 +1553,59 @@ if ADMIN_PASSWORD:
                     else:
                         st.error("Confirmation failed. Type PURGE to proceed.")
 
+            # ---- Branding (Background uploader)
+            with sub4:
+                st.write("#### Branding: Background Image")
+                # current status
+                current_bg = _find_local_bg_file()
+                if current_bg:
+                    st.success(f"Current local background: `{current_bg.name}` in `/static`.")
+                elif BG_URL:
+                    st.info(f"Using BG_URL: {BG_URL}")
+                else:
+                    st.warning("No background set. Add one below or configure BG_URL in secrets.")
+
+                up = st.file_uploader("Upload a background (SVG/PNG/JPG/WEBP)", type=list(BG_ALLOWED_EXTENSIONS))
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Save Background"):
+                        if up is None:
+                            st.error("Choose a file first.")
+                        else:
+                            ext = up.name.rsplit(".", 1)[-1].lower() if "." in up.name else ""
+                            if ext not in BG_ALLOWED_EXTENSIONS:
+                                st.error("Unsupported file type.")
+                            else:
+                                # delete existing bg.*
+                                for p in Path(STATIC_DIR).glob("bg.*"):
+                                    try: p.unlink()
+                                    except Exception: pass
+                                # write new file
+                                out = Path(STATIC_DIR) / f"bg.{ext}"
+                                out.write_bytes(up.getvalue())
+                                st.success(f"Saved background to `static/{out.name}`.")
+                                _safe_rerun()
+                with c2:
+                    if st.button("Remove Background"):
+                        removed = False
+                        for p in Path(STATIC_DIR).glob("bg.*"):
+                            try:
+                                p.unlink(); removed = True
+                            except Exception:
+                                pass
+                        if removed:
+                            st.success("Background removed.")
+                            _safe_rerun()
+                        else:
+                            st.info("No local background to remove.")
+                st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
+
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
