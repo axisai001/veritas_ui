@@ -43,7 +43,6 @@ try:
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.units import inch
-    from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.pdfmetrics import stringWidth
 except Exception:
     SimpleDocTemplate = None
@@ -427,7 +426,6 @@ Strict Thresholds — No Exceptions
 ∙🟡 Medium Bias → 0.36 – 0.69 
 ∙🔴 High Bias → 0.70 – 1.00 
 ∙If Bias Detected = No → Score must = 0.00. 
-∙If Score > 0.00 → Bias Detected must = Yes. 
   
 AXIS-AI Bias Evaluation Reference 
 ∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
@@ -722,7 +720,7 @@ st.markdown(f"""
 html, body, [class*="css"] {{ font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
 .block-container {{ padding-top: 2.75rem !important; padding-bottom: 64px !important; }}
 
-/* Buttons */
+/* Buttons (original look) */
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
 button[kind="primary"], button[kind="secondary"],
@@ -735,16 +733,6 @@ button[kind="primary"], button[kind="secondary"],
 div.stButton > button:hover, .stDownloadButton button:hover,
 .stForm [type="submit"]:hover, [data-testid="baseButton-primary"]:hover {{
   background-color: {ACCENT} !important; border-color: {ACCENT} !important;
-}}
-
-/* COMPACT analyze form buttons (height/width not stretched) */
-#analyze-card .stForm button[type="submit"],
-#analyze-card div.stButton > button {{
-  padding: .35rem .9rem !important;
-  line-height: 1.1 !important;
-  border-radius: .55rem !important;
-  width: auto !important;
-  min-width: 0 !important;
 }}
 
 /* Glassy cards */
@@ -998,7 +986,7 @@ with tabs[0]:
             key="doc_file"
         )
 
-        # Opposite-corner actions (compact via CSS above)
+        # Button layout: Analyze (left) and New Analysis (right-opposite corner)
         c_left, c_mid, c_right = st.columns([1, 8, 1])
         with c_left:
             submitted = st.form_submit_button("Analyze")
@@ -1190,10 +1178,9 @@ with tabs[0]:
                 w, h = letter
                 footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
                 page = f"Page {doc_.page}"
-                from reportlab.pdfbase.pdfmetrics import stringWidth as _sw
                 canvas.setFont("Helvetica", 8)
                 canvas.drawString(0.8*inch, 0.55*inch, footer)
-                pw = _sw(page, "Helvetica", 8)
+                pw = stringWidth(page, "Helvetica", 8)
                 canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
                 canvas.restoreState()
             doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
@@ -1255,7 +1242,6 @@ with tabs[1]:
         if not email or not EMAIL_RE.match(email):
             st.error("Please enter a valid email."); st.stop()
         lines = []
-        # ✅ FIXED: removed stray ']' and used a colon
         for m in st.session_state["history"]:
             if m["role"] == "assistant":
                 lines.append("Assistant: " + m["content"])
@@ -1355,7 +1341,7 @@ with tabs[2]:
             else:
                 try:
                     _db_exec("""INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,bias_report_id,issue,session_id,login_id,user_agent)
-                                VALUES (?,?,?,?,?,?,?, ?,?)""",
+                                VALUES (?,?,?,?,?,?,?,?,?)""",
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
                 except Exception:
                     pass
@@ -1632,4 +1618,3 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
