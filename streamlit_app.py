@@ -441,6 +441,15 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
+# ---- NEW: safe widget clearing helper (prevents StreamlitAPIException) ----
+def _safe_clear_textbox(key: str):
+    try:
+        st.session_state[key] = ""
+    except Exception:
+        # If Streamlit disallows changing the widget this run,
+        # fall back to next-run clearing via flag.
+        pass
+
 # ---- Global rate limiter ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
@@ -607,7 +616,7 @@ button[kind="primary"], button[kind="secondary"],
   font-size: 0.95rem !important; font-weight: 500 !important;
 }}
 
-/* ===== NEW: enforce single-line labels & sane sizing inside forms ===== */
+/* Enforce single-line labels & sane sizing inside forms */
 .stForm button[type="submit"],
 .stForm [data-testid="baseButton-primary"],
 .stForm [data-testid="baseButton-secondary"] {{
@@ -615,7 +624,7 @@ button[kind="primary"], button[kind="secondary"],
   word-break: normal !important;
   overflow: visible !important;
   width: auto !important;
-  min-width: 180px !important;     /* give the label room */
+  min-width: 180px !important;
   height: auto !important;
   display: inline-flex !important;
   align-items: center !important;
@@ -864,6 +873,7 @@ def _email_status(context: str):
 with tabs[0]:
     st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
 
+    # Clear text field on the NEXT run if flagged
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
@@ -882,7 +892,7 @@ with tabs[0]:
             accept_multiple_files=False
         )
 
-        # >>> Buttons: Analyze + New Analysis (unchanged Python; visual fix done via CSS)
+        # Buttons row
         bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
             submitted = st.form_submit_button("Analyze")
@@ -891,9 +901,9 @@ with tabs[0]:
 
     # Handle "New Analysis" first (clears inputs + last report)
     if 'new_analysis' in locals() and new_analysis:
-        st.session_state["user_input_box"] = ""
+        _safe_clear_textbox("user_input_box")     # <-- safe immediate attempt
         st.session_state["last_reply"] = ""
-        st.session_state["_clear_text_box"] = True
+        st.session_state["_clear_text_box"] = True  # ensure clearing on next run
         _safe_rerun()
 
     if 'submitted' in locals() and submitted:
@@ -1508,8 +1518,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
-
 
 
 
