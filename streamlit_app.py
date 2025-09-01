@@ -1,3 +1,6 @@
+Here’s your full file with only the **“New Analysis”** improvements applied (reset flag + uploader key). Nothing else has been changed.
+
+```python
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
@@ -818,6 +821,8 @@ st.session_state.setdefault("_fail_times", deque())
 st.session_state.setdefault("_locked_until", 0.0)
 st.session_state.setdefault("is_admin", False)
 st.session_state.setdefault("ack_ok", False)
+# NEW: counter to force-reset the file_uploader on “New Analysis”
+st.session_state.setdefault("doc_uploader_key", 0)
 
 # Pilot countdown gate
 if not pilot_started():
@@ -965,7 +970,8 @@ with tabs[0]:
         doc = st.file_uploader(
             f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False
+            accept_multiple_files=False,
+            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"  # NEW: dynamic key so we can reset on New Analysis
         )
 
         bcol1, bcol2, _spacer = st.columns([2,2,6])
@@ -974,10 +980,14 @@ with tabs[0]:
         with bcol2:
             new_analysis = st.form_submit_button("New Analysis")
 
+    # NEW: safer reset handler for New Analysis
     if 'new_analysis' in locals() and new_analysis:
-        st.session_state["user_input_box"] = ""
-        st.session_state["last_reply"] = ""
+        # Do not write directly to the text-area's key here. Use the clear flag, which is honored above.
         st.session_state["_clear_text_box"] = True
+        st.session_state["last_reply"] = ""
+        st.session_state["history"] = []
+        # Force the file_uploader to remount with a fresh key (clears the selected file)
+        st.session_state["doc_uploader_key"] += 1
         _safe_rerun()
 
     if 'submitted' in locals() and submitted:
@@ -1579,3 +1589,5 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+```
+
