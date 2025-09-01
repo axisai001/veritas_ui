@@ -166,97 +166,106 @@ SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
 ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
 if ACK_TTL_DAYS < 0: ACK_TTL_DAYS = 0
 
-# SendGrid
+# SendGrid (base)
 SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
 SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
 SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
 SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 
-# === ADD: lightweight secret reader (kept from previous update) ===
+# === ADDITIVE: Helpers for robust secret/env hydration & validation ===
 def _read_secret(name: str, default: str = "") -> str:
+    """Prefer environment variable; else st.secrets[name]; else default."""
     try:
-        return os.environ.get(name) or st.secrets.get(name, default)
+        val = os.environ.get(name)
+        if val:
+            return val
+        return st.secrets.get(name, default)
     except Exception:
         return os.environ.get(name, default)
 
+def _get_secret_multi(candidates: List[str], default: str = "") -> str:
+    """Try multiple names & nested secrets like 'sendgrid.api_key'."""
+    # Check env first
+    for nm in candidates:
+        v = os.environ.get(nm)
+        if v and str(v).strip():
+            return str(v).strip()
+    # Then st.secrets (flat and nested)
+    try:
+        # flat
+        for nm in candidates:
+            v = st.secrets.get(nm, "")
+            if v and str(v).strip():
+                return str(v).strip()
+        # nested with dot paths
+        for nm in candidates:
+            if "." in nm:
+                parts = nm.split(".")
+                cur = st.secrets
+                ok = True
+                for p in parts:
+                    if isinstance(cur, dict) and p in cur:
+                        cur = cur[p]
+                    else:
+                        ok = False
+                        break
+                if ok and cur and str(cur).strip():
+                    return str(cur).strip()
+    except Exception:
+        pass
+    return default
+
+def _mask_email(addr: str) -> str:
+    try:
+        left, right = addr.split("@", 1)
+        left_m = (left[0] + "*"*(max(0,len(left)-2)) + left[-1]) if len(left) > 2 else left[0] + "*"
+        dom, *rest = right.split(".")
+        dom_m = (dom[0] + "*"*(max(0,len(dom)-2)) + dom[-1]) if len(dom) > 2 else dom[0] + "*"
+        tail = ".".join(rest) if rest else ""
+        return f"{left_m}@{dom_m}{('.' + tail) if tail else ''}"
+    except Exception:
+        return "********"
+
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+def _hydrate_sendgrid_extended():
+    """Additive hydration for alternate keys and nested secrets."""
+    global SENDGRID_API_KEY, SENDGRID_TO, SENDGRID_FROM, SENDGRID_SUBJECT
+    # If any missing, try extended candidates
+    if not str(SENDGRID_API_KEY).strip():
+        SENDGRID_API_KEY = _get_secret_multi([
+            "SENDGRID_API_KEY", "SENDGRID_KEY", "SENDGRID_TOKEN",
+            "sendgrid_api_key", "sendgrid.key", "sendgrid.api_key"
+        ], SENDGRID_API_KEY)
+    if not str(SENDGRID_TO).strip():
+        SENDGRID_TO = _get_secret_multi([
+            "SENDGRID_TO", "SENDGRID_TO_EMAIL", "MAIL_TO",
+            "sendgrid_to", "sendgrid.to", "mail.to"
+        ], SENDGRID_TO)
+    if not str(SENDGRID_FROM).strip():
+        SENDGRID_FROM = _get_secret_multi([
+            "SENDGRID_FROM", "SENDGRID_FROM_EMAIL", "MAIL_FROM",
+            "sendgrid_from", "sendgrid.from", "mail.from"
+        ], SENDGRID_FROM)
+    if not str(SENDGRID_SUBJECT).strip():
+        SENDGRID_SUBJECT = _get_secret_multi([
+            "SENDGRID_SUBJECT", "sendgrid_subject", "mail.subject", "sendgrid.subject"
+        ], SENDGRID_SUBJECT)
+    # Normalize whitespace
+    SENDGRID_API_KEY = (SENDGRID_API_KEY or "").strip()
+    SENDGRID_TO      = (SENDGRID_TO or "").strip()
+    SENDGRID_FROM    = (SENDGRID_FROM or "").strip()
+    SENDGRID_SUBJECT = (SENDGRID_SUBJECT or "").strip()
+
+# Original basic hydration
 if not SENDGRID_API_KEY or not SENDGRID_TO or not SENDGRID_FROM:
     SENDGRID_API_KEY = _read_secret("SENDGRID_API_KEY", SENDGRID_API_KEY)
     SENDGRID_TO      = _read_secret("SENDGRID_TO", SENDGRID_TO)
     SENDGRID_FROM    = _read_secret("SENDGRID_FROM", SENDGRID_FROM)
     SENDGRID_SUBJECT = _read_secret("SENDGRID_SUBJECT", SENDGRID_SUBJECT)
 
-# === ADD: deep hydration + normalization for SendGrid config (multiple sources & aliases) ===
-def _first_nonempty(*vals) -> str:
-    for v in vals:
-        if v is None: 
-            continue
-        s = str(v).strip()
-        if s:
-            return s
-    return ""
-
-def _get_secret_nested(*keys) -> str:
-    """Try st.secrets['key'] and st.secrets['sendgrid']['key'] safely."""
-    try:
-        for k in keys:
-            if hasattr(st, "secrets"):
-                if isinstance(st.secrets, dict) and k in st.secrets:
-                    v = st.secrets.get(k)
-                    if v:
-                        return str(v)
-                if isinstance(st.secrets, dict) and "sendgrid" in st.secrets:
-                    sg = st.secrets.get("sendgrid", {})
-                    if isinstance(sg, dict) and k in sg and sg[k]:
-                        return str(sg[k])
-    except Exception:
-        pass
-    return ""
-
-def _hydrate_sendgrid_deep():
-    global SENDGRID_API_KEY, SENDGRID_FROM, SENDGRID_TO, SENDGRID_SUBJECT
-    # Accept common aliases
-    api_key = _first_nonempty(
-        os.environ.get("SENDGRID_API_KEY"),
-        os.environ.get("SG_API_KEY"),
-        os.environ.get("SENDGRID_TOKEN"),
-        _get_secret_nested("SENDGRID_API_KEY", "SG_API_KEY", "SENDGRID_TOKEN"),
-    )
-    from_addr = _first_nonempty(
-        os.environ.get("SENDGRID_FROM"),
-        os.environ.get("SENDGRID_FROM_EMAIL"),
-        _get_secret_nested("SENDGRID_FROM", "SENDGRID_FROM_EMAIL"),
-    )
-    to_addr = _first_nonempty(
-        os.environ.get("SENDGRID_TO"),
-        os.environ.get("SENDGRID_TO_EMAIL"),
-        _get_secret_nested("SENDGRID_TO", "SENDGRID_TO_EMAIL"),
-    )
-    subj = _first_nonempty(
-        os.environ.get("SENDGRID_SUBJECT"),
-        _get_secret_nested("SENDGRID_SUBJECT"),
-        SENDGRID_SUBJECT,
-    )
-    # Only fill in if missing; never erase existing
-    SENDGRID_API_KEY = SENDGRID_API_KEY or api_key
-    SENDGRID_FROM    = SENDGRID_FROM or from_addr
-    SENDGRID_TO      = SENDGRID_TO or to_addr
-    SENDGRID_SUBJECT = SENDGRID_SUBJECT or subj
-    # Normalize
-    SENDGRID_API_KEY = (SENDGRID_API_KEY or "").strip()
-    SENDGRID_FROM    = (SENDGRID_FROM or "").strip()
-    SENDGRID_TO      = (SENDGRID_TO or "").strip()
-    SENDGRID_SUBJECT = (SENDGRID_SUBJECT or "New Veritas feedback").strip()
-
-def _email_regex_ok(addr: str) -> bool:
-    if not addr: 
-        return False
-    try:
-        return re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", addr) is not None
-    except Exception:
-        return False
-
-# perform deep hydration once at startup
-_hydrate_sendgrid_deep()
+# NEW: extended hydration pass (additive)
+_hydrate_sendgrid_extended()
 
 # Password gate
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
@@ -527,7 +536,7 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
-# ---- NEW (previous fix): safe widget clearing helper ----
+# ---- NEW: safe widget clearing helper ----
 def _safe_clear_textbox(key: str):
     try:
         st.session_state[key] = ""
@@ -945,31 +954,31 @@ tabs = st.tabs(tab_names)
 
 # Helper: email configured?
 def _email_is_configured() -> bool:
-    # === ADD: stricter validation so banner reflects reality ===
-    if not (SENDGRID_API_KEY and SENDGRID_FROM and SENDGRID_TO):
-        return False
-    if not _email_regex_ok(SENDGRID_FROM):
-        return False
-    if not _email_regex_ok(SENDGRID_TO):
-        return False
-    return True
+    # Valid if key exists and both emails look valid
+    key_ok = bool(SENDGRID_API_KEY and len(SENDGRID_API_KEY) > 20)
+    from_ok = bool(SENDGRID_FROM and EMAIL_RE.match(SENDGRID_FROM))
+    to_ok   = bool(SENDGRID_TO and EMAIL_RE.match(SENDGRID_TO))
+    return key_ok and from_ok and to_ok
 
 def _email_status(context: str):
     if _email_is_configured():
-        st.success(f"Email delivery is enabled for {context}.")
+        st.success(
+            f"Email delivery is enabled for {context}. "
+            f"FROM={_mask_email(SENDGRID_FROM)} → TO={_mask_email(SENDGRID_TO)}"
+        )
     else:
         missing = []
-        if not SENDGRID_API_KEY: missing.append("SENDGRID_API_KEY")
-        if not SENDGRID_FROM:    missing.append("SENDGRID_FROM")
-        if not SENDGRID_TO:      missing.append("SENDGRID_TO")
-        extra = ""
-        if SENDGRID_FROM and not _email_regex_ok(SENDGRID_FROM): extra += " (FROM invalid format)"
-        if SENDGRID_TO and not _email_regex_ok(SENDGRID_TO):     extra += " (TO invalid format)"
-        msg = "Email delivery is NOT configured"
-        if missing or extra:
-            msg += f": missing {', '.join(missing) if missing else 'none'}{extra}."
-        msg += " Set values in environment variables or `st.secrets` (root or `sendgrid` section)."
-        st.warning(msg)
+        if not (SENDGRID_API_KEY and len(SENDGRID_API_KEY) > 20):
+            missing.append("SENDGRID_API_KEY")
+        if not (SENDGRID_FROM and EMAIL_RE.match(SENDGRID_FROM)):
+            missing.append("SENDGRID_FROM")
+        if not (SENDGRID_TO and EMAIL_RE.match(SENDGRID_TO)):
+            missing.append("SENDGRID_TO")
+        st.warning(
+            "Email delivery is NOT configured. Missing/invalid: "
+            + (", ".join(missing) if missing else "unknown").strip()
+            + ". Set variables in environment or `st.secrets` (flat or nested)."
+        )
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
@@ -1235,8 +1244,8 @@ with tabs[1]:
         comments = st.text_area("Comments (what worked / what didn’t)", height=120, max_chars=2000)
         submit_fb = st.form_submit_button("Submit feedback")
     if submit_fb:
-        EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-        if not email or not EMAIL_RE.match(email):
+        EMAIL_RE_LOCAL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+        if not email or not EMAIL_RE_LOCAL.match(email):
             st.error("Please enter a valid email."); st.stop()
         lines = []
         for m in st.session_state["history"]:
@@ -1284,7 +1293,7 @@ with tabs[1]:
                 payload = {
                     "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
                     "from": {"email": SENDGRID_FROM, "name": "Veritas"},
-                    "subject": SENDGRID_SUBJECT,
+                    "subject": SENDGRID_SUBJECT or "New Veritas feedback",
                     "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
                 }
                 with httpx.Client(timeout=12) as client:
@@ -1405,7 +1414,220 @@ if ADMIN_PASSWORD:
 
         if not st.session_state.get("is_admin", False):
             with st.form("admin_login_form", clear_on_submit=False):
-                admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL",
+                admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
+                admin_pwd = st.text_input("Admin Password", type="password")
+                submit_admin = st.form_submit_button("Login")
+            if submit_admin:
+                if not admin_email.strip():
+                    st.error("Please enter your admin email.")
+                elif ADMIN_EMAIL_ALLOWED and admin_email.strip().lower() != ADMIN_EMAIL_ALLOWED.lower():
+                    st.error("This email is not authorized for admin access.")
+                elif admin_pwd != ADMIN_PASSWORD:
+                    st.error("Incorrect admin password.")
+                else:
+                    st.session_state["is_admin"] = True
+                    st.success("Admin access granted."); _safe_rerun()
+            st.stop()
+        else:
+            if st.button("Exit Admin"):
+                st.session_state["is_admin"] = False
+                _safe_rerun()
 
+            sub1, sub2, sub3, sub4 = st.tabs(["🕘 History", "📂 Data Explorer", "🧹 Maintenance", "🎨 Branding"])
+
+            # ---- History
+            with sub1:
+                st.write("#### Previous Reports")
+                q = st.text_input("Search by Report ID or text (local DB)", placeholder="e.g., VER-2025… or a phrase…")
+                try:
+                    con = sqlite3.connect(DB_PATH)
+                    df = pd.read_sql_query("SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json FROM analyses ORDER BY id DESC LIMIT 1000", con)
+                    con.close()
+                except Exception:
+                    df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
+                if not df.empty:
+                    def extract_preview(js: str) -> str:
+                        try:
+                            return json.loads(js).get("assistant_reply","")[:220]
+                        except Exception:
+                            return ""
+                    df["preview"] = df["conversation_json"].apply(extract_preview)
+                    if q.strip():
+                        ql = q.lower()
+                        df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1)]
+                    st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
+                    sel = st.text_input("Load a report back into the viewer by Report ID (optional)")
+                    if st.button("Load Report"):
+                        row = df[df["public_report_id"] == sel]
+                        if len(row) == 1:
+                            try:
+                                txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
+                                st.session_state["last_reply"] = txt
+                                st.success("Loaded into Analyze tab.")
+                            except Exception:
+                                st.error("Could not load that report.")
+                        else:
+                            st.warning("Report ID not found in the current list.")
+                else:
+                    st.info("No reports yet.")
+
+            # ---- Data Explorer
+            with sub2:
+                st.write("#### Data Explorer")
+                st.caption("Browse app data stored on this instance. Use the download buttons for backups.")
+
+                def _read_csv_safe(path: str) -> pd.DataFrame:
+                    try:
+                        return pd.read_csv(path)
+                    except Exception:
+                        return pd.DataFrame()
+
+                c1, c2 = st.columns(2)
+                with c1:
+                    st.write("##### Auth Events")
+                    st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
+                    except Exception:
+                        pass
+
+                    st.write("##### Errors")
+                    st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
+                    except Exception:
+                        pass
+
+                    st.write("##### Acknowledgments")
+                    st.dataframe(_read_csv_safe(ACK_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download ack_events.csv", data=open(ACK_CSV, "rb").read(), file_name="ack_events.csv", mime="text/csv")
+                    except Exception:
+                        pass
+                with c2:
+                    st.write("##### Analyses")
+                    st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
+                    except Exception:
+                        pass
+
+                    st.write("##### Feedback")
+                    st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
+                    except Exception:
+                        pass
+
+                    st.write("##### Support Tickets")
+                    st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
+                    try:
+                        st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
+                    except Exception:
+                        pass
+
+            # ---- Maintenance
+            with sub3:
+                st.write("#### Prune & Wipe Data")
+                st.caption("Prune removes rows older than the TTL. Wipe deletes ALL rows in a dataset. Use with care.")
+
+                st.write("**Prune by TTL (days)**")
+                cpa, cpb, cpc = st.columns(3)
+                with cpa:
+                    ttl_auth = st.number_input("Auth Events TTL",   min_value=0, value=max(0, AUTH_LOG_TTL_DAYS),     step=1)
+                    ttl_err  = st.number_input("Errors TTL",        min_value=0, value=max(0, ERRORS_LOG_TTL_DAYS),  step=1)
+                    ttl_ack  = st.number_input("Ack Events TTL",    min_value=0, value=max(0, ACK_TTL_DAYS),         step=1)
+                with cpb:
+                    ttl_ana  = st.number_input("Analyses TTL",      min_value=0, value=max(0, ANALYSES_LOG_TTL_DAYS),step=1)
+                    ttl_fb   = st.number_input("Feedback TTL",      min_value=0, value=max(0, FEEDBACK_LOG_TTL_DAYS),step=1)
+                    ttl_sup  = st.number_input("Support TTL",       min_value=0, value=max(0, SUPPORT_LOG_TTL_DAYS), step=1)
+                with cpc:
+                    st.markdown("&nbsp;")
+                    if st.button("Run Prune Now (CSV + DB)"):
+                        _prune_csv_by_ttl(AUTH_CSV, ttl_auth);    _prune_db_by_ttl("auth_events", "timestamp_utc", ttl_auth)
+                        _prune_csv_by_ttl(ERRORS_CSV, ttl_err);   _prune_db_by_ttl("errors", "timestamp_utc", ttl_err)
+                        _prune_csv_by_ttl(ACK_CSV, ttl_ack);      _prune_db_by_ttl("ack_events", "timestamp_utc", ttl_ack)
+                        _prune_csv_by_ttl(ANALYSES_CSV, ttl_ana); _prune_db_by_ttl("analyses", "timestamp_utc", ttl_ana)
+                        _prune_csv_by_ttl(FEEDBACK_CSV, ttl_fb);  _prune_db_by_ttl("feedback", "timestamp_utc", ttl_fb)
+                        _prune_csv_by_ttl(SUPPORT_CSV, ttl_sup);  _prune_db_by_ttl("support_tickets", "timestamp_utc", ttl_sup)
+                        st.success("Prune complete.")
+
+                st.write("---")
+                st.write("**Wipe Dataset (dangerous)**")
+                target = st.selectbox("Choose dataset to wipe", [
+                    "auth_events", "errors", "ack_events", "analyses", "feedback", "support_tickets"
+                ])
+                confirm = st.text_input("Type PURGE to confirm")
+                if st.button("Wipe Selected Dataset"):
+                    if confirm.strip().upper() == "PURGE":
+                        _wipe_db_table(target)
+                        csv_map = {
+                            "auth_events": AUTH_CSV, "errors": ERRORS_CSV, "ack_events": ACK_CSV,
+                            "analyses": ANALYSES_CSV, "feedback": FEEDBACK_CSV, "support_tickets": SUPPORT_CSV
+                        }
+                        path = csv_map.get(target)
+                        if path and os.path.exists(path):
+                            hdr = []
+                            try:
+                                with open(path, "r", encoding="utf-8", newline="") as f:
+                                    rdr = csv.reader(f); hdr = next(rdr, [])
+                            except Exception:
+                                pass
+                            with open(path, "w", encoding="utf-8", newline="") as f:
+                                if hdr:
+                                    csv.writer(f).writerow(hdr)
+                        st.success(f"Wiped: {target}")
+                    else:
+                        st.error("Confirmation failed. Type PURGE to proceed.")
+
+            # ---- Branding (Background uploader)
+            with sub4:
+                st.write("#### Branding: Background Image")
+                current_bg = _find_local_bg_file()
+                if current_bg:
+                    st.success(f"Current local background: `{current_bg.name}` in `/static`.")
+                elif BG_URL:
+                    st.info(f"Using BG_URL: {BG_URL}")
+                else:
+                    st.warning("No background set. Add one below or configure BG_URL in secrets.")
+
+                up = st.file_uploader("Upload a background (SVG/PNG/JPG/WEBP)", type=list(BG_ALLOWED_EXTENSIONS))
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Save Background"):
+                        if up is None:
+                            st.error("Choose a file first.")
+                        else:
+                            ext = up.name.rsplit(".", 1)[-1].lower() if "." in up.name else ""
+                            if ext not in BG_ALLOWED_EXTENSIONS:
+                                st.error("Unsupported file type.")
+                            else:
+                                for p in Path(STATIC_DIR).glob("bg.*"):
+                                    try: p.unlink()
+                                    except Exception: pass
+                                out = Path(STATIC_DIR) / f"bg.{ext}"
+                                out.write_bytes(up.getvalue())
+                                st.success(f"Saved background to `static/{out.name}`.")
+                                _safe_rerun()
+                with c2:
+                    if st.button("Remove Background"):
+                        removed = False
+                        for p in Path(STATIC_DIR).glob("bg.*"):
+                            try:
+                                p.unlink(); removed = True
+                            except Exception:
+                                pass
+                        if removed:
+                            st.success("Background removed.")
+                            _safe_rerun()
+                        else:
+                            st.info("No local background to remove.")
+                st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
+
+# ====== Footer ======
+st.markdown(
+    "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
+    unsafe_allow_html=True
+)
 
 
