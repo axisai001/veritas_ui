@@ -1014,8 +1014,9 @@ def require_acknowledgment():
 
     st.stop()
 
-# Require acknowledgment after login
-require_acknowledgment()
+# Require acknowledgment after login — skip for admin sessions
+if not st.session_state.get("is_admin", False):
+    require_acknowledgment()
 
 # ================= Tabs =================
 tab_names = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
@@ -1645,6 +1646,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
