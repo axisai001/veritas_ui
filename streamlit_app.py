@@ -1,6 +1,3 @@
-Here’s your full file with only the **“New Analysis”** improvements applied (reset flag + uploader key). Nothing else has been changed.
-
-```python
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
@@ -1590,4 +1587,5 @@ st.markdown(
     unsafe_allow_html=True
 )
 ```
+
 
