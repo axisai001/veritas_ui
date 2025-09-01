@@ -3,6 +3,12 @@
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
 # Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
 # and robust background image support (local static file OR external URL).
+#
+# Update (overrides-first email config):
+# - Per-tab overrides (FEEDBACK_* / SUPPORT_*) are treated as first-class.
+# - If ALL required override fields for a channel are present AND valid, globals are ignored.
+# - If any override fields are missing, we gracefully fall back to global SENDGRID_* for just those fields.
+# - Status banner reflects actual effective config per tab.
 
 import os
 import io
@@ -166,23 +172,16 @@ SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
 ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
 if ACK_TTL_DAYS < 0: ACK_TTL_DAYS = 0
 
-# SendGrid globals (backward-compat)
-SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
-SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
-SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
-SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
+# SendGrid globals (fallbacks)
+SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "") or st.secrets.get("SENDGRID_API_KEY", "")
+SENDGRID_TO       = os.environ.get("SENDGRID_TO", "") or st.secrets.get("SENDGRID_TO", "")
+SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "") or st.secrets.get("SENDGRID_FROM", "")
+SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "") or st.secrets.get("SENDGRID_SUBJECT", "New Veritas Feedback")
 
-# === Robust secret/env hydration & validation (extended) ===
-def _read_secret(name: str, default: str = "") -> str:
-    try:
-        val = os.environ.get(name)
-        if val:
-            return val
-        return st.secrets.get(name, default)
-    except Exception:
-        return os.environ.get(name, default)
+# ======= Email config helpers (overrides-first) =======
+EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-def _get_secret_multi(candidates: List[str], default: str = "") -> str:
+def _get_secret_multi(candidates: List[str]) -> str:
     # env first
     for nm in candidates:
         v = os.environ.get(nm)
@@ -194,7 +193,7 @@ def _get_secret_multi(candidates: List[str], default: str = "") -> str:
             v = st.secrets.get(nm, "")
             if v and str(v).strip():
                 return str(v).strip()
-        # st.secrets dot-path/nested
+        # st.secrets nested (dot notation)
         for nm in candidates:
             if "." in nm:
                 parts = nm.split(".")
@@ -210,7 +209,58 @@ def _get_secret_multi(candidates: List[str], default: str = "") -> str:
                     return str(cur).strip()
     except Exception:
         pass
-    return default
+    return ""
+
+def _channel_overrides(channel: str) -> Dict[str, str]:
+    ch = channel.strip().lower()
+    return {
+        "api_key": _get_secret_multi([f"{ch.upper()}_SENDGRID_API_KEY", f"{ch}.sendgrid.api_key"]),
+        "from":    _get_secret_multi([f"{ch.upper()}_SENDGRID_FROM",    f"{ch}.sendgrid.from"]),
+        "to":      _get_secret_multi([f"{ch.upper()}_SENDGRID_TO",      f"{ch}.sendgrid.to"]),
+        "subject": _get_secret_multi([f"{ch.upper()}_SENDGRID_SUBJECT", f"{ch}.sendgrid.subject"]),
+    }
+
+def _overrides_are_complete_and_valid(ov: Dict[str, str], default_subject: str) -> bool:
+    # api_key non-trivial, from/to valid emails; subject can fall back
+    key_ok = bool(ov["api_key"] and len(ov["api_key"]) > 20)
+    from_ok = bool(ov["from"] and EMAIL_RE.match(ov["from"]))
+    to_ok   = bool(ov["to"]   and EMAIL_RE.match(ov["to"]))
+    # subject not strictly required (we can supply default)
+    return key_ok and from_ok and to_ok
+
+def _effective_mail_cfg(channel: str) -> Dict[str, str]:
+    """
+    If channel overrides are present AND valid (key/from/to), return ONLY overrides (subject fallback allowed).
+    Otherwise, construct a mixed config that uses any provided overrides and falls back to globals per field.
+    """
+    ch = channel.strip().lower()
+    default_subject = "New Veritas Support Ticket" if ch == "support" else (SENDGRID_SUBJECT or "New Veritas Feedback")
+    ov = _channel_overrides(ch)
+
+    if _overrides_are_complete_and_valid(ov, default_subject):
+        return {
+            "api_key": ov["api_key"],
+            "from":    ov["from"],
+            "to":      ov["to"],
+            "subject": ov["subject"] or default_subject,
+            "source":  "overrides-only"
+        }
+
+    # Partial overrides or none → fall back per field to globals
+    return {
+        "api_key": ov["api_key"] or SENDGRID_API_KEY,
+        "from":    ov["from"]    or SENDGRID_FROM,
+        "to":      ov["to"]      or SENDGRID_TO,
+        "subject": (ov["subject"] or ( "New Veritas Support Ticket" if ch == "support" else (SENDGRID_SUBJECT or "New Veritas Feedback") )),
+        "source":  "mixed-or-global"
+    }
+
+def _email_is_configured(channel: str) -> bool:
+    cfg = _effective_mail_cfg(channel)
+    key_ok = bool(cfg["api_key"] and len(cfg["api_key"]) > 20)
+    from_ok = bool(cfg["from"] and EMAIL_RE.match(cfg["from"]))
+    to_ok   = bool(cfg["to"]   and EMAIL_RE.match(cfg["to"]))
+    return key_ok and from_ok and to_ok
 
 def _mask_email(addr: str) -> str:
     try:
@@ -223,70 +273,22 @@ def _mask_email(addr: str) -> str:
     except Exception:
         return "********"
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-
-def _hydrate_sendgrid_extended():
-    global SENDGRID_API_KEY, SENDGRID_TO, SENDGRID_FROM, SENDGRID_SUBJECT
-    if not str(SENDGRID_API_KEY).strip():
-        SENDGRID_API_KEY = _get_secret_multi([
-            "SENDGRID_API_KEY","SENDGRID_KEY","SENDGRID_TOKEN",
-            "sendgrid_api_key","sendgrid.key","sendgrid.api_key"
-        ], SENDGRID_API_KEY)
-    if not str(SENDGRID_TO).strip():
-        SENDGRID_TO = _get_secret_multi([
-            "SENDGRID_TO","SENDGRID_TO_EMAIL","MAIL_TO",
-            "sendgrid_to","sendgrid.to","mail.to"
-        ], SENDGRID_TO)
-    if not str(SENDGRID_FROM).strip():
-        SENDGRID_FROM = _get_secret_multi([
-            "SENDGRID_FROM","SENDGRID_FROM_EMAIL","MAIL_FROM",
-            "sendgrid_from","sendgrid.from","mail.from"
-        ], SENDGRID_FROM)
-    if not str(SENDGRID_SUBJECT).strip():
-        SENDGRID_SUBJECT = _get_secret_multi([
-            "SENDGRID_SUBJECT","sendgrid_subject","mail.subject","sendgrid.subject"
-        ], SENDGRID_SUBJECT)
-    SENDGRID_API_KEY = (SENDGRID_API_KEY or "").strip()
-    SENDGRID_TO      = (SENDGRID_TO or "").strip()
-    SENDGRID_FROM    = (SENDGRID_FROM or "").strip()
-    SENDGRID_SUBJECT = (SENDGRID_SUBJECT or "").strip()
-
-# base hydration & extended pass
-if not SENDGRID_API_KEY or not SENDGRID_TO or not SENDGRID_FROM:
-    SENDGRID_API_KEY = _read_secret("SENDGRID_API_KEY", SENDGRID_API_KEY)
-    SENDGRID_TO      = _read_secret("SENDGRID_TO", SENDGRID_TO)
-    SENDGRID_FROM    = _read_secret("SENDGRID_FROM", SENDGRID_FROM)
-    SENDGRID_SUBJECT = _read_secret("SENDGRID_SUBJECT", SENDGRID_SUBJECT)
-_hydrate_sendgrid_extended()
-
-# NEW: effective mail config per channel (feedback/support)
-def _effective_mail_cfg(channel: str) -> Dict[str, str]:
-    ch = (channel or "").strip().lower()
-    # Candidates for channel-specific overrides
-    key  = _get_secret_multi([
-        f"{ch.upper()}_SENDGRID_API_KEY",
-        f"{ch}.sendgrid.api_key"
-    ], "") or SENDGRID_API_KEY
-    from_ = _get_secret_multi([
-        f"{ch.upper()}_SENDGRID_FROM",
-        f"{ch}.sendgrid.from"
-    ], "") or SENDGRID_FROM
-    to_   = _get_secret_multi([
-        f"{ch.upper()}_SENDGRID_TO",
-        f"{ch}.sendgrid.to"
-    ], "") or SENDGRID_TO
-    # Subject: feedback default from global; support default set here if none
-    subj_default = "New Veritas Support Ticket" if ch == "support" else (SENDGRID_SUBJECT or "New Veritas Feedback")
-    subject = _get_secret_multi([
-        f"{ch.upper()}_SENDGRID_SUBJECT",
-        f"{ch}.sendgrid.subject"
-    ], "") or subj_default
-    return {
-        "api_key": key.strip() if key else "",
-        "from":    from_.strip() if from_ else "",
-        "to":      to_.strip() if to_ else "",
-        "subject": subject.strip() if subject else "",
-    }
+def _email_status(channel: str):
+    cfg = _effective_mail_cfg(channel)
+    if _email_is_configured(channel):
+        st.success(
+            f"Email is enabled for {channel} ({cfg['source']}). "
+            f"FROM={_mask_email(cfg['from'])} → TO={_mask_email(cfg['to'])}"
+        )
+    else:
+        missing = []
+        if not (cfg["api_key"] and len(cfg["api_key"]) > 20): missing.append("API_KEY")
+        if not (cfg["from"] and EMAIL_RE.match(cfg["from"])): missing.append("FROM")
+        if not (cfg["to"]   and EMAIL_RE.match(cfg["to"])):   missing.append("TO")
+        st.warning(
+            f"Email delivery is NOT configured for {channel} ({cfg['source']}). "
+            + ("Missing/invalid: " + ", ".join(missing) if missing else "Unknown error") + "."
+        )
 
 # Password gate
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
@@ -427,7 +429,7 @@ _init_csv(AUTH_CSV,     ["timestamp_utc","event_type","login_id","session_id","t
 _init_csv(ANALYSES_CSV, ["timestamp_utc","public_report_id","internal_report_id","session_id","login_id","remote_addr","user_agent","conversation_chars","conversation_json"])
 _init_csv(FEEDBACK_CSV, ["timestamp_utc","rating","email","comments","conversation_chars","conversation","remote_addr","ua"])
 _init_csv(ERRORS_CSV,   ["timestamp_utc","error_id","request_id","route","kind","http_status","detail","session_id","login_id","remote_addr","user_agent"])
-_init_csv(SUPPORT_CSV,  ["timestamp_utc","ticket_id","full_name","email","bias_report_id","issue","session_id","login_id","user_agent"])
+_init_csv(SUPPORT_CSV,  ["timestamp_utc","timestamp_utc","ticket_id","full_name","email","bias_report_id","issue","session_id","login_id","user_agent"] if False else ["timestamp_utc","ticket_id","full_name","email","bias_report_id","issue","session_id","login_id","user_agent"])
 _init_csv(ACK_CSV,      ["timestamp_utc","session_id","login_id","acknowledged","privacy_url","terms_url","remote_addr","user_agent"])
 
 # Default tagline + logo autodetect
@@ -944,35 +946,6 @@ if ADMIN_PASSWORD:
     tab_names.append("🛡️ Admin")
 tabs = st.tabs(tab_names)
 
-# Helper: email configured? (per channel)
-def _email_is_configured(channel: str) -> bool:
-    cfg = _effective_mail_cfg(channel)
-    key_ok = bool(cfg["api_key"] and len(cfg["api_key"]) > 20)
-    from_ok = bool(cfg["from"] and EMAIL_RE.match(cfg["from"]))
-    to_ok   = bool(cfg["to"] and EMAIL_RE.match(cfg["to"]))
-    return key_ok and from_ok and to_ok
-
-def _email_status(channel: str):
-    cfg = _effective_mail_cfg(channel)
-    if _email_is_configured(channel):
-        st.success(
-            f"Email is enabled for {channel}. "
-            f"FROM={_mask_email(cfg['from'])} → TO={_mask_email(cfg['to'])}"
-        )
-    else:
-        missing = []
-        if not (cfg["api_key"] and len(cfg["api_key"]) > 20):
-            missing.append("API_KEY")
-        if not (cfg["from"] and EMAIL_RE.match(cfg["from"])):
-            missing.append("FROM")
-        if not (cfg["to"] and EMAIL_RE.match(cfg["to"])):
-            missing.append("TO")
-        st.warning(
-            f"Email delivery is NOT configured for {channel}. Missing/invalid: "
-            + (", ".join(missing) if missing else "unknown")
-            + "."
-        )
-
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
     st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
@@ -1216,7 +1189,7 @@ with tabs[1]:
         comments = st.text_area("Comments (what worked / what didn’t)", height=120, max_chars=2000)
         submit_fb = st.form_submit_button("Submit feedback")
     if submit_fb:
-        EMAIL_RE_LOCAL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+        EMAIL_RE_LOCAL = EMAIL_RE
         if not email or not EMAIL_RE_LOCAL.match(email):
             st.error("Please enter a valid email."); st.stop()
         lines = []
