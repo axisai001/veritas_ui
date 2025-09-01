@@ -873,7 +873,8 @@ def show_login():
         with st.form("login_form_user"):
             login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
             pwd = st.text_input("Password", type="password")
-            c1, c2, _gap = st.columns([2, 2, 1, 5])  # tighter layout
+           # unpack all 4 columns, even if you don’t use the last two explicitly
+            c1, c2, _gap, _spacer = st.columns([2, 2, 1, 5])
             with c1:
                 submit = st.form_submit_button("Enter")
             with c2:
@@ -911,10 +912,10 @@ def show_login():
         with st.form("login_form_admin"):
             admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
             admin_pwd = st.text_input("Admin Password", type="password")
-            c1, c2, _gap = st.columns([2, 2, 1, 5])  # tighter layout
-            with c1:
-                submit_admin = st.form_submit_button("Admin Enter")
-            with c2:
+            a1, a2, _gap, _spacer = st.columns([2, 2, 1, 5])
+            with a1:
+                submit_admin = st.form_submit_button("Login")
+            with a2:
                 cancel_admin = st.form_submit_button("Cancel")
         if cancel_admin:
             st.session_state["auth_view"] = "user"
@@ -1644,6 +1645,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
