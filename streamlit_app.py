@@ -15,7 +15,7 @@ import uuid
 import hashlib
 import secrets
 import sqlite3
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from collections import deque
@@ -166,15 +166,14 @@ SUPPORT_LOG_TTL_DAYS  = int(os.environ.get("SUPPORT_LOG_TTL_DAYS", "365"))
 ACK_TTL_DAYS          = int(os.environ.get("ACK_TTL_DAYS") or st.secrets.get("ACK_TTL_DAYS", 365))
 if ACK_TTL_DAYS < 0: ACK_TTL_DAYS = 0
 
-# SendGrid (base)
+# SendGrid globals (backward-compat)
 SENDGRID_API_KEY  = os.environ.get("SENDGRID_API_KEY", "")
 SENDGRID_TO       = os.environ.get("SENDGRID_TO", "")
 SENDGRID_FROM     = os.environ.get("SENDGRID_FROM", "")
 SENDGRID_SUBJECT  = os.environ.get("SENDGRID_SUBJECT", "New Veritas feedback")
 
-# === ADDITIVE: Helpers for robust secret/env hydration & validation ===
+# === Robust secret/env hydration & validation (extended) ===
 def _read_secret(name: str, default: str = "") -> str:
-    """Prefer environment variable; else st.secrets[name]; else default."""
     try:
         val = os.environ.get(name)
         if val:
@@ -184,20 +183,18 @@ def _read_secret(name: str, default: str = "") -> str:
         return os.environ.get(name, default)
 
 def _get_secret_multi(candidates: List[str], default: str = "") -> str:
-    """Try multiple names & nested secrets like 'sendgrid.api_key'."""
-    # Check env first
+    # env first
     for nm in candidates:
         v = os.environ.get(nm)
         if v and str(v).strip():
             return str(v).strip()
-    # Then st.secrets (flat and nested)
+    # st.secrets flat
     try:
-        # flat
         for nm in candidates:
             v = st.secrets.get(nm, "")
             if v and str(v).strip():
                 return str(v).strip()
-        # nested with dot paths
+        # st.secrets dot-path/nested
         for nm in candidates:
             if "." in nm:
                 parts = nm.split(".")
@@ -229,43 +226,67 @@ def _mask_email(addr: str) -> str:
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 def _hydrate_sendgrid_extended():
-    """Additive hydration for alternate keys and nested secrets."""
     global SENDGRID_API_KEY, SENDGRID_TO, SENDGRID_FROM, SENDGRID_SUBJECT
-    # If any missing, try extended candidates
     if not str(SENDGRID_API_KEY).strip():
         SENDGRID_API_KEY = _get_secret_multi([
-            "SENDGRID_API_KEY", "SENDGRID_KEY", "SENDGRID_TOKEN",
-            "sendgrid_api_key", "sendgrid.key", "sendgrid.api_key"
+            "SENDGRID_API_KEY","SENDGRID_KEY","SENDGRID_TOKEN",
+            "sendgrid_api_key","sendgrid.key","sendgrid.api_key"
         ], SENDGRID_API_KEY)
     if not str(SENDGRID_TO).strip():
         SENDGRID_TO = _get_secret_multi([
-            "SENDGRID_TO", "SENDGRID_TO_EMAIL", "MAIL_TO",
-            "sendgrid_to", "sendgrid.to", "mail.to"
+            "SENDGRID_TO","SENDGRID_TO_EMAIL","MAIL_TO",
+            "sendgrid_to","sendgrid.to","mail.to"
         ], SENDGRID_TO)
     if not str(SENDGRID_FROM).strip():
         SENDGRID_FROM = _get_secret_multi([
-            "SENDGRID_FROM", "SENDGRID_FROM_EMAIL", "MAIL_FROM",
-            "sendgrid_from", "sendgrid.from", "mail.from"
+            "SENDGRID_FROM","SENDGRID_FROM_EMAIL","MAIL_FROM",
+            "sendgrid_from","sendgrid.from","mail.from"
         ], SENDGRID_FROM)
     if not str(SENDGRID_SUBJECT).strip():
         SENDGRID_SUBJECT = _get_secret_multi([
-            "SENDGRID_SUBJECT", "sendgrid_subject", "mail.subject", "sendgrid.subject"
+            "SENDGRID_SUBJECT","sendgrid_subject","mail.subject","sendgrid.subject"
         ], SENDGRID_SUBJECT)
-    # Normalize whitespace
     SENDGRID_API_KEY = (SENDGRID_API_KEY or "").strip()
     SENDGRID_TO      = (SENDGRID_TO or "").strip()
     SENDGRID_FROM    = (SENDGRID_FROM or "").strip()
     SENDGRID_SUBJECT = (SENDGRID_SUBJECT or "").strip()
 
-# Original basic hydration
+# base hydration & extended pass
 if not SENDGRID_API_KEY or not SENDGRID_TO or not SENDGRID_FROM:
     SENDGRID_API_KEY = _read_secret("SENDGRID_API_KEY", SENDGRID_API_KEY)
     SENDGRID_TO      = _read_secret("SENDGRID_TO", SENDGRID_TO)
     SENDGRID_FROM    = _read_secret("SENDGRID_FROM", SENDGRID_FROM)
     SENDGRID_SUBJECT = _read_secret("SENDGRID_SUBJECT", SENDGRID_SUBJECT)
-
-# NEW: extended hydration pass (additive)
 _hydrate_sendgrid_extended()
+
+# NEW: effective mail config per channel (feedback/support)
+def _effective_mail_cfg(channel: str) -> Dict[str, str]:
+    ch = (channel or "").strip().lower()
+    # Candidates for channel-specific overrides
+    key  = _get_secret_multi([
+        f"{ch.upper()}_SENDGRID_API_KEY",
+        f"{ch}.sendgrid.api_key"
+    ], "") or SENDGRID_API_KEY
+    from_ = _get_secret_multi([
+        f"{ch.upper()}_SENDGRID_FROM",
+        f"{ch}.sendgrid.from"
+    ], "") or SENDGRID_FROM
+    to_   = _get_secret_multi([
+        f"{ch.upper()}_SENDGRID_TO",
+        f"{ch}.sendgrid.to"
+    ], "") or SENDGRID_TO
+    # Subject: feedback default from global; support default set here if none
+    subj_default = "New Veritas Support Ticket" if ch == "support" else (SENDGRID_SUBJECT or "New Veritas Feedback")
+    subject = _get_secret_multi([
+        f"{ch.upper()}_SENDGRID_SUBJECT",
+        f"{ch}.sendgrid.subject"
+    ], "") or subj_default
+    return {
+        "api_key": key.strip() if key else "",
+        "from":    from_.strip() if from_ else "",
+        "to":      to_.strip() if to_ else "",
+        "subject": subject.strip() if subject else "",
+    }
 
 # Password gate
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
@@ -278,7 +299,7 @@ LOCKOUT_DURATION_SEC   = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800"))
 # Storage / branding
 BASE_DIR      = os.path.dirname(__file__)
 STATIC_DIR    = os.path.join(BASE_DIR, "static")
-UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")  # logos only
+UPLOAD_FOLDER = os.path.join(STATIC_DIR, "uploads")
 DATA_DIR      = os.path.join(BASE_DIR, "data")
 DB_PATH       = os.path.join(DATA_DIR, "veritas.db")
 FEEDBACK_CSV  = os.path.join(DATA_DIR, "feedback.csv")
@@ -291,9 +312,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
-ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}           # logo types
-DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}      # upload types
-BG_ALLOWED_EXTENSIONS  = {"svg", "png", "jpg", "jpeg", "webp"}    # background types
+ALLOWED_EXTENSIONS     = {"png", "jpg", "jpeg", "webp"}
+DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
+BG_ALLOWED_EXTENSIONS  = {"svg", "png", "jpg", "jpeg", "webp"}
 
 # ---------- SQLite setup ----------
 def _init_db():
@@ -536,13 +557,6 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
-# ---- NEW: safe widget clearing helper ----
-def _safe_clear_textbox(key: str):
-    try:
-        st.session_state[key] = ""
-    except Exception:
-        pass
-
 # ---- Global rate limiter ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
@@ -708,46 +722,30 @@ button[kind="primary"], button[kind="secondary"],
   box-shadow: none !important; padding: 0.60rem 1rem !important;
   font-size: 0.95rem !important; font-weight: 500 !important;
 }}
-
-/* Enforce single-line labels & sane sizing inside forms */
 .stForm button[type="submit"],
 .stForm [data-testid="baseButton-primary"],
 .stForm [data-testid="baseButton-secondary"] {{
-  white-space: nowrap !important;
-  word-break: normal !important;
-  overflow: visible !important;
-  width: auto !important;
-  min-width: 180px !important;
-  height: auto !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  white-space: nowrap !important; word-break: normal !important; overflow: visible !important;
+  width: auto !important; min-width: 180px !important; height: auto !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
 }}
-
-/* Glassy cards */
 .v-card {{ background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);
   border-radius: 16px; padding: 18px; }}
-
-/* Analyze card spacing */
 #analyze-card h3 {{ margin: 0 0 .5rem !important; }}
 #analyze-card [data-testid="stTextArea"] label,
 #analyze-card [data-testid="stFileUploader"] label {{ margin-top: 0 !important; }}
-
-/* Action links bar */
 .v-actions {{ display: inline-flex; gap: 1.0rem; align-items: center;
   padding: .45rem .75rem; border-radius: 10px; background: rgba(0,0,0,0.65); }}
 .v-actions a {{ color: #fff !important; text-decoration: none; font-weight: 600; }}
 .v-actions a:hover {{ text-decoration: underline; }}
 .v-actions .copy-note {{ color:#fff; opacity:.8; font-size:.85rem; }}
-
-/* Sticky footer */
 #vFooter {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
   text-align: center; font-size: 12px; opacity: .85;
   background: rgba(0,0,0,0.75); color: #fff; padding: 6px 8px; }}
 </style>
 """, unsafe_allow_html=True)
 
-# ====== Background image injection (smarter) ======
+# ====== Background image injection ======
 def _find_local_bg_file() -> Optional[Path]:
     for ext in ("svg","png","jpg","jpeg","webp"):
         p = Path(STATIC_DIR) / f"bg.{ext}"
@@ -763,13 +761,7 @@ def _inject_bg():
         p = _find_local_bg_file()
         if p and p.exists():
             ext = p.suffix.lower().lstrip(".")
-            mime = {
-                "svg": "image/svg+xml",
-                "png": "image/png",
-                "jpg": "image/jpeg",
-                "jpeg":"image/jpeg",
-                "webp":"image/webp",
-            }.get(ext, "application/octet-stream")
+            mime = {"svg":"image/svg+xml","png":"image/png","jpg":"image/jpeg","jpeg":"image/jpeg","webp":"image/webp"}.get(ext, "application/octet-stream")
             b64 = base64.b64encode(p.read_bytes()).decode("ascii")
             st.markdown(f"""
             <style>
@@ -794,7 +786,7 @@ def _inject_bg():
 
 _inject_bg()
 
-# =========== Header (logo only; title moved to sidebar) ===========
+# =========== Header ===========
 with st.container():
     col_logo, col_title, _ = st.columns([1, 6, 1])
     with col_logo:
@@ -952,39 +944,39 @@ if ADMIN_PASSWORD:
     tab_names.append("🛡️ Admin")
 tabs = st.tabs(tab_names)
 
-# Helper: email configured?
-def _email_is_configured() -> bool:
-    # Valid if key exists and both emails look valid
-    key_ok = bool(SENDGRID_API_KEY and len(SENDGRID_API_KEY) > 20)
-    from_ok = bool(SENDGRID_FROM and EMAIL_RE.match(SENDGRID_FROM))
-    to_ok   = bool(SENDGRID_TO and EMAIL_RE.match(SENDGRID_TO))
+# Helper: email configured? (per channel)
+def _email_is_configured(channel: str) -> bool:
+    cfg = _effective_mail_cfg(channel)
+    key_ok = bool(cfg["api_key"] and len(cfg["api_key"]) > 20)
+    from_ok = bool(cfg["from"] and EMAIL_RE.match(cfg["from"]))
+    to_ok   = bool(cfg["to"] and EMAIL_RE.match(cfg["to"]))
     return key_ok and from_ok and to_ok
 
-def _email_status(context: str):
-    if _email_is_configured():
+def _email_status(channel: str):
+    cfg = _effective_mail_cfg(channel)
+    if _email_is_configured(channel):
         st.success(
-            f"Email delivery is enabled for {context}. "
-            f"FROM={_mask_email(SENDGRID_FROM)} → TO={_mask_email(SENDGRID_TO)}"
+            f"Email is enabled for {channel}. "
+            f"FROM={_mask_email(cfg['from'])} → TO={_mask_email(cfg['to'])}"
         )
     else:
         missing = []
-        if not (SENDGRID_API_KEY and len(SENDGRID_API_KEY) > 20):
-            missing.append("SENDGRID_API_KEY")
-        if not (SENDGRID_FROM and EMAIL_RE.match(SENDGRID_FROM)):
-            missing.append("SENDGRID_FROM")
-        if not (SENDGRID_TO and EMAIL_RE.match(SENDGRID_TO)):
-            missing.append("SENDGRID_TO")
+        if not (cfg["api_key"] and len(cfg["api_key"]) > 20):
+            missing.append("API_KEY")
+        if not (cfg["from"] and EMAIL_RE.match(cfg["from"])):
+            missing.append("FROM")
+        if not (cfg["to"] and EMAIL_RE.match(cfg["to"])):
+            missing.append("TO")
         st.warning(
-            "Email delivery is NOT configured. Missing/invalid: "
-            + (", ".join(missing) if missing else "unknown").strip()
-            + ". Set variables in environment or `st.secrets` (flat or nested)."
+            f"Email delivery is NOT configured for {channel}. Missing/invalid: "
+            + (", ".join(missing) if missing else "unknown")
+            + "."
         )
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
     st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
 
-    # Clear text field on the NEXT run if flagged
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
@@ -1003,16 +995,14 @@ with tabs[0]:
             accept_multiple_files=False
         )
 
-        # Buttons row
         bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
             submitted = st.form_submit_button("Analyze")
         with bcol2:
             new_analysis = st.form_submit_button("New Analysis")
 
-    # Handle "New Analysis" first (clears inputs + last report)
     if 'new_analysis' in locals() and new_analysis:
-        _safe_clear_textbox("user_input_box")
+        st.session_state["user_input_box"] = ""
         st.session_state["last_reply"] = ""
         st.session_state["_clear_text_box"] = True
         _safe_rerun()
@@ -1028,10 +1018,8 @@ with tabs[0]:
 
         user_text = st.session_state.get("user_input_box", "").strip()
         extracted = ""
-        try:
-            prog.progress(10)
-        except Exception:
-            pass
+        try: prog.progress(10)
+        except Exception: pass
 
         if doc is not None:
             size_mb = doc.size / (1024 * 1024)
@@ -1042,30 +1030,24 @@ with tabs[0]:
                     def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
                         if ext == "pdf":
-                            if PdfReader is None:
-                                return ""
+                            if PdfReader is None: return ""
                             reader = PdfReader(io.BytesIO(file_bytes))
                             parts = []
                             for page in reader.pages:
-                                try:
-                                    parts.append(page.extract_text() or "")
-                                except Exception:
-                                    continue
+                                try: parts.append(page.extract_text() or "")
+                                except Exception: continue
                             return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
                         elif ext == "docx":
-                            if docx is None:
-                                return ""
+                            if docx is None: return ""
                             buf = io.BytesIO(file_bytes)
                             doc_obj = docx.Document(buf)
                             text = "\n".join(p.text for p in doc_obj.paragraphs)
                             return text[:MAX_EXTRACT_CHARS]
-                        elif ext in ("txt", "md", "csv"):
+                        elif ext in ("txt","md","csv"):
                             def _safe_decode(b: bytes) -> str:
-                                for enc in ("utf-8", "utf-16", "latin-1"):
-                                    try:
-                                        return b.decode(enc)
-                                    except Exception:
-                                        continue
+                                for enc in ("utf-8","utf-16","latin-1"):
+                                    try: return b.decode(enc)
+                                    except Exception: continue
                                 return b.decode("utf-8", errors="ignore")
                             return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
                         return ""
@@ -1086,16 +1068,12 @@ with tabs[0]:
         user_instruction = _build_user_instruction(final_input)
 
         try:
-            try:
-                prog.progress(40, text="Contacting model…")
-            except Exception:
-                prog.progress(40)
+            try: prog.progress(40, text="Contacting model…")
+            except Exception: prog.progress(40)
 
             client = OpenAI(api_key=api_key)
-
             resp = client.chat.completions.create(
-                model=MODEL,
-                temperature=ANALYSIS_TEMPERATURE,
+                model=MODEL, temperature=ANALYSIS_TEMPERATURE,
                 messages=[
                     {"role": "system", "content": IDENTITY_PROMPT},
                     {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
@@ -1124,10 +1102,8 @@ with tabs[0]:
                 if _looks_strict(fixed):
                     model_reply = fixed
 
-            try:
-                prog.progress(85, text="Formatting report…")
-            except Exception:
-                prog.progress(85)
+            try: prog.progress(85, text="Formatting report…")
+            except Exception: prog.progress(85)
         except Exception as e:
             log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
             st.error("Could not contact the language model. Check API key/model."); st.stop()
@@ -1138,16 +1114,12 @@ with tabs[0]:
 
         st.session_state["history"].append({"role":"assistant","content":decorated_reply})
         st.session_state["last_reply"] = decorated_reply
-        try:
-            log_analysis(public_report_id, internal_report_id, decorated_reply)
-        except Exception:
-            pass
+        try: log_analysis(public_report_id, internal_report_id, decorated_reply)
+        except Exception: pass
 
         st.session_state["_clear_text_box"] = True
-        try:
-            prog.progress(100, text="Done ✓")
-        except Exception:
-            prog.progress(100)
+        try: prog.progress(100, text="Done ✓")
+        except Exception: prog.progress(100)
         _safe_rerun()
 
     # Show latest report (if any)
@@ -1175,7 +1147,7 @@ with tabs[0]:
             story.append(Paragraph(f"<i>Generated {ts}</i>", base))
             story.append(Spacer(1, 10))
             for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
-                safe = p.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                safe = p.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
                 story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
             def _header_footer(canvas, doc_):
                 canvas.saveState()
@@ -1269,8 +1241,9 @@ with tabs[1]:
         except Exception:
             pass
         # Email
-        if not _email_is_configured():
-            st.warning("Feedback saved locally; email delivery is not configured.")
+        fb_cfg = _effective_mail_cfg("feedback")
+        if not _email_is_configured("feedback"):
+            st.warning("Feedback saved locally; email delivery is not configured for Feedback.")
         else:
             try:
                 conv_preview = transcript[:2000]
@@ -1291,15 +1264,15 @@ with tabs[1]:
                     f"<hr><p><strong>IP:</strong> streamlit<br><strong>User-Agent:</strong> streamlit</p>"
                 )
                 payload = {
-                    "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
-                    "from": {"email": SENDGRID_FROM, "name": "Veritas"},
-                    "subject": SENDGRID_SUBJECT or "New Veritas feedback",
+                    "personalizations": [{"to": [{"email": fb_cfg["to"]}]}],
+                    "from": {"email": fb_cfg["from"], "name": "Veritas"},
+                    "subject": fb_cfg["subject"] or "New Veritas Feedback",
                     "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
                 }
                 with httpx.Client(timeout=12) as client:
                     r = client.post(
                         "https://api.sendgrid.com/v3/mail/send",
-                        headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
+                        headers={"Authorization": f"Bearer {fb_cfg['api_key']}", "Content-Type": "application/json"},
                         json=payload,
                     )
                 if r.status_code not in (200, 202):
@@ -1312,7 +1285,7 @@ with tabs[1]:
 # -------------------- Support Tab --------------------
 with tabs[2]:
     st.write("### Support")
-    _email_status("support tickets")
+    _email_status("support")
 
     with st.form("support_form"):
         full_name = st.text_input("Full name")
@@ -1353,9 +1326,11 @@ with tabs[2]:
                              (ts, ticket_id, full_name.strip(), email_sup.strip(), bias_report_id.strip(), issue_text.strip(), sid, login_id, ua))
                 except Exception:
                     pass
-                if _email_is_configured():
+
+                sup_cfg = _effective_mail_cfg("support")
+                if _email_is_configured("support"):
                     try:
-                        subject = f"[Veritas Support] Ticket {ticket_id}"
+                        subject = sup_cfg["subject"] or f"[Veritas Support] Ticket {ticket_id}"
                         plain = (
                             f"New Support Ticket\n"
                             f"Ticket ID: {ticket_id}\n"
@@ -1375,21 +1350,23 @@ with tabs[2]:
                             f"<hr><p><strong>Session:</strong> {sid}<br><strong>Login:</strong> {login_id}</p>"
                         )
                         payload = {
-                            "personalizations": [{"to": [{"email": SENDGRID_TO}]}],
-                            "from": {"email": SENDGRID_FROM, "name": "Veritas"},
+                            "personalizations": [{"to": [{"email": sup_cfg["to"]}]}],
+                            "from": {"email": sup_cfg["from"], "name": "Veritas"},
                             "subject": subject,
                             "content": [{"type": "text/plain", "value": plain}, {"type": "text/html", "value": html_body}],
                         }
                         with httpx.Client(timeout=12) as client:
-                            r = client.post("https://api.sendgrid.com/v3/mail/send",
-                                            headers={"Authorization": f"Bearer {SENDGRID_API_KEY}", "Content-Type": "application/json"},
-                                            json=payload)
+                            r = client.post(
+                                "https://api.sendgrid.com/v3/mail/send",
+                                headers={"Authorization": f"Bearer {sup_cfg['api_key']}", "Content-Type": "application/json"},
+                                json=payload
+                            )
                         if r.status_code not in (200, 202):
                             st.warning("Ticket saved; email notification failed.")
                     except Exception:
                         st.warning("Ticket saved; email notification failed.")
                 else:
-                    st.warning("Ticket saved locally; email delivery is not configured.")
+                    st.warning("Ticket saved locally; email delivery is not configured for Support.")
 
                 st.success(f"Thanks! Your support ticket has been submitted. **Ticket ID: {ticket_id}**")
                 _safe_rerun()
@@ -1580,7 +1557,7 @@ if ADMIN_PASSWORD:
                     else:
                         st.error("Confirmation failed. Type PURGE to proceed.")
 
-            # ---- Branding (Background uploader)
+            # ---- Branding
             with sub4:
                 st.write("#### Branding: Background Image")
                 current_bg = _find_local_bg_file()
@@ -1629,5 +1606,3 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
-
