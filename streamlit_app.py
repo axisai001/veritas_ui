@@ -1,5 +1,5 @@
 # streamlit_app.py — Veritas (Streamlit)
-# Tabs: Analyze, Feedback, Support, Help, (Admin if ADMIN_PASSWORD set)
+# Tabs: Analyze, Feedback, Support, Help, (Admin only if authenticated as admin)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
 # Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
 # and robust background image support (local static file OR external URL).
@@ -9,6 +9,11 @@
 # - If ALL required override fields for a channel are present AND valid, globals are ignored.
 # - If any override fields are missing, we gracefully fall back to global SENDGRID_* for just those fields.
 # - Status banner reflects actual effective config per tab.
+#
+# New (auth flow):
+# - Pre-login screen lets user choose "User" or "Admin" sign-in.
+# - Admin tab only appears when authenticated as admin.
+# - No admin login UI after login for regular users.
 
 import os
 import io
@@ -579,6 +584,7 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
                       f"limit={limit}/{window_sec}s", _get_sid(), st.session_state.get("login_id",""), "streamlit", "streamlit"))
         except Exception:
             pass
+    # The call should still be blocked when exceeding limit
         return False
     dq.append(now)
     return True
@@ -820,6 +826,8 @@ st.session_state.setdefault("is_admin", False)
 st.session_state.setdefault("ack_ok", False)
 # NEW: counter to force-reset the file_uploader on “New Analysis”
 st.session_state.setdefault("doc_uploader_key", 0)
+# NEW: store which login view is selected on pre-login screen
+st.session_state.setdefault("auth_view", "user")  # 'user' or 'admin'
 
 # Pilot countdown gate
 if not pilot_started():
@@ -847,12 +855,32 @@ def _note_failed_login(attempted_secret: str = ""):
         st.session_state["_locked_until"] = now + LOCKOUT_DURATION_SEC
         log_auth_event("login_lockout", False, login_id=(st.session_state.get("login_id","") or ""), credential_label="APP_PASSWORD")
 
+# ====== Pre-login screen (User vs Admin) ======
 def show_login():
-    with st.form("login_form"):
-        st.subheader("Login")
-        login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
-        pwd = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Enter")
+    st.subheader("Sign In")
+
+    # Choose which login you want to perform.
+    auth_choice = st.radio(
+        "Sign in as",
+        options=["User", "Admin"],
+        index=(0 if st.session_state.get("auth_view", "user") == "user" else 1),
+        horizontal=True
+    )
+    st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
+
+    if st.session_state["auth_view"] == "user":
+        # ---- Normal User Login ----
+        with st.form("login_form_user"):
+            login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
+            pwd = st.text_input("Password", type="password")
+            c1, c2 = st.columns(2)
+            with c1:
+                submit = st.form_submit_button("Enter")
+            with c2:
+                cancel = st.form_submit_button("Cancel")
+        if cancel:
+            st.stop()
+
         if submit:
             if _is_locked():
                 remaining = int(st.session_state["_locked_until"] - time.time())
@@ -863,15 +891,59 @@ def show_login():
                 st.error("network error"); st.stop()
             if pwd == APP_PASSWORD:
                 st.session_state["authed"] = True
+                st.session_state["is_admin"] = False  # regular user
                 st.session_state["login_id"] = (login_id or "").strip()
                 st.session_state["_fail_times"].clear()
                 st.session_state["_locked_until"] = 0.0
                 log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
-                st.success("Logged in."); _safe_rerun()
+                st.success("Logged in.")
+                _safe_rerun()
             else:
                 _note_failed_login(attempted_secret=pwd)
                 st.error("Incorrect password")
 
+    else:
+        # ---- Admin Login (separate) ----
+        if not ADMIN_PASSWORD:
+            st.warning("Admin access is not configured on this instance.")
+            st.stop()
+
+        with st.form("login_form_admin"):
+            admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
+            admin_pwd = st.text_input("Admin Password", type="password")
+            c1, c2 = st.columns(2)
+            with c1:
+                submit_admin = st.form_submit_button("Admin Enter")
+            with c2:
+                cancel_admin = st.form_submit_button("Cancel")
+        if cancel_admin:
+            st.session_state["auth_view"] = "user"
+            _safe_rerun()
+
+        if submit_admin:
+            if _is_locked():
+                remaining = int(st.session_state["_locked_until"] - time.time())
+                mins = max(0, remaining // 60); secs = max(0, remaining % 60)
+                st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
+                st.stop()
+            if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
+                st.error("network error"); st.stop()
+
+            # Validate admin credentials (optional email allow-list)
+            if (not ADMIN_EMAIL_ALLOWED or (admin_email.strip().lower() == ADMIN_EMAIL_ALLOWED.lower())) and (admin_pwd == ADMIN_PASSWORD):
+                st.session_state["authed"] = True
+                st.session_state["is_admin"] = True
+                st.session_state["login_id"] = admin_email.strip()
+                st.session_state["_fail_times"].clear()
+                st.session_state["_locked_until"] = 0.0
+                log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="ADMIN_PASSWORD")
+                st.success("Admin access granted.")
+                _safe_rerun()
+            else:
+                _note_failed_login(attempted_secret=admin_pwd)
+                st.error("Invalid admin credentials.")
+
+# Require login if password is set; else auto-enter as user
 if not st.session_state["authed"] and APP_PASSWORD:
     show_login(); st.stop()
 elif not APP_PASSWORD:
@@ -880,13 +952,15 @@ elif not APP_PASSWORD:
         st.session_state["login_id"] = ""
     log_auth_event("login_success", True, login_id="", credential_label="NO_PASSWORD")
     st.session_state["authed"] = True
+    # remains non-admin unless separately logged in via admin view (not shown when APP_PASSWORD is empty)
 
 # ====== Sidebar ======
 with st.sidebar:
     st.markdown(f"<h2 style='margin:.25rem 0 .75rem 0;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box","_fail_times","_locked_until","show_support","is_admin","ack_ok"):
+        for k in ("authed","history","last_reply","login_id","user_input_box","_clear_text_box",
+                  "_fail_times","_locked_until","show_support","is_admin","ack_ok","auth_view"):
             st.session_state.pop(k, None)
         _safe_rerun()
 
@@ -944,7 +1018,8 @@ require_acknowledgment()
 
 # ================= Tabs =================
 tab_names = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
-if ADMIN_PASSWORD:
+# Only reveal Admin tab if authenticated as admin
+if st.session_state.get("is_admin", False):
     tab_names.append("🛡️ Admin")
 tabs = st.tabs(tab_names)
 
@@ -1364,228 +1439,210 @@ with tabs[3]:
         """
     )
 
-# -------------------- Admin Tab (conditional) --------------------
-if ADMIN_PASSWORD:
-    with tabs[4]:
+# -------------------- Admin Tab (only for authenticated admins) --------------------
+if st.session_state.get("is_admin", False):
+    with tabs[-1]:
         st.write("### Admin")
 
-        if not st.session_state.get("is_admin", False):
-            with st.form("admin_login_form", clear_on_submit=False):
-                admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
-                admin_pwd = st.text_input("Admin Password", type="password")
-                submit_admin = st.form_submit_button("Login")
-            if submit_admin:
-                if not admin_email.strip():
-                    st.error("Please enter your admin email.")
-                elif ADMIN_EMAIL_ALLOWED and admin_email.strip().lower() != ADMIN_EMAIL_ALLOWED.lower():
-                    st.error("This email is not authorized for admin access.")
-                elif admin_pwd != ADMIN_PASSWORD:
-                    st.error("Incorrect admin password.")
-                else:
-                    st.session_state["is_admin"] = True
-                    st.success("Admin access granted."); _safe_rerun()
-            st.stop()
-        else:
-            if st.button("Exit Admin"):
-                st.session_state["is_admin"] = False
-                _safe_rerun()
+        if st.button("Exit Admin"):
+            st.session_state["is_admin"] = False
+            _safe_rerun()
 
-            sub1, sub2, sub3, sub4 = st.tabs(["🕘 History", "📂 Data Explorer", "🧹 Maintenance", "🎨 Branding"])
+        sub1, sub2, sub3, sub4 = st.tabs(["🕘 History", "📂 Data Explorer", "🧹 Maintenance", "🎨 Branding"])
 
-            # ---- History
-            with sub1:
-                st.write("#### Previous Reports")
-                q = st.text_input("Search by Report ID or text (local DB)", placeholder="e.g., VER-2025… or a phrase…")
-                try:
-                    con = sqlite3.connect(DB_PATH)
-                    df = pd.read_sql_query("SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json FROM analyses ORDER BY id DESC LIMIT 1000", con)
-                    con.close()
-                except Exception:
-                    df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
-                if not df.empty:
-                    def extract_preview(js: str) -> str:
+        # ---- History
+        with sub1:
+            st.write("#### Previous Reports")
+            q = st.text_input("Search by Report ID or text (local DB)", placeholder="e.g., VER-2025… or a phrase…")
+            try:
+                con = sqlite3.connect(DB_PATH)
+                df = pd.read_sql_query("SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json FROM analyses ORDER BY id DESC LIMIT 1000", con)
+                con.close()
+            except Exception:
+                df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
+            if not df.empty:
+                def extract_preview(js: str) -> str:
+                    try:
+                        return json.loads(js).get("assistant_reply","")[:220]
+                    except Exception:
+                        return ""
+                df["preview"] = df["conversation_json"].apply(extract_preview)
+                if q.strip():
+                    ql = q.lower()
+                    df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1)]
+                st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
+                sel = st.text_input("Load a report back into the viewer by Report ID (optional)")
+                if st.button("Load Report"):
+                    row = df[df["public_report_id"] == sel]
+                    if len(row) == 1:
                         try:
-                            return json.loads(js).get("assistant_reply","")[:220]
+                            txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
+                            st.session_state["last_reply"] = txt
+                            st.success("Loaded into Analyze tab.")
                         except Exception:
-                            return ""
-                    df["preview"] = df["conversation_json"].apply(extract_preview)
-                    if q.strip():
-                        ql = q.lower()
-                        df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1)]
-                    st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
-                    sel = st.text_input("Load a report back into the viewer by Report ID (optional)")
-                    if st.button("Load Report"):
-                        row = df[df["public_report_id"] == sel]
-                        if len(row) == 1:
-                            try:
-                                txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
-                                st.session_state["last_reply"] = txt
-                                st.success("Loaded into Analyze tab.")
-                            except Exception:
-                                st.error("Could not load that report.")
-                        else:
-                            st.warning("Report ID not found in the current list.")
-                else:
-                    st.info("No reports yet.")
-
-            # ---- Data Explorer
-            with sub2:
-                st.write("#### Data Explorer")
-                st.caption("Browse app data stored on this instance. Use the download buttons for backups.")
-
-                def _read_csv_safe(path: str) -> pd.DataFrame:
-                    try:
-                        return pd.read_csv(path)
-                    except Exception:
-                        return pd.DataFrame()
-
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.write("##### Auth Events")
-                    st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
-                    try:
-                        st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
-                    except Exception:
-                        pass
-
-                    st.write("##### Errors")
-                    st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
-                    try:
-                        st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
-                    except Exception:
-                        pass
-
-                    st.write("##### Acknowledgments")
-                    st.dataframe(_read_csv_safe(ACK_CSV), use_container_width=True)
-                    try:
-                        st.download_button("Download ack_events.csv", data=open(ACK_CSV, "rb").read(), file_name="ack_events.csv", mime="text/csv")
-                    except Exception:
-                        pass
-                with c2:
-                    st.write("##### Analyses")
-                    st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
-                    try:
-                        st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
-                    except Exception:
-                        pass
-
-                    st.write("##### Feedback")
-                    st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
-                    try:
-                        st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
-                    except Exception:
-                        pass
-
-                    st.write("##### Support Tickets")
-                    st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
-                    try:
-                        st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
-                    except Exception:
-                        pass
-
-            # ---- Maintenance
-            with sub3:
-                st.write("#### Prune & Wipe Data")
-                st.caption("Prune removes rows older than the TTL. Wipe deletes ALL rows in a dataset. Use with care.")
-
-                st.write("**Prune by TTL (days)**")
-                cpa, cpb, cpc = st.columns(3)
-                with cpa:
-                    ttl_auth = st.number_input("Auth Events TTL",   min_value=0, value=max(0, AUTH_LOG_TTL_DAYS),     step=1)
-                    ttl_err  = st.number_input("Errors TTL",        min_value=0, value=max(0, ERRORS_LOG_TTL_DAYS),  step=1)
-                    ttl_ack  = st.number_input("Ack Events TTL",    min_value=0, value=max(0, ACK_TTL_DAYS),         step=1)
-                with cpb:
-                    ttl_ana  = st.number_input("Analyses TTL",      min_value=0, value=max(0, ANALYSES_LOG_TTL_DAYS),step=1)
-                    ttl_fb   = st.number_input("Feedback TTL",      min_value=0, value=max(0, FEEDBACK_LOG_TTL_DAYS),step=1)
-                    ttl_sup  = st.number_input("Support TTL",       min_value=0, value=max(0, SUPPORT_LOG_TTL_DAYS), step=1)
-                with cpc:
-                    st.markdown("&nbsp;")
-                    if st.button("Run Prune Now (CSV + DB)"):
-                        _prune_csv_by_ttl(AUTH_CSV, ttl_auth);    _prune_db_by_ttl("auth_events", "timestamp_utc", ttl_auth)
-                        _prune_csv_by_ttl(ERRORS_CSV, ttl_err);   _prune_db_by_ttl("errors", "timestamp_utc", ttl_err)
-                        _prune_csv_by_ttl(ACK_CSV, ttl_ack);      _prune_db_by_ttl("ack_events", "timestamp_utc", ttl_ack)
-                        _prune_csv_by_ttl(ANALYSES_CSV, ttl_ana); _prune_db_by_ttl("analyses", "timestamp_utc", ttl_ana)
-                        _prune_csv_by_ttl(FEEDBACK_CSV, ttl_fb);  _prune_db_by_ttl("feedback", "timestamp_utc", ttl_fb)
-                        _prune_csv_by_ttl(SUPPORT_CSV, ttl_sup);  _prune_db_by_ttl("support_tickets", "timestamp_utc", ttl_sup)
-                        st.success("Prune complete.")
-
-                st.write("---")
-                st.write("**Wipe Dataset (dangerous)**")
-                target = st.selectbox("Choose dataset to wipe", [
-                    "auth_events", "errors", "ack_events", "analyses", "feedback", "support_tickets"
-                ])
-                confirm = st.text_input("Type PURGE to confirm")
-                if st.button("Wipe Selected Dataset"):
-                    if confirm.strip().upper() == "PURGE":
-                        _wipe_db_table(target)
-                        csv_map = {
-                            "auth_events": AUTH_CSV, "errors": ERRORS_CSV, "ack_events": ACK_CSV,
-                            "analyses": ANALYSES_CSV, "feedback": FEEDBACK_CSV, "support_tickets": SUPPORT_CSV
-                        }
-                        path = csv_map.get(target)
-                        if path and os.path.exists(path):
-                            hdr = []
-                            try:
-                                with open(path, "r", encoding="utf-8", newline="") as f:
-                                    rdr = csv.reader(f); hdr = next(rdr, [])
-                            except Exception:
-                                pass
-                            with open(path, "w", encoding="utf-8", newline="") as f:
-                                if hdr:
-                                    csv.writer(f).writerow(hdr)
-                        st.success(f"Wiped: {target}")
+                            st.error("Could not load that report.")
                     else:
-                        st.error("Confirmation failed. Type PURGE to proceed.")
+                        st.warning("Report ID not found in the current list.")
+            else:
+                st.info("No reports yet.")
 
-            # ---- Branding
-            with sub4:
-                st.write("#### Branding: Background Image")
-                current_bg = _find_local_bg_file()
-                if current_bg:
-                    st.success(f"Current local background: `{current_bg.name}` in `/static`.")
-                elif BG_URL:
-                    st.info(f"Using BG_URL: {BG_URL}")
+        # ---- Data Explorer
+        with sub2:
+            st.write("#### Data Explorer")
+            st.caption("Browse app data stored on this instance. Use the download buttons for backups.")
+
+            def _read_csv_safe(path: str) -> pd.DataFrame:
+                try:
+                    return pd.read_csv(path)
+                except Exception:
+                    return pd.DataFrame()
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.write("##### Auth Events")
+                st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
+                except Exception:
+                    pass
+
+                st.write("##### Errors")
+                st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
+                except Exception:
+                    pass
+
+                st.write("##### Acknowledgments")
+                st.dataframe(_read_csv_safe(ACK_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download ack_events.csv", data=open(ACK_CSV, "rb").read(), file_name="ack_events.csv", mime="text/csv")
+                except Exception:
+                    pass
+            with c2:
+                st.write("##### Analyses")
+                st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
+                except Exception:
+                    pass
+
+                st.write("##### Feedback")
+                st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
+                except Exception:
+                    pass
+
+                st.write("##### Support Tickets")
+                st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
+                try:
+                    st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
+                except Exception:
+                    pass
+
+        # ---- Maintenance
+        with sub3:
+            st.write("#### Prune & Wipe Data")
+            st.caption("Prune removes rows older than the TTL. Wipe deletes ALL rows in a dataset. Use with care.")
+
+            st.write("**Prune by TTL (days)**")
+            cpa, cpb, cpc = st.columns(3)
+            with cpa:
+                ttl_auth = st.number_input("Auth Events TTL",   min_value=0, value=max(0, AUTH_LOG_TTL_DAYS),     step=1)
+                ttl_err  = st.number_input("Errors TTL",        min_value=0, value=max(0, ERRORS_LOG_TTL_DAYS),  step=1)
+                ttl_ack  = st.number_input("Ack Events TTL",    min_value=0, value=max(0, ACK_TTL_DAYS),         step=1)
+            with cpb:
+                ttl_ana  = st.number_input("Analyses TTL",      min_value=0, value=max(0, ANALYSES_LOG_TTL_DAYS),step=1)
+                ttl_fb   = st.number_input("Feedback TTL",      min_value=0, value=max(0, FEEDBACK_LOG_TTL_DAYS),step=1)
+                ttl_sup  = st.number_input("Support TTL",       min_value=0, value=max(0, SUPPORT_LOG_TTL_DAYS), step=1)
+            with cpc:
+                st.markdown("&nbsp;")
+                if st.button("Run Prune Now (CSV + DB)"):
+                    _prune_csv_by_ttl(AUTH_CSV, ttl_auth);    _prune_db_by_ttl("auth_events", "timestamp_utc", ttl_auth)
+                    _prune_csv_by_ttl(ERRORS_CSV, ttl_err);   _prune_db_by_ttl("errors", "timestamp_utc", ttl_err)
+                    _prune_csv_by_ttl(ACK_CSV, ttl_ack);      _prune_db_by_ttl("ack_events", "timestamp_utc", ttl_ack)
+                    _prune_csv_by_ttl(ANALYSES_CSV, ttl_ana); _prune_db_by_ttl("analyses", "timestamp_utc", ttl_ana)
+                    _prune_csv_by_ttl(FEEDBACK_CSV, ttl_fb);  _prune_db_by_ttl("feedback", "timestamp_utc", ttl_fb)
+                    _prune_csv_by_ttl(SUPPORT_CSV, ttl_sup);  _prune_db_by_ttl("support_tickets", "timestamp_utc", ttl_sup)
+                    st.success("Prune complete.")
+
+            st.write("---")
+            st.write("**Wipe Dataset (dangerous)**")
+            target = st.selectbox("Choose dataset to wipe", [
+                "auth_events", "errors", "ack_events", "analyses", "feedback", "support_tickets"
+            ])
+            confirm = st.text_input("Type PURGE to confirm")
+            if st.button("Wipe Selected Dataset"):
+                if confirm.strip().upper() == "PURGE":
+                    _wipe_db_table(target)
+                    csv_map = {
+                        "auth_events": AUTH_CSV, "errors": ERRORS_CSV, "ack_events": ACK_CSV,
+                        "analyses": ANALYSES_CSV, "feedback": FEEDBACK_CSV, "support_tickets": SUPPORT_CSV
+                    }
+                    path = csv_map.get(target)
+                    if path and os.path.exists(path):
+                        hdr = []
+                        try:
+                            with open(path, "r", encoding="utf-8", newline="") as f:
+                                rdr = csv.reader(f); hdr = next(rdr, [])
+                        except Exception:
+                            pass
+                        with open(path, "w", encoding="utf-8", newline="") as f:
+                            if hdr:
+                                csv.writer(f).writerow(hdr)
+                    st.success(f"Wiped: {target}")
                 else:
-                    st.warning("No background set. Add one below or configure BG_URL in secrets.")
+                    st.error("Confirmation failed. Type PURGE to proceed.")
 
-                up = st.file_uploader("Upload a background (SVG/PNG/JPG/WEBP)", type=list(BG_ALLOWED_EXTENSIONS))
-                c1, c2 = st.columns(2)
-                with c1:
-                    if st.button("Save Background"):
-                        if up is None:
-                            st.error("Choose a file first.")
+        # ---- Branding
+        with sub4:
+            st.write("#### Branding: Background Image")
+            current_bg = _find_local_bg_file()
+            if current_bg:
+                st.success(f"Current local background: `{current_bg.name}` in `/static`.")
+            elif BG_URL:
+                st.info(f"Using BG_URL: {BG_URL}")
+            else:
+                st.warning("No background set. Add one below or configure BG_URL in secrets.")
+
+            up = st.file_uploader("Upload a background (SVG/PNG/JPG/WEBP)", type=list(BG_ALLOWED_EXTENSIONS))
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Save Background"):
+                    if up is None:
+                        st.error("Choose a file first.")
+                    else:
+                        ext = up.name.rsplit(".", 1)[-1].lower() if "." in up.name else ""
+                        if ext not in BG_ALLOWED_EXTENSIONS:
+                            st.error("Unsupported file type.")
                         else:
-                            ext = up.name.rsplit(".", 1)[-1].lower() if "." in up.name else ""
-                            if ext not in BG_ALLOWED_EXTENSIONS:
-                                st.error("Unsupported file type.")
-                            else:
-                                for p in Path(STATIC_DIR).glob("bg.*"):
-                                    try: p.unlink()
-                                    except Exception: pass
-                                out = Path(STATIC_DIR) / f"bg.{ext}"
-                                out.write_bytes(up.getvalue())
-                                st.success(f"Saved background to `static/{out.name}`.")
-                                _safe_rerun()
-                with c2:
-                    if st.button("Remove Background"):
-                        removed = False
-                        for p in Path(STATIC_DIR).glob("bg.*"):
-                            try:
-                                p.unlink(); removed = True
-                            except Exception:
-                                pass
-                        if removed:
-                            st.success("Background removed.")
+                            for p in Path(STATIC_DIR).glob("bg.*"):
+                                try: p.unlink()
+                                except Exception: pass
+                            out = Path(STATIC_DIR) / f"bg.{ext}"
+                            out.write_bytes(up.getvalue())
+                            st.success(f"Saved background to `static/{out.name}`.")
                             _safe_rerun()
-                        else:
-                            st.info("No local background to remove.")
-                st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
+            with c2:
+                if st.button("Remove Background"):
+                    removed = False
+                    for p in Path(STATIC_DIR).glob("bg.*"):
+                        try:
+                            p.unlink(); removed = True
+                        except Exception:
+                            pass
+                    if removed:
+                        st.success("Background removed.")
+                        _safe_rerun()
+                    else:
+                        st.info("No local background to remove.")
+            st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
 
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
 
 
