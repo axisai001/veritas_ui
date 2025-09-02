@@ -873,13 +873,7 @@ def show_login():
         with st.form("login_form_user"):
             login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
             pwd = st.text_input("Password", type="password")
-            c1, c2 = st.columns(2)
-            with c1:
-                submit = st.form_submit_button("Enter")
-            with c2:
-                cancel = st.form_submit_button("Cancel")
-        if cancel:
-            st.stop()
+            submit = st.form_submit_button("Enter")
 
         if submit:
             if _is_locked():
@@ -911,14 +905,7 @@ def show_login():
         with st.form("login_form_admin"):
             admin_email = st.text_input("Admin Email", value=os.environ.get("ADMIN_PREFILL_EMAIL", ""))
             admin_pwd = st.text_input("Admin Password", type="password")
-            c1, c2 = st.columns(2)
-            with c1:
-                submit_admin = st.form_submit_button("Admin Enter")
-            with c2:
-                cancel_admin = st.form_submit_button("Cancel")
-        if cancel_admin:
-            st.session_state["auth_view"] = "user"
-            _safe_rerun()
+            submit_admin = st.form_submit_button("Admin Enter")
 
         if submit_admin:
             if _is_locked():
@@ -1644,3 +1631,4 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
