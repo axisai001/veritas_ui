@@ -921,7 +921,7 @@ DEFAULT_SYSTEM_PROMPT = """
 # ===== Strict output template & helpers =====
 STRICT_OUTPUT_TEMPLATE = """
 1. Bias Detected: <Yes/No>
-2. Bias Score: <Emoji + label> | Score: <0.00–1.00 with two decimals>
+"2. Bias Score: <Emoji + label> | Score: <0.00–1.00 with two decimals>"
 3. Type(s) of Bias:
 - <type 1>
 - <type 2>
@@ -3303,6 +3303,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
