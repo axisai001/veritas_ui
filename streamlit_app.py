@@ -935,7 +935,9 @@ bias_template = """
 - "<phrase>" → <bias type> — <why>
 """
 7. Contextual Definitions:
+bias_template = """
 - <term> — Contextual: <meaning in passage> | General: <neutral definition>
+"""
 8. Framework Awareness Note:
 - <note or “None”>
 9. Suggested Revisions:
@@ -3305,6 +3307,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
