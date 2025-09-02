@@ -868,7 +868,6 @@ def show_login():
         label_visibility="collapsed"
     )
 
-    )
     st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
     if st.session_state["auth_view"] == "user":
@@ -1634,5 +1633,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
