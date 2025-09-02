@@ -931,7 +931,9 @@ STRICT_OUTPUT_TEMPLATE = """
 5. Bias Summary:
 "<exactly 2–4 sentences>"
 6. Explanation:
+bias_template = """
 - "<phrase>" → <bias type> — <why>
+"""
 7. Contextual Definitions:
 - <term> — Contextual: <meaning in passage> | General: <neutral definition>
 8. Framework Awareness Note:
@@ -3303,6 +3305,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
