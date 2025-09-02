@@ -929,7 +929,7 @@ STRICT_OUTPUT_TEMPLATE = """
 - "<exact quote 1>"
 - "<exact quote 2>"
 5. Bias Summary:
-<exactly 2–4 sentences>
+"<exactly 2–4 sentences>"
 6. Explanation:
 - "<phrase>" → <bias type> — <why>
 7. Contextual Definitions:
@@ -3303,6 +3303,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
