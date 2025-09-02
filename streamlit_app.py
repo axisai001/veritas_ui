@@ -690,7 +690,7 @@ def _overrides_are_complete_and_valid(ov: Dict[str, str], default_subject: str) 
 
 def _effective_mail_cfg(channel: str) -> Dict[str, str]:
     """
-    If channel overrides are present AND valid (key/from/to), return ONLY overrides (subject fallback allowed).
+    # If channel overrides are present AND valid (key/from/to), return ONLY overrides (subject fallback allowed).
     Otherwise, construct a mixed config that uses any provided overrides and falls back to globals per field.
     """
     ch = channel.strip().lower()
@@ -3299,6 +3299,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
