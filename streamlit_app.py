@@ -882,20 +882,21 @@ button[kind="primary"], button[kind="secondary"],
   background: rgba(0,0,0,0.75); color: #fff; padding: 6px 8px; }}
   
   /* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
-.stApp [data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
-.stApp [data-testid="stToolbar"] * { display: none !important; }
+.stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
+.stApp [data-testid="stToolbar"] * {{ display: none !important; }}
 
 /* Legacy/aux hooks Streamlit sometimes uses */
-#MainMenu { visibility: hidden !important; }
-footer { visibility: hidden !important; }
-a.viewerBadge_link__1S137 { display: none !important; }
-.stDeployButton, [data-testid="stDeployButton"] { display: none !important; }
+#MainMenu {{ visibility: hidden !important; }}
+footer {{ visibility: hidden !important; }}
+a.viewerBadge_link__1S137 {{ display: none !important; }}
+.stDeployButton, [data-testid="stDeployButton"] {{ display: none !important; }}
 
 /* Hide any “View source on GitHub” style header buttons if present */
 header [data-testid="baseButton-headerNoPadding"],
-header a[href*="github.com"] {
+header a[href*="github.com"] {{
   display: none !important;
-}
+}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -1778,6 +1779,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
