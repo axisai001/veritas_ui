@@ -692,7 +692,7 @@ def _effective_mail_cfg(channel: str) -> Dict[str, str]:
     """
 # Otherwise, construct a mixed config that uses any provided overrides
 # and falls back to globals per field.
-    bias_template = """
+bias_template = """
 1. Bias Detected: (Yes / No)
 2. Bias Score: <Emoji + label> | Score: <0.00-1.00 with two decimals>
 3. Types of Bias Detected: <list>
@@ -3317,6 +3317,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
