@@ -1002,8 +1002,9 @@ def require_acknowledgment():
 
     st.stop()
 
-# Require acknowledgment after login
-require_acknowledgment()
+# Require acknowledgment after login — skip for admin sessions
+if not st.session_state.get("is_admin", False):
+    require_acknowledgment()
 
 # ================= Tabs =================
 tab_names = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
