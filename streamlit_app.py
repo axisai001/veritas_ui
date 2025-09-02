@@ -461,7 +461,7 @@ any accompanying charts, graphs, or images — to identify elements that may be 
 biased, or create barriers for individuals from underrepresented or marginalized groups.​
 In addition, provide contextual definitions and framework awareness to improve user literacy 
 and reduce false positives. 
- 
+  
 Bias Categories (with academic context) 
 ∙Gendered language: Words or phrases that assume or privilege a specific gender identity 
 (e.g., “chairman,” “he”). 
@@ -483,8 +483,8 @@ barriers.
 domestic situations, financial status, or schedule flexibility. 
 ∙Visual bias: Charts/graphs or imagery that lack representation, use inaccessible colors, or 
 reinforce stereotypes. 
- 
- 
+  
+  
 Bias Detection Rules 
 1.Context Check for Legal/Program/Framework Names​ 
 Do not flag factual names of laws, programs, religious texts, or courses (e.g., “Title IX,” 
@@ -537,7 +537,7 @@ Score: 0.00
 ⚠️ Biased → “The state budget wisely prohibits unnecessary DEI 
 initiatives, ensuring resources are not wasted.” → Bias Detected | Score > 
 0.00 
- 
+  
 Severity Score Mapping (Fixed) 
 Bias Detection Logic 
 ∙If no bias is present: 
@@ -555,7 +555,7 @@ Strict Thresholds — No Exceptions
 ∙🔴 High Bias → 0.70 – 1.00 
 ∙If Bias Detected = No → Score must = 0.00. 
 ∙If Score > 0.00 → Bias Detected must = Yes. 
- 
+  
 AXIS-AI Bias Evaluation Reference 
 ∙Low Bias (0.01–0.35): Neutral, inclusive language; bias rare, subtle, or contextually 
 justified. 
@@ -563,7 +563,7 @@ justified.
 barriers or reinforce stereotypes. 
 ∙High Bias (0.70–1.00): Strong recurring or systemic bias; significantly impacts fairness, 
 inclusion, or accessibility. 
- 
+  
 Output Format (Strict) 
 1.Bias Detected: Yes/No 
 2.Bias Score: Emoji + label + numeric value (two decimals, e.g., 🟡 Medium Bias | Score: 
@@ -581,7 +581,7 @@ cultural framework, note it here
 its range (Low/Medium/High/None) and how the balance between inclusivity and bias 
 was assessed. If the text is a factual legal/compliance report, explicitly state that no bias 
 is present for this reason. 
- 
+  
 Revision Guidance 
 ∙Maintain academic tone and intent. 
 ∙Replace exclusionary terms with inclusive equivalents. 
@@ -880,8 +880,8 @@ button[kind="primary"], button[kind="secondary"],
 #vFooter {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
   text-align: center; font-size: 12px; opacity: .85;
   background: rgba(0,0,0,0.75); color: #fff; padding: 6px 8px; }}
-  
-  /* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
+
+/* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
 .stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
 .stApp [data-testid="stToolbar"] * {{ display: none !important; }}
 
@@ -940,6 +940,54 @@ def _inject_bg():
         pass
 
 _inject_bg()
+
+# ====== Acknowledgment Gate (pre-UI; admins bypass) ======
+def _has_valid_ack(login_id: str, sid: str) -> bool:
+    try:
+        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=ACK_TTL_DAYS)
+        con = sqlite3.connect(DB_PATH); cur = con.cursor()
+        cur.execute("""SELECT timestamp_utc FROM ack_events
+                       WHERE acknowledged=1 AND (login_id=? OR session_id=?)
+                       ORDER BY id DESC LIMIT 1""", (login_id or "", sid))
+        row = cur.fetchone(); con.close()
+        if not row: return False
+        ts = datetime.fromisoformat(row[0])
+        if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)
+        return ts >= cutoff_dt
+    except Exception:
+        return False
+
+def require_acknowledgment():
+    if st.session_state.get("ack_ok", False):
+        return
+    sid = _get_sid()
+    login_id = st.session_state.get("login_id","")
+    if _has_valid_ack(login_id, sid):
+        st.session_state["ack_ok"] = True
+        return
+
+    with st.form("ack_form", clear_on_submit=False):
+        st.markdown("### Privacy & Terms Acknowledgment")
+        st.write(
+            "Before using Veritas, please confirm you have read and agree to the "
+            f"[Privacy Policy]({PRIVACY_URL or '#'}) and "
+            f"[Terms of Use]({TERMS_URL or '#'})."
+        )
+        c1 = st.checkbox("I have read the Privacy Policy")
+        c2 = st.checkbox("I agree to the Terms of Use")
+        ccol1, ccol2 = st.columns([1,1])
+        with ccol1:
+            submitted = st.form_submit_button("I acknowledge")
+        with ccol2:
+            cancel = st.form_submit_button("Cancel")
+        if cancel:
+            st.warning("You must acknowledge to continue."); st.stop()
+        if submitted:
+            if not (c1 and c2):
+                st.error("Please check both boxes to continue."); st.stop()
+            log_ack_event(True)
+            st.session_state["ack_ok"] = True
+            st.success("Thanks! You may continue."); _safe_rerun()
 
 # =========== Header ===========
 with st.container():
@@ -1090,6 +1138,12 @@ elif not APP_PASSWORD:
     st.session_state["authed"] = True
     # remains non-admin unless separately logged in via admin view (not shown when APP_PASSWORD is empty)
 
+# --- EARLY Privacy/Terms gate (pre-UI), admins bypass ---
+if not st.session_state.get("is_admin", False):
+    if not st.session_state.get("ack_ok", False):
+        require_acknowledgment()
+        st.stop()  # Prevent any UI from rendering until acknowledged
+
 # ====== Sidebar ======
 with st.sidebar:
     st.markdown(f"<h2 style='margin:.25rem 0 .75rem 0;'>{APP_TITLE}</h2>", unsafe_allow_html=True)
@@ -1099,57 +1153,6 @@ with st.sidebar:
                   "_fail_times","_locked_until","show_support","is_admin","ack_ok","auth_view"):
             st.session_state.pop(k, None)
         _safe_rerun()
-
-# ====== Acknowledgment Gate (post-login) ======
-def _has_valid_ack(login_id: str, sid: str) -> bool:
-    try:
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=ACK_TTL_DAYS)
-        con = sqlite3.connect(DB_PATH); cur = con.cursor()
-        cur.execute("""SELECT timestamp_utc FROM ack_events
-                       WHERE acknowledged=1 AND (login_id=? OR session_id=?)
-                       ORDER BY id DESC LIMIT 1""", (login_id or "", sid))
-        row = cur.fetchone(); con.close()
-        if not row: return False
-        ts = datetime.fromisoformat(row[0])
-        if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)
-        return ts >= cutoff_dt
-    except Exception:
-        return False
-
-def require_acknowledgment():
-    if st.session_state.get("ack_ok", False): return
-    sid = _get_sid()
-    login_id = st.session_state.get("login_id","")
-    if _has_valid_ack(login_id, sid):
-        st.session_state["ack_ok"] = True
-        return
-
-    with st.form("ack_form", clear_on_submit=False):
-        st.markdown("### Privacy & Terms Acknowledgment")
-        st.write(
-            "Before using Veritas, please confirm you have read and agree to the "
-            f"[Privacy Policy]({PRIVACY_URL or '#'}) and "
-            f"[Terms of Use]({TERMS_URL or '#'})."
-        )
-        c1 = st.checkbox("I have read the Privacy Policy")
-        c2 = st.checkbox("I agree to the Terms of Use")
-        ccol1, ccol2 = st.columns([1,1])
-        with ccol1:
-            submitted = st.form_submit_button("I acknowledge")
-        with ccol2:
-            cancel = st.form_submit_button("Cancel")
-        if cancel:
-            st.warning("You must acknowledge to continue."); st.stop()
-        if submitted:
-            if not (c1 and c2):
-                st.error("Please check both boxes to continue."); st.stop()
-            log_ack_event(True)
-            st.session_state["ack_ok"] = True
-            st.success("Thanks! You may continue."); _safe_rerun()
-
-# Require acknowledgment after login — skip for admin sessions
-if not st.session_state.get("is_admin", False):
-    require_acknowledgment()
 
 # ================= Tabs =================
 tab_names = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
@@ -1548,7 +1551,7 @@ with tabs[2]:
                         with httpx.Client(timeout=12) as client:
                             r = client.post(
                                 "https://api.sendgrid.com/v3/mail/send",
-                                headers={"Authorization": f"Bearer {sup_cfg['api_key']}", "Content-Type": "application/json"},
+                                headers={"Authorization": f"Bearer {sup_cfg['api_key']}","Content-Type":"application/json"},
                                 json=payload
                             )
                         if r.status_code not in (200, 202):
@@ -1779,7 +1782,3 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
-
-
-
