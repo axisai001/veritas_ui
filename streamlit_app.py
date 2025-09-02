@@ -584,7 +584,7 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
                       f"limit={limit}/{window_sec}s", _get_sid(), st.session_state.get("login_id",""), "streamlit", "streamlit"))
         except Exception:
             pass
-    # The call should still be blocked when exceeding limit
+        # The call should still be blocked when exceeding limit
         return False
     dq.append(now)
     return True
@@ -1634,6 +1634,3 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
-
-
