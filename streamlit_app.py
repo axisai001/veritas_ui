@@ -945,7 +945,9 @@ bias_template = """
 9. Suggested Revisions:
 - <suggestion 1>
 - <suggestion 2>
+bias_template = """
 10. 📊 Interpretation of Score:
+"""
 <one short paragraph clarifying why the score falls in its range>
 """.strip()
 
@@ -3309,6 +3311,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
