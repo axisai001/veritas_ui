@@ -699,9 +699,9 @@ bias_template = """
 ...
 10. Interpretation of Score: <your guidance here>
 """
-    ch = channel.strip().lower()
-    default_subject = "New Veritas Support Ticket" if ch == "support" else (SENDGRID_SUBJECT or "New Veritas Feedback")
-    ov = _channel_overrides(ch)
+ch = channel.strip().lower()
+default_subject = "New Veritas Support Ticket" if ch == "support" else (SENDGRID_SUBJECT or "New Veritas Feedback")
+ov = _channel_overrides(ch)
 
     if _overrides_are_complete_and_valid(ov, default_subject):
         return {
@@ -3317,6 +3317,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
