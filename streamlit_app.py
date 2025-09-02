@@ -861,10 +861,13 @@ def show_login():
 
     # Choose which login you want to perform.
     auth_choice = st.radio(
-        "Sign in as",
+        label="",
         options=["User", "Admin"],
         index=(0 if st.session_state.get("auth_view", "user") == "user" else 1),
-        horizontal=True
+        horizontal=True,
+        label_visibility="collapsed"
+    )
+
     )
     st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
@@ -1631,4 +1634,5 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
