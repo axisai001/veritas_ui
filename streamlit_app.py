@@ -939,7 +939,9 @@ bias_template = """
 - <term> — Contextual: <meaning in passage> | General: <neutral definition>
 """
 8. Framework Awareness Note:
-- <note or “None”>
+bias_template = """
+- <note or "None">
+"""
 9. Suggested Revisions:
 - <suggestion 1>
 - <suggestion 2>
@@ -3307,6 +3309,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
