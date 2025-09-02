@@ -880,6 +880,7 @@ button[kind="primary"], button[kind="secondary"],
 #vFooter {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
   text-align: center; font-size: 12px; opacity: .85;
   background: rgba(0,0,0,0.75); color: #fff; padding: 6px 8px; }}
+  
   /* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
 .stApp [data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
 .stApp [data-testid="stToolbar"] * { display: none !important; }
@@ -1777,5 +1778,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
