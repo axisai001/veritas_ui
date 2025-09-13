@@ -121,7 +121,7 @@ def _set_query_params(**kwargs):
 
 # Admin controls
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
-ADMIN_EMAIL_ALLOWED = os.environ.get("a.parra@axislabs.ai,d.pineau@axislabs.ai"").strip()
+ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai"}
 
 # --- Safe timezone ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
@@ -1769,5 +1769,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
