@@ -162,6 +162,22 @@ def pilot_started() -> bool:
     if PILOT_START_UTC is None:
         return True
     return datetime.now(timezone.utc) >= PILOT_START_UTC
+    # ---- Pilot end window (lock after this time) ----
+PILOT_END_AT = os.environ.get("PILOT_END_AT", "")
+PILOT_END_UTC = _parse_pilot_start_to_utc(PILOT_END_AT)  # reuse same parser
+
+def pilot_active() -> bool:
+    """
+    Returns True only when current time is within the allowed user window:
+    (now >= start) AND (end is unset or now <= end).
+    Admins are handled elsewhere; this is just the time window check.
+    """
+    now = datetime.now(timezone.utc)
+    if PILOT_START_UTC and now < PILOT_START_UTC:
+        return False
+    if PILOT_END_UTC and now > PILOT_END_UTC:
+        return False
+    return True
 
 # Rates / windows
 RATE_LIMIT_LOGIN   = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
@@ -1776,6 +1792,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
