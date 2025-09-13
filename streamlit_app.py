@@ -121,8 +121,14 @@ def _set_query_params(**kwargs):
 
 # Admin controls
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
+
+# Hard-coded allowlist of admin emails (empty set => allow any email if password matches)
 ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai"}
 
+# Optional: also accept a comma-separated env var ADMIN_EMAILS to extend/override
+_raw = os.environ.get("ADMIN_EMAILS", "")
+if _raw:
+    ADMIN_EMAILS |= {e.strip().lower() for e in _raw.split(",") if e.strip()}
 # --- Safe timezone ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
     try:
@@ -1101,7 +1107,8 @@ def show_login():
                 st.error("network error"); st.stop()
 
             # Validate admin credentials (optional email allow-list)
-            if (not ADMIN_EMAIL_ALLOWED or (admin_email.strip().lower() == ADMIN_EMAIL_ALLOWED.lower())) and (admin_pwd == ADMIN_PASSWORD):
+            email_ok = (not ADMIN_EMAILS) or (admin_email.strip().lower() in ADMIN_EMAILS)
+            if email_ok and (admin_pwd == ADMIN_PASSWORD):
                 st.session_state["authed"] = True
                 st.session_state["is_admin"] = True
                 st.session_state["login_id"] = admin_email.strip()
@@ -1769,6 +1776,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
