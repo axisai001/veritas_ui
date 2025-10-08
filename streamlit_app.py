@@ -747,25 +747,79 @@ def _looks_strict(md: str) -> bool:
 
 
 def _build_user_instruction(input_text: str) -> str:
-    """Constructs the compliant Veritas system prompt (AXIS Security Protocol § IV)."""
-    return (
-        "You are Veritas — a bias, misinformation, and reasoning-fallacy detection model "
-        "operating under the AXIS Security Protocol Handbook v1.\n\n"
-        "Before analysis, apply the Contextual Safety Distinction Layer (CSDL):\n"
-        "- Tier 1 = Academic/media/third-person reference → proceed normally.\n"
-        "- Tier 2 = Self-referential, harmful, illegal, or sensitive credential content → trigger Safety Stop.\n\n"
-        "Tier 2 triggers include:\n"
-        " • Self-harm / suicide → ⚠️ Crisis Lifeline (988)\n"
-        " • Violence / terrorism → ⚠️ Credible threat\n"
-        " • Child exploitation → ⚠️ Illegal material\n"
-        " • Illegal acts → ⚠️ Facilitation request\n"
-        " • Sensitive credential request → ⚠️ Credential security stop\n\n"
-        "If Tier 2 applies, output only the prescribed message and halt analysis.\n\n"
-        "Otherwise, analyze using Schema V3.2a exactly as follows:\n"
-        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
-        "=== TEXT TO ANALYZE (verbatim) ===\n"
-        f"{input_text}"
-    )
+    # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
+import re
+
+def _run_safety_precheck(user_text: str) -> str | None:
+    """
+    Local Contextual Safety Distinction Layer (CSDL)
+    Enforces Tier 1 vs Tier 2 security before model execution.
+    Returns a Tier 2 safety message if triggered; otherwise None.
+    (Cited: AXIS Security Protocol Handbook § IV; Veritas Schema § I–II)
+    """
+
+    text = user_text.strip().lower()
+
+    # --- Tier 2: Self-harm / suicide intent ---
+    if re.search(r"\b(i\s*(want|plan|intend|am\s*going)\s*to\s*(kill|harm|hurt)\s*(myself|me)\b)", text):
+        return (
+            "⚠️ If you are in crisis or thinking about suicide, please call or text 988 to connect with the "
+            "Suicide & Crisis Lifeline, or seek help from a qualified professional immediately. "
+            "Per Safety Rule, analysis stops here."
+        )
+
+    # --- Tier 2: Violence or terrorism planning ---
+    if re.search(r"\b(i\s*(plan|intend|will|want)\s*to\s*(attack|shoot|bomb|kill|harm)\b)", text):
+        return (
+            "⚠️ This text contains a credible threat. "
+            "For safety and legal compliance, analysis stops here."
+        )
+
+    # --- Tier 2: Child exploitation / illegal material ---
+    if re.search(r"child\s*(porn|sexual|exploitation|abuse)", text):
+        return (
+            "⚠️ This text references illegal child-exploitation material. "
+            "Analysis stops here."
+        )
+
+    # --- Tier 2: Requests for illegal instructions or acts ---
+    if re.search(r"(how\s*to\s*(make|build|create)\s*(a\s*bomb|explosive|weapon)|buy\s*drugs|fake\s*id)", text):
+        return (
+            "⚠️ This text requests instructions or facilitation of illegal acts. "
+            "Analysis stops here."
+        )
+
+    # --- Tier 2: Sensitive credential or data-security requests ---
+    sensitive_patterns = [
+        r"api\s*key",
+        r"access\s*token",
+        r"password",
+        r"secret\s*key",
+        r"credentials?",
+        r"private\s*key",
+    ]
+    for pattern in sensitive_patterns:
+        if re.search(pattern, text):
+            return (
+                "⚠️ This text contains a request for sensitive credentials or security keys. "
+                "For safety and legal compliance under AXIS Security Protocol § IV.6, analysis stops here."
+            )
+
+    # --- Tier 1: Safe academic / third-person / analytic contexts ---
+    academic_markers = [
+        r"study\s*(found|examined|analyzed)",
+        r"researchers?\s*(reported|studied)",
+        r"according\s*to",
+        r"article\s*(discussed|described)",
+        r"court\s*case",
+        r"policy\s*analysis",
+    ]
+    for marker in academic_markers:
+        if re.search(marker, text):
+            return None  # Tier 1 → safe to proceed
+
+    # Default: no Tier 2 trigger detected → normal analysis
+    return None
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -1907,6 +1961,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
