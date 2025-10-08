@@ -680,65 +680,95 @@ Source B: Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf — 
 Source C: Veritas Legacy User Experience Analysis.docx — Informs tone, interpretability, and UX design.
 """.strip()
 
-# ===== Strict output template & helpers =====
+# ===== Strict output template & helpers (Veritas Schema V3.1 – Bias, Misinformation & Fallacies) =====
 STRICT_OUTPUT_TEMPLATE = """
-1. Bias Detected: <Yes/No>
-2. Bias Score: <Emoji + label> | Score: <0.00–1.00 with two decimals>
-3. Type(s) of Bias:
-- <type 1>
-- <type 2>
-4. Biased Phrases or Terms:
-- "<exact quote 1>"
-- "<exact quote 2>"
-5. Bias Summary:
-<exactly 2–4 sentences>
-6. Explanation:
-- "<phrase>" → <bias type> — <why>
-7. Contextual Definitions:
-- <term> — Contextual: <meaning in passage> | General: <neutral definition>
-8. Framework Awareness Note:
-- <note or “None”>
-9. Suggested Revisions:
-- <suggestion 1>
-- <suggestion 2>
-10. 📊 Interpretation of Score:
-<one short paragraph clarifying why the score falls in its range>
+1. Fact:
+- <empirical or uncontested statement(s) extracted from text>
+
+2. Bias:
+- Detected: <Yes/No>
+- Type(s): <bias type(s) if present, aligned with Bias Typology §II>
+- Example(s): "<biased phrase 1>", "<biased phrase 2>"
+
+3. Misinformation Patterns:
+- Detected: <Yes/No>
+- Label(s): <pattern(s) if present, labeled per Typology §III (e.g., Overgeneralization, False Balance)>
+- Example(s): "<misleading phrase 1>", "<misleading phrase 2>"
+
+4. Reasoning Fallacies:
+- Detected: <Yes/No>
+- Type(s): <fallacy type(s) if present, per Typology §IV (e.g., Ad Hominem, Slippery Slope)>
+- Example(s): "<flawed reasoning phrase 1>", "<flawed reasoning phrase 2>"
+
+5. Explanation:
+<Clarify detected issues per tone-length matrix: 2–4 sentences describing how bias, misinformation, or reasoning fallacies influence interpretation or truth-value.>
+
+6. Revision:
+<Rewrite the text inclusively, factually, and logically while maintaining its intent.>
 """.strip()
 
 SECTION_REGEXES = [
-    r"^\s*1\.\s*Bias Detected:\s*(Yes|No)",
-    r"^\s*2\.\s*Bias Score:\s*.+\|\s*Score:\s*\d+\.\d{2}",
-    r"^\s*3\.\s*Type\(s\) of Bias:",
-    r"^\s*4\.\s*Biased Phrases or Terms:",
-    r"^\s*5\.\s*Bias Summary:",
-    r"^\s*6\.\s*Explanation:",
-    r"^\s*7\.\s*Contextual Definitions:",
-    r"^\s*8\.\s*Framework Awareness Note:",
-    r"^\s*9\.\s*Suggested Revisions:",
-    r"^\s*10\.\s*📊\s*Interpretation of Score:",
+    r"^\s*1\.\s*Fact:",
+    r"^\s*2\.\s*Bias:",
+    r"^\s*3\.\s*Misinformation Patterns:",
+    r"^\s*4\.\s*Reasoning Fallacies:",
+    r"^\s*5\.\s*Explanation:",
+    r"^\s*6\.\s*Revision:",
 ]
 
+
 def _looks_strict(md: str) -> bool:
+    """
+    Verify that the model's response matches the strict Veritas Schema V3.1 output.
+    Ensures all required section headers (1–6) appear exactly and in order.
+    If model correctly outputs the Nothing-Flagged Rule statement, it's also accepted.
+    """
     text = md or ""
+    if re.match(r'^\s*No bias, misinformation, or reasoning fallacies detected\.\s*$', text.strip(), flags=re.IGNORECASE):
+        return True
     for rx in SECTION_REGEXES:
         if re.search(rx, text, flags=re.MULTILINE) is None:
             return False
     return True
 
+
 def _build_user_instruction(input_text: str) -> str:
+    """
+    Build the user instruction enforcing the Veritas Schema V3.1 structure,
+    integrated with Security Protocols §II–IV and Typology §II–IV.
+    """
     return (
-        "Analyze the TEXT below strictly using the rules above. "
-        "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
-        "Do not add any intro/outro or backticks. "
-        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’. "
-        "For sections 3, 4, and 9 in that case, write ‘(none)’. "
-        "Include section 10 even when no bias is present.\n\n"
+        "You are Veritas — a bias, misinformation, and reasoning-fallacy detection model. "
+        "Follow the official AXIS AI Schema V3.1 standard exactly.\n\n"
+        "Each Veritas report must follow this schema structure:\n"
+        "1. Fact — Empirical, uncontested statements.\n"
+        "2. Bias — Only if present; aligned with recognized bias categories (see Bias Typology §II).\n"
+        "3. Misinformation Patterns — Only if present; label using Typology §III definitions.\n"
+        "4. Reasoning Fallacies — Only if present; identify logical flaws as outlined in Typology §IV.\n"
+        "5. Explanation — Clarify detected issues per tone-length matrix.\n"
+        "6. Revision — Rewrite text inclusively, factually, and logically.\n\n"
+        "Step 4 — Nothing Flagged Rule:\n"
+        "If no bias, misinformation, or fallacies are detected, output exactly:\n"
+        "\"No bias, misinformation, or reasoning fallacies detected.\"\n"
+        "No additional commentary, schema fields, or visualizations are permitted. (Cited: Security Protocols §III.1)\n\n"
+        "Step 5 — Integrated Security Compliance:\n"
+        "Veritas and Prism must comply with the AXIS Security Protocol Handbook v1 and cross-audit:\n"
+        "• Shared refusal templates (§II.1)\n• Audit logging (§II.2)\n• Rate-limiting (§II.3)\n• Cross-contamination prevention (§II.5)\n"
+        "(Cited: AXIS Security Handbook §II–IV)\n\n"
+        "Step 6 — Bias Typology Integration:\n"
+        "Bias categories map as follows (e.g., Gendered Language → Identity Bias, Institutional Bias → Systemic Bias, etc.).\n\n"
+        "Step 7 — Misinformation Patterns and Reasoning Fallacies:\n"
+        "Use the lists from Bias Typology §III–IV for labeling:\n"
+        "Misinformation Patterns = Strawman Argument, Cherry Picking, Gish Gallop, Moving the Goalposts, Anecdotal Fallacy, "
+        "Post Hoc (False Cause), Appeal to Authority, Appeal to Popularity, Red Herring, Whataboutism.\n"
+        "Reasoning Fallacies = False Equivalence, Motte-and-Bailey, Ad Hominem, Slippery Slope, False Dilemma, "
+        "Hasty Generalization, Circular Reasoning, Appeal to Emotion, Loaded Question.\n\n"
+        "Output ONLY using this exact six-section template below (same headings and order). Do not add intro/outro/backticks.\n\n"
         "=== OUTPUT TEMPLATE (copy exactly) ===\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
         "=== TEXT TO ANALYZE (verbatim) ===\n"
         f"{input_text}"
     )
-
 # ================= Utilities =================
 def _get_sid() -> str:
     sid = st.session_state.get("sid")
@@ -1879,6 +1909,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
