@@ -1445,160 +1445,37 @@ with tabs[0]:
             st.error("Please enter some text or upload a document."); st.stop()
 
         # --- OpenAI call ---
-        api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-        if not api_key:
-            st.error("Missing OpenAI API key. Set OPENAI_API_KEY."); st.stop()
+api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+if not api_key:
+    st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
+    st.stop()
 
-        # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
+# --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
 safety_message = _run_safety_precheck(final_input)
 
 if safety_message:
     # Stop everything here — no Veritas schema, no model call
-    final_report = safety_message
-    st.markdown(final_report)
-else:
-    # Safe Tier-1 input → proceed to Veritas schema generation
-    user_instruction = _build_user_instruction(final_input)
-    # ↓ keep your existing model-generation code right below this ↓
-    # e.g. final_report = generate_veritas_report(user_instruction)
+    st.markdown(safety_message)
+    st.stop()
 
-        try:
-            try: prog.progress(40, text="Contacting model…")
-            except Exception: prog.progress(40)
+# --- Safe Tier-1 input → proceed to Veritas schema generation ---
+user_instruction = _build_user_instruction(final_input)
 
-            client = OpenAI(api_key=api_key)
-            resp = client.chat.completions.create(
-                model=MODEL, temperature=ANALYSIS_TEMPERATURE,
-                messages=[
-                    {"role": "system", "content": IDENTITY_PROMPT},
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_instruction},
-                ],
-            )
-            model_reply = (resp.choices[0].message.content or "").strip()
+try:
+    prog.progress(40, text="Contacting model…")
+except Exception:
+    prog.progress(40)
 
-            if not _looks_strict(model_reply):
-                repair_msg = (
-                    "Reformat the ORIGINAL ANSWER to exactly match the 10-section template below. "
-                    "Only fix structure; keep substance. Include all sections in the same order.\n\n"
-                    "=== TEMPLATE ===\n"
-                    f"{STRICT_OUTPUT_TEMPLATE}\n\n"
-                    "=== ORIGINAL ANSWER ===\n"
-                    f"{model_reply}"
-                )
-                resp2 = client.chat.completions.create(
-                    model=MODEL, temperature=0.0,
-                    messages=[
-                        {"role": "system", "content": "You output exactly the requested structure."},
-                        {"role": "user", "content": repair_msg},
-                    ],
-                )
-                fixed = (resp2.choices[0].message.content or "").strip()
-                if _looks_strict(fixed):
-                    model_reply = fixed
-
-            try: prog.progress(85, text="Formatting report…")
-            except Exception: prog.progress(85)
-        except Exception as e:
-            log_error_event(kind="OPENAI", route="/chat", http_status=502, detail=repr(e))
-            st.error("Could not contact the language model. Check API key/model."); st.stop()
-
-        public_report_id = _gen_public_report_id()
-        internal_report_id = _gen_internal_report_id()
-        decorated_reply = f"📄 Report ID: {public_report_id}\n\n{model_reply}".strip()
-
-        st.session_state["history"].append({"role":"assistant","content":decorated_reply})
-        st.session_state["last_reply"] = decorated_reply
-        try: log_analysis(public_report_id, internal_report_id, decorated_reply)
-        except Exception: pass
-
-        st.session_state["_clear_text_box"] = True
-        try: prog.progress(100, text="Done ✓")
-        except Exception: prog.progress(100)
-        _safe_rerun()
-
-    # Show latest report (if any)
-    if st.session_state.get("last_reply"):
-        st.write("### Bias Report")
-        st.markdown(st.session_state["last_reply"])
-
-        def _build_pdf_inline(content: str) -> bytes:
-            if SimpleDocTemplate is None:
-                return content.encode("utf-8")
-            buf = io.BytesIO()
-            doc = SimpleDocTemplate(
-                buf, pagesize=letter,
-                leftMargin=0.8*inch, rightMargin=0.8*inch,
-                topMargin=0.9*inch, bottomMargin=0.9*inch
-            )
-            styles = getSampleStyleSheet()
-            base = styles["Normal"]; base.leading = 14; base.fontName = "Helvetica"
-            body = ParagraphStyle("Body", parent=base, fontSize=10)
-            h = ParagraphStyle("H", parent=base, fontSize=12, spaceAfter=8, leading=14)
-            story = []
-            title = APP_TITLE + " — Bias Analysis Report"
-            ts = datetime.now().astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-            story.append(Paragraph(f"<b>{title}</b>", h))
-            story.append(Paragraph(f"<i>Generated {ts}</i>", base))
-            story.append(Spacer(1, 10))
-            for p in [p.strip() for p in content.split("\n\n") if p.strip()]:
-                safe = p.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-                story.append(Paragraph(safe, body)); story.append(Spacer(1, 6))
-            def _header_footer(canvas, doc_):
-                canvas.saveState()
-                w, h = letter
-                footer = f"Veritas — {datetime.now().strftime('%Y-%m-%d')}"
-                page = f"Page {doc_.page}"
-                canvas.setFont("Helvetica", 8)
-                canvas.drawString(0.8*inch, 0.55*inch, footer)
-                pw = stringWidth(page, "Helvetica", 8)
-                canvas.drawString(w - 0.8*inch - pw, 0.55*inch, page)
-                canvas.restoreState()
-            doc.build(story, onFirstPage=_header_footer, onLaterPages=_header_footer)
-            buf.seek(0); return buf.read()
-
-        pdf_bytes = _build_pdf_inline(st.session_state["last_reply"])
-        pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
-        uid = str(uuid.uuid4()).replace("-", "")
-        copy_id = f"copyLink_{uid}"
-        note_id = f"copyNote_{uid}"
-
-        components.html(f"""
-<style>
-  .v-actions {{ display: inline-flex; gap: 1.0rem; align-items: center;
-    padding: .45rem .75rem; border-radius: 10px; background: rgba(0,0,0,0.65);
-    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
-  .v-actions a {{ color: #fff !important; text-decoration: none; font-weight: 600; }}
-  .v-actions a:hover {{ text-decoration: underline; }}
-  .v-actions .copy-note {{ color:#fff; opacity:.8; font-size:.85rem; }}
-</style>
-<div class="v-actions">
-  <a id="{copy_id}" href="javascript:void(0)">Copy Report</a>
-  <a id="download_{uid}" href="data:application/pdf;base64,{pdf_b64}" download="veritas_report.pdf">Download Report</a>
-  <span id="{note_id}" class="copy-note" style="display:none;">Copied ✓</span>
-</div>
-<script>
-  const text_{uid} = {json.dumps(st.session_state["last_reply"])};
-  const copyEl_{uid} = document.getElementById("{copy_id}");
-  const note_{uid} = document.getElementById("{note_id}");
-  copyEl_{uid}.addEventListener("click", async () => {{
-    try {{
-      await navigator.clipboard.writeText(text_{uid});
-      note_{uid}.style.display = "inline";
-      setTimeout(() => note_{uid}.style.display = "none", 1200);
-    }} catch (e) {{
-      const ta = document.createElement("textarea");
-      ta.value = text_{uid}; ta.style.position="fixed"; ta.style.opacity="0";
-      document.body.appendChild(ta); ta.focus(); ta.select();
-      try {{ document.execCommand("copy"); }} catch (_e) {{}}
-      ta.remove(); note_{uid}.style.display = "inline";
-      setTimeout(() => note_{uid}.style.display = "none", 1200);
-    }}
-  }});
-</script>
-""", height=64)
-
-    st.markdown('</div>', unsafe_allow_html=True)
+client = OpenAI(api_key=api_key)
+resp = client.chat.completions.create(
+    model=MODEL,
+    temperature=ANALYSIS_TEMPERATURE,
+    messages=[
+        {"role": "system", "content": IDENTITY_PROMPT},
+        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_instruction},
+    ],
+)
 
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -1989,6 +1866,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
