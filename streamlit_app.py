@@ -1392,91 +1392,95 @@ with tabs[0]:
         _safe_rerun()
 
     if 'submitted' in locals() and submitted:
-        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-            st.error("network error"); st.stop()
+    if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+        st.error("network error"); st.stop()
 
+    try:
+        prog = st.progress(0, text="Preparing…")
+    except TypeError:
+        prog = st.progress(0)
+
+    user_text = st.session_state.get("user_input_box", "").strip()
+    extracted = ""
+    try: prog.progress(10)
+    except Exception: pass
+
+    if doc is not None:
+        size_mb = doc.size / (1024 * 1024)
+        if size_mb > MAX_UPLOAD_MB:
+            st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB.")
+            st.stop()
         try:
-            prog = st.progress(0, text="Preparing…")
-        except TypeError:
-            prog = st.progress(0)
-
-        user_text = st.session_state.get("user_input_box", "").strip()
-        extracted = ""
-        try: prog.progress(10)
-        except Exception: pass
-
-        if doc is not None:
-            size_mb = doc.size / (1024 * 1024)
-            if size_mb > MAX_UPLOAD_MB:
-                st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB."); st.stop()
-            try:
-                with st.spinner("Extracting document…"):
-                    def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-                        ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-                        if ext == "pdf":
-                            if PdfReader is None: return ""
-                            reader = PdfReader(io.BytesIO(file_bytes))
-                            parts = []
-                            for page in reader.pages:
-                                try: parts.append(page.extract_text() or "")
+            with st.spinner("Extracting document…"):
+                def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+                    if ext == "pdf":
+                        if PdfReader is None: return ""
+                        reader = PdfReader(io.BytesIO(file_bytes))
+                        parts = []
+                        for page in reader.pages:
+                            try: parts.append(page.extract_text() or "")
+                            except Exception: continue
+                        return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
+                    elif ext == "docx":
+                        if docx is None: return ""
+                        buf = io.BytesIO(file_bytes)
+                        doc_obj = docx.Document(buf)
+                        text = "\n".join(p.text for p in doc_obj.paragraphs)
+                        return text[:MAX_EXTRACT_CHARS]
+                    elif ext in ("txt", "md", "csv"):
+                        def _safe_decode(b: bytes) -> str:
+                            for enc in ("utf-8", "utf-16", "latin-1"):
+                                try: return b.decode(enc)
                                 except Exception: continue
-                            return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
-                        elif ext == "docx":
-                            if docx is None: return ""
-                            buf = io.BytesIO(file_bytes)
-                            doc_obj = docx.Document(buf)
-                            text = "\n".join(p.text for p in doc_obj.paragraphs)
-                            return text[:MAX_EXTRACT_CHARS]
-                        elif ext in ("txt","md","csv"):
-                            def _safe_decode(b: bytes) -> str:
-                                for enc in ("utf-8","utf-16","latin-1"):
-                                    try: return b.decode(enc)
-                                    except Exception: continue
-                                return b.decode("utf-8", errors="ignore")
-                            return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
-                        return ""
-                    extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
-            except Exception as e:
-                log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
-                st.error("network error"); st.stop()
-
-                final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-        if not final_input:
-            st.error("Please enter some text or upload a document.")
+                            return b.decode("utf-8", errors="ignore")
+                        return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
+                    return ""
+                extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
+        except Exception as e:
+            log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
+            st.error("network error")
             st.stop()
 
-        # --- OpenAI call ---
-        api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-        if not api_key:
-            st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
-            st.stop()
+    # ✅ FIXED — moved OUTSIDE the exception block so it always runs
+    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
-        # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
-        safety_message = _run_safety_precheck(final_input)
-        if safety_message:
-            final_report = safety_message
-            st.markdown(final_report)
-            st.stop()
+    if not final_input:
+        st.error("Please enter some text or upload a document.")
+        st.stop()
 
-        # --- Safe Tier-1 input → proceed to Veritas schema generation ---
-        user_instruction = _build_user_instruction(final_input)
+    # --- OpenAI call ---
+    api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+    if not api_key:
+        st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
+        st.stop()
 
-        try:
-            prog.progress(40, text="Contacting model…")
-        except Exception:
-            prog.progress(40)
+    # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
+    safety_message = _run_safety_precheck(final_input)
+    if safety_message:
+        final_report = safety_message
+        st.markdown(final_report)
+        st.stop()
 
-        client = OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model=MODEL,
-            temperature=ANALYSIS_TEMPERATURE,
-            messages=[
-                {"role": "system", "content": IDENTITY_PROMPT},
-                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                {"role": "user", "content": user_instruction},
-            ],
-        )
+    # --- Safe Tier-1 input → proceed to Veritas schema generation ---
+    user_instruction = _build_user_instruction(final_input)
 
+    try:
+        prog.progress(40, text="Contacting model…")
+    except Exception:
+        prog.progress(40)
+
+    client = OpenAI(api_key=api_key)
+    resp = client.chat.completions.create(
+        model=MODEL,
+        temperature=ANALYSIS_TEMPERATURE,
+        messages=[
+            {"role": "system", "content": IDENTITY_PROMPT},
+            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_instruction},
+        ],
+    )
+    
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
     st.write("### Feedback")
@@ -1866,6 +1870,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
