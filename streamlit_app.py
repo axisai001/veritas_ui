@@ -1449,7 +1449,18 @@ with tabs[0]:
         if not api_key:
             st.error("Missing OpenAI API key. Set OPENAI_API_KEY."); st.stop()
 
-        user_instruction = _build_user_instruction(final_input)
+        # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
+safety_message = _run_safety_precheck(final_input)
+
+if safety_message:
+    # Stop everything here — no Veritas schema, no model call
+    final_report = safety_message
+    st.markdown(final_report)
+else:
+    # Safe Tier-1 input → proceed to Veritas schema generation
+    user_instruction = _build_user_instruction(final_input)
+    # ↓ keep your existing model-generation code right below this ↓
+    # e.g. final_report = generate_veritas_report(user_instruction)
 
         try:
             try: prog.progress(40, text="Contacting model…")
@@ -1978,6 +1989,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
