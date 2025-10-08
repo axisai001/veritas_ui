@@ -1392,8 +1392,9 @@ with tabs[0]:
         _safe_rerun()
 
     if 'submitted' in locals() and submitted:
-    if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-        st.error("network error"); st.stop()
+        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+            st.error("network error")
+            st.stop()
 
     try:
         prog = st.progress(0, text="Preparing…")
@@ -1870,6 +1871,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
