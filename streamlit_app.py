@@ -1,5 +1,4 @@
-# Write the full Streamlit app with ONLY the DEFAULT_SYSTEM_PROMPT updated
-code = r'''# streamlit_app.py — Veritas (Streamlit)
+# streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin only if authenticated as admin)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
 # Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
@@ -1880,6 +1879,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
