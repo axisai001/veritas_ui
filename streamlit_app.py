@@ -470,7 +470,7 @@ if os.path.isdir(UPLOAD_FOLDER):
 STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 
 # ===== Identity + Veritas Prompts (EXACT as provided) =====
-IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
+IDENTITY_PROMPT = "I'm Veritas — a bias, misinformation, and reasoning fallacy detection tool."
 
 DEFAULT_SYSTEM_PROMPT = """
 Veritas Schema v3.1 establishes a unified, compliance-ready framework for analyzing bias, misinformation, and reasoning fallacies across all industries. It integrates the structural logic of Veritas v3.3 with enhanced security and typological precision based on the following embedded sources:
@@ -1879,6 +1879,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
