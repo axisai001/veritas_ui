@@ -1440,42 +1440,42 @@ with tabs[0]:
                 log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
                 st.error("network error"); st.stop()
 
-        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+                final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
         if not final_input:
-            st.error("Please enter some text or upload a document."); st.stop()
+            st.error("Please enter some text or upload a document.")
+            st.stop()
 
         # --- OpenAI call ---
-    api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-    if not api_key:
-        st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
-        st.stop()
+        api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+        if not api_key:
+            st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
+            st.stop()
 
-    # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
-    safety_message = _run_safety_precheck(final_input)
+        # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
+        safety_message = _run_safety_precheck(final_input)
+        if safety_message:
+            final_report = safety_message
+            st.markdown(final_report)
+            st.stop()
 
-    if safety_message:
-        final_report = safety_message
-        st.markdown(final_report)
-        st.stop()
+        # --- Safe Tier-1 input → proceed to Veritas schema generation ---
+        user_instruction = _build_user_instruction(final_input)
 
-    # --- Safe Tier-1 input → proceed to Veritas schema generation ---
-    user_instruction = _build_user_instruction(final_input)
+        try:
+            prog.progress(40, text="Contacting model…")
+        except Exception:
+            prog.progress(40)
 
-try:
-    prog.progress(40, text="Contacting model…")
-except Exception:
-    prog.progress(40)
-
-client = OpenAI(api_key=api_key)
-resp = client.chat.completions.create(
-    model=MODEL,
-    temperature=ANALYSIS_TEMPERATURE,
-    messages=[
-        {"role": "system", "content": IDENTITY_PROMPT},
-        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-        {"role": "user", "content": user_instruction},
-    ],
-)
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=MODEL,
+            temperature=ANALYSIS_TEMPERATURE,
+            messages=[
+                {"role": "system", "content": IDENTITY_PROMPT},
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_instruction},
+            ],
+        )
 
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -1866,6 +1866,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
