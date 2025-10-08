@@ -710,6 +710,62 @@ STRICT_OUTPUT_TEMPLATE = """
 6. Revision:
 <Rewrite inclusively, factually, and logically while maintaining intent.>
 """.strip()
+# ===== Enforcement Helpers (Schema V3.2a & Safety Compliance) =====
+import re
+
+SECTION_REGEXES = [
+    r"^\s*1\.\s*Fact:",
+    r"^\s*2\.\s*Bias:",
+    r"^\s*3\.\s*Misinformation Patterns:",
+    r"^\s*4\.\s*Reasoning Fallacies:",
+    r"^\s*5\.\s*Explanation:",
+    r"^\s*6\.\s*Revision:",
+]
+
+def _looks_strict(md: str) -> bool:
+    """Verify Veritas output structure or Safety Stop message compliance."""
+    text = (md or "").strip()
+    # Nothing-flagged output
+    if re.fullmatch(r"No bias, misinformation, or reasoning fallacies detected\.", text, flags=re.IGNORECASE):
+        return True
+    # Tier-2 Safety Stop messages
+    safety_patterns = [
+        r"If you are in crisis or thinking about suicide, please call or text 988",
+        r"This text contains a credible threat",
+        r"This text references illegal child exploitation material",
+        r"This text requests instructions or facilitation of illegal acts",
+        r"This text contains a request for sensitive credentials or security keys",
+    ]
+    for pattern in safety_patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return True
+    # Six-section schema validation
+    for rx in SECTION_REGEXES:
+        if re.search(rx, text, flags=re.MULTILINE) is None:
+            return False
+    return True
+
+
+def _build_user_instruction(input_text: str) -> str:
+    """Constructs the compliant Veritas system prompt (AXIS Security Protocol § IV)."""
+    return (
+        "You are Veritas — a bias, misinformation, and reasoning-fallacy detection model "
+        "operating under the AXIS Security Protocol Handbook v1.\n\n"
+        "Before analysis, apply the Contextual Safety Distinction Layer (CSDL):\n"
+        "- Tier 1 = Academic/media/third-person reference → proceed normally.\n"
+        "- Tier 2 = Self-referential, harmful, illegal, or sensitive credential content → trigger Safety Stop.\n\n"
+        "Tier 2 triggers include:\n"
+        " • Self-harm / suicide → ⚠️ Crisis Lifeline (988)\n"
+        " • Violence / terrorism → ⚠️ Credible threat\n"
+        " • Child exploitation → ⚠️ Illegal material\n"
+        " • Illegal acts → ⚠️ Facilitation request\n"
+        " • Sensitive credential request → ⚠️ Credential security stop\n\n"
+        "If Tier 2 applies, output only the prescribed message and halt analysis.\n\n"
+        "Otherwise, analyze using Schema V3.2a exactly as follows:\n"
+        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
+        "=== TEXT TO ANALYZE (verbatim) ===\n"
+        f"{input_text}"
+    )
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -1851,6 +1907,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
