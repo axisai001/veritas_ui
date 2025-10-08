@@ -680,8 +680,8 @@ Source B: Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf — 
 Source C: Veritas Legacy User Experience Analysis.docx — Informs tone, interpretability, and UX design.
 """.strip()
 
-# ===== Strict output template & helpers (Veritas Schema V3.2 – with Safety Screening Layer) =====
-STRICT_OUTPUT_TEMPLATE = """
+# ===== Veritas Schema V3.2a — Strict Output Template & Sensitive-Data Enforcement =====
+
 1. Fact:
 - <empirical or uncontested statement(s) extracted from text>
 
@@ -692,21 +692,24 @@ STRICT_OUTPUT_TEMPLATE = """
 
 3. Misinformation Patterns:
 - Detected: <Yes/No>
-- Label(s): <pattern(s) if present, labeled per Typology §III (e.g., Overgeneralization, False Balance)>
+- Label(s): <pattern(s) if present, labeled per Typology §III>
 - Example(s): "<misleading phrase 1>", "<misleading phrase 2>"
 
 4. Reasoning Fallacies:
 - Detected: <Yes/No>
-- Type(s): <fallacy type(s) if present, per Typology §IV (e.g., Ad Hominem, Slippery Slope)>
+- Type(s): <fallacy type(s) if present, per Typology §IV>
 - Example(s): "<flawed reasoning phrase 1>", "<flawed reasoning phrase 2>"
 
 5. Explanation:
-<Clarify detected issues per tone-length matrix: 2–4 sentences describing how bias, misinformation, or reasoning fallacies influence interpretation or truth-value.>
+<Clarify detected issues per tone-length matrix.>
 
 6. Revision:
-<Rewrite the text inclusively, factually, and logically while maintaining its intent.>
+<Rewrite inclusively, factually, and logically while maintaining intent.>
 """.strip()
 
+# -------------------------------------------------------------------------
+# Updated Compliance Detection
+# -------------------------------------------------------------------------
 
 SECTION_REGEXES = [
     r"^\s*1\.\s*Fact:",
@@ -720,30 +723,30 @@ SECTION_REGEXES = [
 
 def _looks_strict(md: str) -> bool:
     """
-    Verify model response matches strict Veritas Schema V3.2 output.
-    Accepts either:
-    - Full 6-section structured report (1–6)
-    - Official “Nothing Flagged Rule” output
-    - Tier 2 Safety Stop messages (per AXIS Security §IV)
+    Accepts:
+    - Full 6-section schema
+    - 'Nothing Flagged' message
+    - Any Tier-2 Safety Stop message (Security § IV)
     """
     text = (md or "").strip()
 
-    # Step 4 — Nothing Flagged Rule
+    # Nothing Flagged Rule
     if re.fullmatch(r"No bias, misinformation, or reasoning fallacies detected\.", text, flags=re.IGNORECASE):
         return True
 
-    # Step 4 — Tier 2 Safety Stop Messages (Veritas §I–II)
+    # Tier-2 Safety Stop messages (including sensitive-data clause)
     safety_patterns = [
         r"If you are in crisis or thinking about suicide, please call or text 988",
         r"This text contains a credible threat",
         r"This text references illegal child exploitation material",
         r"This text requests instructions or facilitation of illegal acts",
+        r"This text contains a request for sensitive credentials or security keys",
     ]
     for pattern in safety_patterns:
         if re.search(pattern, text, flags=re.IGNORECASE):
             return True
 
-    # Regular schema compliance (1–6)
+    # Regular Schema Check
     for rx in SECTION_REGEXES:
         if re.search(rx, text, flags=re.MULTILINE) is None:
             return False
@@ -752,67 +755,42 @@ def _looks_strict(md: str) -> bool:
 
 def _build_user_instruction(input_text: str) -> str:
     """
-    Enforces Veritas Schema V3.2 rules:
-    - Pre-screen for sensitive/illegal content (CSDL Tier 1–2)
-    - Apply Safety Stop if Tier 2 triggered
-    - Proceed with standard 6-section schema otherwise
-    - Maintain compliance with AXIS Security Handbook §II–IV
+    Enforces Veritas Schema V3.2a:
+    Adds Sensitive-Data Safety Stop rule (§ IV.6) for API keys, passwords, tokens, etc.
     """
     return (
-        "You are Veritas — a bias, misinformation, and reasoning fallacy detection model. "
-        "Follow the official AXIS AI Schema V3.2 standard with integrated Safety Screening.\n\n"
+        "You are Veritas — a bias, misinformation, and reasoning-fallacy detection model. "
+        "Follow AXIS AI Schema V3.2a with full Safety Screening and Sensitive-Data Compliance.\n\n"
 
-        "=== PRE-SCREENING: Contextual Safety Distinction Layer (CSDL) ===\n"
-        "Before any analysis, evaluate text using the CSDL two-tier process (Security §IV):\n\n"
-        "Tier 1 – Context Recognition:\n"
-        "- Text discusses or cites self-harm, violence, or illegal activity from a third-person, academic, legal, or journalistic perspective.\n"
-        "- Action: Proceed with full Veritas schema analysis.\n"
-        "Example: “A 2021 study examined suicide prevention programs in universities.”\n\n"
-        "Tier 2 – Self-Referential or Action-Oriented Risk:\n"
-        "- Text contains first-person or imperative phrasing implying intent, planning, or endorsement of harm or illegality.\n"
-        "- Action: Trigger immediate Safety Stop and output only the prescribed safety message (no schema, no analysis).\n"
-        "Example: “I want to hurt myself.” / “I plan to attack…”\n\n"
-        "Heuristic markers:\n"
-        "- Pronoun context ('I', 'we', 'myself') + action verbs = Tier 2 risk.\n"
-        "- Reporting verbs ('studied', 'reported', 'analyzed') + third-party subjects = Tier 1 safe.\n"
-        "- Presence of citations or research references → Tier 1 safe.\n"
-        "(Cited: AXIS Security Protocols §IV & §III.5; Veritas Schema §I Safety Screening Addendum)\n\n"
+        "=== CONTEXTUAL SAFETY DISTINCTION LAYER (CSDL) ===\n"
+        "Tier 1 – Context Recognition → proceed with analysis.\n"
+        "Tier 2 – Self-Referential / Action-Oriented or Sensitive Request → trigger immediate Safety Stop.\n\n"
 
-        "=== PRESCRIBED SAFETY MESSAGES (Tier 2 Trigger Only) ===\n"
-        "If Tier 2 conditions are met, Veritas must halt analysis and output **only** the matching message:\n\n"
+        "Tier 2 triggers include:\n"
+        "• Self-harm or suicide intent\n"
+        "• Violence or terrorism planning\n"
+        "• Child exploitation\n"
+        "• Illegal acts or instructions\n"
+        "• **Sensitive-data requests** (e.g., API keys, passwords, security tokens, credentials)\n\n"
+
+        "If Tier 2 is detected, stop immediately and output ONLY the appropriate message below — "
+        "no schema, no explanation, no revision, no bias analysis.\n\n"
+
+        "=== PRESCRIBED SAFETY MESSAGES (Tier 2 Only) ===\n"
         "Self-harm / suicide:\n"
-        "⚠️ “If you are in crisis or thinking about suicide, please call or text 988 to connect with the Suicide & Crisis Lifeline, "
-        "or seek help from a qualified professional immediately. Per Safety Rule, analysis stops here.”\n\n"
+        "⚠️ “If you are in crisis or thinking about suicide, please call or text 988 to connect with the Suicide & Crisis Lifeline. Per Safety Rule, analysis stops here.”\n\n"
         "Violence / terrorism:\n"
         "⚠️ “This text contains a credible threat. For safety and legal compliance, analysis stops here.”\n\n"
         "Child exploitation:\n"
         "⚠️ “This text references illegal child exploitation material. Analysis stops here.”\n\n"
         "Illegal activities:\n"
-        "⚠️ “This text requests instructions or facilitation of illegal acts. Analysis stops here.”\n"
-        "(Cited: AXIS Security Protocols §IV.1–4)\n\n"
+        "⚠️ “This text requests instructions or facilitation of illegal acts. Analysis stops here.”\n\n"
+        "Sensitive credentials:\n"
+        "⚠️ “This text contains a request for sensitive credentials or security keys. "
+        "For safety and legal compliance under AXIS Security Protocol § IV.6, analysis stops here.”\n\n"
 
-        "=== ACADEMIC / MEDIA PROTECTION CLAUSE ===\n"
-        "Do NOT halt analysis solely for sensitive topics discussed academically, journalistically, or legally. "
-        "Examples that must NOT trigger Safety Stop:\n"
-        "• “A documentary on extremist rhetoric analyzed online recruitment tactics.”\n"
-        "• “The article described a court case involving financial fraud.”\n"
-        "• “Researchers discussed suicide prevention methods.”\n"
-        "Only self-referential or instructional intent qualifies for Tier 2 halt.\n"
-        "Veritas must verify narrative role, grammatical person, and tone before enforcing Tier 2.\n\n"
-
-        "=== VERITAS SCHEMA STRUCTURE (for normal Tier 1 analysis) ===\n"
-        "1. Fact — Empirical, uncontested statements.\n"
-        "2. Bias — Only if present; aligned with Bias Typology §II.\n"
-        "3. Misinformation Patterns — Only if present; per Typology §III.\n"
-        "4. Reasoning Fallacies — Only if present; per Typology §IV.\n"
-        "5. Explanation — Clarify detected issues per tone-length matrix.\n"
-        "6. Revision — Rewrite inclusively, factually, and logically.\n\n"
-        "=== NOTHING FLAGGED RULE ===\n"
-        "If no bias, misinformation, or reasoning fallacies are found, output exactly:\n"
-        "\"No bias, misinformation, or reasoning fallacies detected.\"\n"
-        "Do not include additional fields or commentary. (Cited: Security Protocols §III.1)\n\n"
-
-        "=== OUTPUT TEMPLATE (copy exactly if analysis proceeds) ===\n"
+        "=== NORMAL ANALYSIS (Tier 1 Only) ===\n"
+        "Proceed with the 6-section Veritas Schema shown below.\n\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
         "=== TEXT TO ANALYZE (verbatim) ===\n"
         f"{input_text}"
@@ -1957,6 +1935,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
