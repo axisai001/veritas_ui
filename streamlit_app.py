@@ -1880,13 +1880,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-'''
-# Save to file
-path = "/mnt/data/streamlit_app.py"
-with open(path, "w", encoding="utf-8") as f:
-    f.write(code)
 
-path
 
 
 
