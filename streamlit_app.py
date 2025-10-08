@@ -1,4 +1,5 @@
-# streamlit_app.py — Veritas (Streamlit)
+# Write the full Streamlit app with ONLY the DEFAULT_SYSTEM_PROMPT updated
+code = r'''# streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, Feedback, Support, Help, (Admin only if authenticated as admin)
 # Strict 10-section bias report, CSV+SQLite logging, SendGrid email.
 # Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
@@ -679,6 +680,65 @@ Source A: Security Protocols Embedded into Schema.pdf — Sections III–V infor
 Source B: Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf — Establishes category consistency.
 Source C: Veritas Legacy User Experience Analysis.docx — Informs tone, interpretability, and UX design.
 """.strip()
+
+# ===== Strict output template & helpers =====
+STRICT_OUTPUT_TEMPLATE = """
+1. Bias Detected: <Yes/No>
+2. Bias Score: <Emoji + label> | Score: <0.00–1.00 with two decimals>
+3. Type(s) of Bias:
+- <type 1>
+- <type 2>
+4. Biased Phrases or Terms:
+- "<exact quote 1>"
+- "<exact quote 2>"
+5. Bias Summary:
+<exactly 2–4 sentences>
+6. Explanation:
+- "<phrase>" → <bias type> — <why>
+7. Contextual Definitions:
+- <term> — Contextual: <meaning in passage> | General: <neutral definition>
+8. Framework Awareness Note:
+- <note or “None”>
+9. Suggested Revisions:
+- <suggestion 1>
+- <suggestion 2>
+10. 📊 Interpretation of Score:
+<one short paragraph clarifying why the score falls in its range>
+""".strip()
+
+SECTION_REGEXES = [
+    r"^\s*1\.\s*Bias Detected:\s*(Yes|No)",
+    r"^\s*2\.\s*Bias Score:\s*.+\|\s*Score:\s*\d+\.\d{2}",
+    r"^\s*3\.\s*Type\(s\) of Bias:",
+    r"^\s*4\.\s*Biased Phrases or Terms:",
+    r"^\s*5\.\s*Bias Summary:",
+    r"^\s*6\.\s*Explanation:",
+    r"^\s*7\.\s*Contextual Definitions:",
+    r"^\s*8\.\s*Framework Awareness Note:",
+    r"^\s*9\.\s*Suggested Revisions:",
+    r"^\s*10\.\s*📊\s*Interpretation of Score:",
+]
+
+def _looks_strict(md: str) -> bool:
+    text = md or ""
+    for rx in SECTION_REGEXES:
+        if re.search(rx, text, flags=re.MULTILINE) is None:
+            return False
+    return True
+
+def _build_user_instruction(input_text: str) -> str:
+    return (
+        "Analyze the TEXT below strictly using the rules above. "
+        "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
+        "Do not add any intro/outro or backticks. "
+        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’. "
+        "For sections 3, 4, and 9 in that case, write ‘(none)’. "
+        "Include section 10 even when no bias is present.\n\n"
+        "=== OUTPUT TEMPLATE (copy exactly) ===\n"
+        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
+        "=== TEXT TO ANALYZE (verbatim) ===\n"
+        f"{input_text}"
+    )
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -1454,6 +1514,11 @@ with tabs[1]:
         ts_now = datetime.now(timezone.utc).isoformat()
         # CSV
         try:
+            with open(FEEDBACK_CSV, "w", newline="", encoding="utf-8") as f:
+                pass
+        except Exception:
+            pass
+        try:
             with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
                 csv.writer(f).writerow([ts_now, rating, email[:200], (comments or "").replace("\r", " ").strip(), conv_chars, transcript, "streamlit", "streamlit"])
         except Exception as e:
@@ -1815,6 +1880,13 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+'''
+# Save to file
+path = "/mnt/data/streamlit_app.py"
+with open(path, "w", encoding="utf-8") as f:
+    f.write(code)
+
+path
 
 
 
