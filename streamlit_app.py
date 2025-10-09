@@ -743,13 +743,15 @@ def _looks_strict(md: str) -> bool:
 
 
 def _build_user_instruction(input_text: str) -> str:
+    """
     Constructs a fully compliant Veritas system instruction.
-        return (
+    """
+    return (
         "Analyze the TEXT below strictly using the rules above. "
         "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
         "Do not add any intro/outro or backticks. "
-        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’. "
-        "For sections 3, 4, and 9 in that case, write ‘(none)’. "
+        "If no bias is present, set '1. Bias Detected: No' and '2. Bias Score: 🟢 No Bias | Score: 0.00'. "
+        "For sections 3, 4, and 9 in that case, write '(none)'. "
         "Include section 10 even when no bias is present.\n\n"
         "=== OUTPUT TEMPLATE (copy exactly) ===\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
@@ -766,6 +768,7 @@ def _run_safety_precheck(user_text: str) -> str | None:
     (Cited: AXIS Security Protocol Handbook Section IV; Veritas Schema Sections I–II)
     """
     text = user_text.strip().lower()
+
 
     # --- Tier 2: Self-harm / suicide intent ---
     if re.search(r"\b(i\s*(want|plan|intend|am\s*going)\s*to\s*(kill|harm|hurt)\s*(myself|me)\b)", text):
@@ -1900,6 +1903,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
