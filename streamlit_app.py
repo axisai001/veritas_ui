@@ -722,7 +722,9 @@ SECTION_REGEXES = [
 ]
 
 def _looks_strict(md: str) -> bool:
+    """
     Verify if the model output matches the strict Veritas schema or a valid safety message.
+    """
     text = (md or "").strip()
     if re.fullmatch(r"No bias, misinformation, or reasoning fallacies detected\.", text, flags=re.IGNORECASE):
         return True
@@ -1903,6 +1905,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
