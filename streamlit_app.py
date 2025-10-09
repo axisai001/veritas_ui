@@ -753,24 +753,17 @@ def _looks_strict(md: str) -> bool:
 
 
 def _build_user_instruction(input_text: str) -> str:
-    """
-    Constructs a fully compliant Veritas system instruction without displaying the internal template.
-    """
     return (
-        "Analyze the TEXT below according to the Veritas Schema (six sections): "
-        "1. Fact, 2. Bias, 3. Misinformation Patterns, 4. Reasoning Fallacies, 5. Explanation, and 6. Revision. "
-        "Each section must appear in order and use the exact headings shown below. "
-        "Output only these six sections — no extra commentary, templates, or notes.\n\n"
-        "In Section 6 (Revision), directly rewrite the passage to correct any bias, misinformation, or fallacy. "
-        "Do not describe how to revise it. Simply output the improved, fully revised text.\n\n"
-        "Required headings:\n"
-        "1. Fact:\n"
-        "2. Bias:\n"
-        "3. Misinformation Patterns:\n"
-        "4. Reasoning Fallacies:\n"
-        "5. Explanation:\n"
-        "6. Revision:\n\n"
-        "TEXT TO ANALYZE:\n"
+        "Analyze the TEXT below strictly using the Veritas Schema standards (Facts, Bias, Misinformation Patterns, Reasoning Fallacies, Explanation, Revision). "
+        "Follow the template exactly — six numbered sections, same headings, same order, no extra commentary. "
+        "For the **Revision** section, you must rewrite the entire passage completely and directly, "
+        "producing a single polished version that is inclusive, factual, and logically sound. "
+        "All previously detected bias, misinformation patterns, and reasoning fallacies must be corrected or removed. "
+        "Do NOT explain how to revise — only output the fully rewritten text itself. "
+        "If no bias, misinformation, or reasoning fallacies are detected, still provide a clear and unbiased rewritten version for consistency.\n\n"
+        "=== OUTPUT TEMPLATE (copy exactly) ===\n"
+        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
+        "=== TEXT TO ANALYZE (verbatim) ===\n"
         f"{input_text}"
     )
 
@@ -1977,6 +1970,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
