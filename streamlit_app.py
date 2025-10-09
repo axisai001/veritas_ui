@@ -768,7 +768,7 @@ def _run_safety_precheck(user_text: str) -> str | None:
     Local Contextual Safety Distinction Layer (CSDL)
     Enforces Tier 1 vs Tier 2 security before model execution.
     Returns a Tier 2 safety message if triggered; otherwise None.
-    (Cited: AXIS Security Protocol Handbook Section IV; Veritas Schema Sections I-II)
+    (Cited: AXIS Security Protocol Handbook Section IV; Veritas Schema Sections I–II)
     """
     text = user_text.strip().lower()
 
@@ -806,10 +806,8 @@ def _run_safety_precheck(user_text: str) -> str | None:
         )
 
     # --- Tier 2: Sensitive credential or data-security requests ---
-    # Context-aware logic: allows analytical discussion, blocks self-referential or solicitation requests.
     cred_pattern = r"api\s*key|access\s*token|password|secret\s*key|credentials?|private\s*key"
     if re.search(cred_pattern, text):
-        # Tier-2 markers (requests or ownership language)
         tier2_markers = [
             r"\b(send|give|share|show|provide|need|reveal|use)\b",
             r"\b(my|your|the)\s+(api\s*key|access\s*token|password|credentials?)\b",
@@ -819,9 +817,8 @@ def _run_safety_precheck(user_text: str) -> str | None:
             if re.search(marker, text):
                 return (
                     "⚠️ This text contains a request for sensitive credentials or security keys. "
-                    "For safety and legal compliance under AXIS Security Protocol § IV.6, analysis stops here."
+                    "For safety and legal compliance under AXIS Security Protocol Section IV.6, analysis stops here."
                 )
-        # Otherwise → analytical / third-person context = Tier 1 safe
         return None
 
     # --- Tier 1: Safe academic / third-person / analytic contexts ---
@@ -1908,6 +1905,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
