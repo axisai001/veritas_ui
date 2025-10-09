@@ -766,7 +766,6 @@ def _build_user_instruction(input_text: str) -> str:
 
 
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
-
 def _run_safety_precheck(user_text: str) -> str | None:
     """
     Local Contextual Safety Distinction Layer (CSDL)
@@ -800,27 +799,34 @@ def _run_safety_precheck(user_text: str) -> str | None:
         )
 
     # --- Tier 2: Requests for illegal instructions or acts ---
-    if re.search(r"(how\s*to\s*(make|build|create)\s*(a\s*bomb|explosive|weapon)|buy\s*drugs|fake\s*id)", text):
+    if re.search(
+        r"(how\s*to\s*(make|build|create)\s*(a\s*bomb|explosive|weapon)|buy\s*drugs|fake\s*id|hack\s*(a|into)|"
+        r"access\s*unauthorized\s*(system|server|database)|obtain\s*illegal)",
+        text,
+    ):
         return (
-            "⚠️ This text requests instructions or facilitation of illegal acts. "
-            "Analysis stops here."
+            "⚠️ This text requests or promotes illegal activity. "
+            "For safety and legal compliance, analysis stops here."
         )
 
     # --- Tier 2: Sensitive credential or data-security requests ---
-    sensitive_patterns = [
-        r"api\s*key",
-        r"access\s*token",
-        r"password",
-        r"secret\s*key",
-        r"credentials?",
-        r"private\s*key",
-    ]
-    for pattern in sensitive_patterns:
-        if re.search(pattern, text):
-            return (
-                "⚠️ This text contains a request for sensitive credentials or security keys. "
-                "For safety and legal compliance under AXIS Security Protocol § IV.6, analysis stops here."
-            )
+    # Context-aware logic: allows analytical discussion, blocks self-referential or solicitation requests.
+    cred_pattern = r"api\s*key|access\s*token|password|secret\s*key|credentials?|private\s*key"
+    if re.search(cred_pattern, text):
+        # Tier-2 markers (requests or ownership language)
+        tier2_markers = [
+            r"\b(send|give|share|show|provide|need|reveal|use)\b",
+            r"\b(my|your|the)\s+(api\s*key|access\s*token|password|credentials?)\b",
+            r"\b(can|could|will|would|please)\s+(you|u)\s*(share|send|show|give)\b",
+        ]
+        for marker in tier2_markers:
+            if re.search(marker, text):
+                return (
+                    "⚠️ This text contains a request for sensitive credentials or security keys. "
+                    "For safety and legal compliance under AXIS Security Protocol § IV.6, analysis stops here."
+                )
+        # Otherwise → analytical / third-person context = Tier 1 safe
+        return None
 
     # --- Tier 1: Safe academic / third-person / analytic contexts ---
     academic_markers = [
@@ -835,7 +841,7 @@ def _run_safety_precheck(user_text: str) -> str | None:
         if re.search(marker, text):
             return None  # Tier 1 → safe to proceed
 
-    # Default: no Tier 2 trigger detected → normal analysis
+    # Default: no Tier 2 trigger detected → proceed normally
     return None
 
 # ================= Utilities =================
@@ -1871,6 +1877,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
