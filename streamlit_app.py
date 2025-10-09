@@ -1298,39 +1298,39 @@ def show_login():
             login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
             pwd = st.text_input("Password", type="password")
 
-        # --- hCaptcha verification ---
-        verified = st_hcaptcha(
-            sitekey=st.secrets["HCAPTCHA_SITE_KEY"],
-            secret=st.secrets["HCAPTCHA_SECRET_KEY"]
-        )
+            # --- hCaptcha verification ---
+            verified = st_hcaptcha(
+                sitekey=st.secrets["HCAPTCHA_SITE_KEY"],
+                secret=st.secrets["HCAPTCHA_SECRET_KEY"]
+            )
 
-        submit = st.form_submit_button("Enter")
+            submit = st.form_submit_button("Enter")
 
-    if submit:
-        if not verified:
-            st.error("⚠️ Please complete the CAPTCHA before logging in.")
-            st.stop()
-        if _is_locked():
-            remaining = int(st.session_state["_locked_until"] - time.time())
-            mins = max(0, remaining // 60)
-            secs = max(0, remaining % 60)
-            st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
-            st.stop()
-        if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
-            st.error("network error")
-            st.stop()
-        if pwd == APP_PASSWORD:
-            st.session_state["authed"] = True
-            st.session_state["is_admin"] = False
-            st.session_state["login_id"] = (login_id or "").strip()
-            st.session_state["_fail_times"].clear()
-            st.session_state["_locked_until"] = 0.0
-            log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
-            st.success("Logged in.")
-            _safe_rerun()
-        else:
-            _note_failed_login(attempted_secret=pwd)
-            st.error("Incorrect password")
+        if submit:
+            if not verified:
+                st.error("⚠️ Please complete the CAPTCHA before logging in.")
+                st.stop()
+            if _is_locked():
+                remaining = int(st.session_state["_locked_until"] - time.time())
+                mins = max(0, remaining // 60)
+                secs = max(0, remaining % 60)
+                st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
+                st.stop()
+            if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
+                st.error("network error")
+                st.stop()
+            if pwd == APP_PASSWORD:
+                st.session_state["authed"] = True
+                st.session_state["is_admin"] = False
+                st.session_state["login_id"] = (login_id or "").strip()
+                st.session_state["_fail_times"].clear()
+                st.session_state["_locked_until"] = 0.0
+                log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
+                st.success("Logged in.")
+                _safe_rerun()
+            else:
+                _note_failed_login(attempted_secret=pwd)
+                st.error("Incorrect password")
 
     else:
         # ---- Admin Login (separate) ----
@@ -1984,6 +1984,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
