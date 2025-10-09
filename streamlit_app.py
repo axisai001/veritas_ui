@@ -1488,10 +1488,19 @@ with tabs[0]:
         ],
     )
 
-    # --- Extract and display Veritas report ---
+        # --- Extract and display Veritas report ---
     try:
         prog.progress(70, text="Processing model response…")
         final_report = resp.choices[0].message.content.strip()
+
+        # --- Append standard Veritas closing message ---
+        closing_line = (
+            "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
+            "in the text provided. If you have any further questions or need additional analysis, "
+            "feel free to ask The Prism."
+        )
+        if "feel free to ask The Prism" not in final_report:
+            final_report = final_report.rstrip() + "\n\n" + closing_line
 
         # Safety check: enforce strict schema output
         if not _looks_strict(final_report):
@@ -1903,6 +1912,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
