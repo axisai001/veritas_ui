@@ -752,12 +752,16 @@ def _build_user_instruction(input_text: str) -> str:
     Constructs a fully compliant Veritas system instruction without displaying the internal template.
     """
     return (
-        "Analyze the TEXT below strictly according to the Veritas Schema (6 sections): "
-        "1. Fact, 2. Bias, 3. Misinformation Patterns, 4. Reasoning Fallacies, "
-        "5. Explanation, and 6. Revision. "
-        "Each section must appear in order and with the same headings. "
-        "Do not include or display any template, instructions, or commentary. "
-        "Output only the 6 formatted sections and nothing else.\n\n"
+        "Analyze the TEXT below according to the Veritas Schema and output ONLY the six sections, "
+        "each starting on a new line with the EXACT numbered headings shown below. "
+        "No preamble or epilogue.\n\n"
+        "Required headings (copy exactly):\n"
+        "1. Fact:\n"
+        "2. Bias:\n"
+        "3. Misinformation Patterns:\n"
+        "4. Reasoning Fallacies:\n"
+        "5. Explanation:\n"
+        "6. Revision:\n\n"
         "TEXT TO ANALYZE:\n"
         f"{input_text}"
     )
@@ -1906,6 +1910,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
