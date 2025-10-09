@@ -1071,34 +1071,44 @@ div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
 button[kind="primary"], button[kind="secondary"],
 [data-testid="baseButton-secondary"], [data-testid="baseButton-primary"] {{
-  background-color: {PRIMARY} !important; color: #111418 !important;
-  border: 1px solid {PRIMARY} !important; border-radius: .75rem !important;
-  box-shadow: none !important; padding: 0.60rem 1rem !important;
-  font-size: 0.95rem !important; font-weight: 500 !important;
+  background-color: {PRIMARY} !important;
+  color: #111418 !important;
+  border: 1px solid {PRIMARY} !important;
+  border-radius: .75rem !important;
+  box-shadow: none !important;
+  padding: 0.60rem 1rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 500 !important;
 }}
 
 .stForm button[type="submit"],
 .stForm [data-testid="baseButton-primary"],
 .stForm [data-testid="baseButton-secondary"] {{
-  white-space: nowrap !important; word-break: normal !important; overflow: visible !important;
-  width: auto !important; min-width: 180px !important; height: auto !important;
-  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow: visible !important;
+  width: auto !important;
+  min-width: 180px !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 }}
 
 /* === Veritas Action Buttons === */
-.stForm button[type="submit"] {
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-}
-.stForm button[type="submit"]:first-child {
-    background: linear-gradient(90deg, #ff8c32, #e97c25) !important;
-    color: #111418 !important;
-}
-.stForm button[type="submit"]:nth-child(2) {
-    background: rgba(255,255,255,0.08) !important;
-    border: 1px solid rgba(255,255,255,0.25) !important;
-    color: #fff !important;
-}
+.stForm button[type="submit"] {{
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}}
+.stForm button[type="submit"]:first-child {{
+  background: linear-gradient(90deg, #ff8c32, #e97c25) !important;
+  color: #111418 !important;
+}}
+.stForm button[type="submit"]:nth-child(2) {{
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+  color: #fff !important;
+}}
 
 /* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
 .stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
@@ -1115,7 +1125,6 @@ header [data-testid="baseButton-headerNoPadding"],
 header a[href*="github.com"] {{
   display: none !important;
 }}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -1964,6 +1973,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
