@@ -1070,12 +1070,12 @@ html, body, [class*="css"] {{ font-family: 'Inter', system-ui, -apple-system, Se
 div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
 button[kind="primary"], button[kind="secondary"],
-[data-testid="baseButton-secondary"], [data-testid="baseButton-primary"] {
+[data-testid="baseButton-secondary"], [data-testid="baseButton-primary"] {{
   background-color: {PRIMARY} !important; color: #111418 !important;
   border: 1px solid {PRIMARY} !important; border-radius: .75rem !important;
   box-shadow: none !important; padding: 0.60rem 1rem !important;
   font-size: 0.95rem !important; font-weight: 500 !important;
-}
+}}
 
 /* Standard form button alignment */
 .stForm button[type="submit"],
@@ -1965,6 +1965,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
