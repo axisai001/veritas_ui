@@ -708,7 +708,8 @@ STRICT_OUTPUT_TEMPLATE = """
 <Clarify detected issues per tone-length matrix.>
 
 6. Revision:
-<Provide the full revised version of the original text, rewritten to be inclusive, factual, and logically sound while preserving the author’s intent.>
+<REWRITE the passage directly. Produce the revised, unbiased, factual version of the text. 
+Do NOT describe how to revise; output only the new version.>
 """.strip()
 
 # ===== Enforcement Helpers (Schema V3.2a & Safety Compliance) =====
@@ -752,10 +753,13 @@ def _build_user_instruction(input_text: str) -> str:
     Constructs a fully compliant Veritas system instruction without displaying the internal template.
     """
     return (
-        "Analyze the TEXT below according to the Veritas Schema and output ONLY the six sections, "
-        "each starting on a new line with the EXACT numbered headings shown below. "
-        "No preamble or epilogue.\n\n"
-        "Required headings (copy exactly):\n"
+        "Analyze the TEXT below according to the Veritas Schema (six sections): "
+        "1. Fact, 2. Bias, 3. Misinformation Patterns, 4. Reasoning Fallacies, 5. Explanation, and 6. Revision. "
+        "Each section must appear in order and use the exact headings shown below. "
+        "Output only these six sections — no extra commentary, templates, or notes.\n\n"
+        "In Section 6 (Revision), directly rewrite the passage to correct any bias, misinformation, or fallacy. "
+        "Do not describe how to revise it. Simply output the improved, fully revised text.\n\n"
+        "Required headings:\n"
         "1. Fact:\n"
         "2. Bias:\n"
         "3. Misinformation Patterns:\n"
@@ -1910,6 +1914,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
