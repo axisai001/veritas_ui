@@ -753,11 +753,8 @@ def _build_user_instruction(input_text: str) -> str:
     """
     return (
         "Analyze the TEXT below strictly using the rules above. "
-        "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
-        "Do not add any intro/outro or backticks. "
-        "If no bias is present, set '1. Bias Detected: No' and '2. Bias Score: 🟢 No Bias | Score: 0.00'. "
-        "For sections 3, 4, and 9 in that case, write '(none)'. "
-        "Include section 10 even when no bias is present.\n\n"
+        "Then **output ONLY** using this exact template (six numbered sections, same headings, same order). "
+        "Do not add any intro/outro or backticks.\n\n"
         "=== OUTPUT TEMPLATE (copy exactly) ===\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
         "=== TEXT TO ANALYZE (verbatim) ===\n"
@@ -1908,6 +1905,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
