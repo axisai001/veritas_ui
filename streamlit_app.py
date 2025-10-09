@@ -749,15 +749,16 @@ def _looks_strict(md: str) -> bool:
 
 def _build_user_instruction(input_text: str) -> str:
     """
-    Constructs a fully compliant Veritas system instruction.
+    Constructs a fully compliant Veritas system instruction without displaying the internal template.
     """
     return (
-        "Analyze the TEXT below strictly using the rules above. "
-        "Then **output ONLY** using this exact template (six numbered sections, same headings, same order). "
-        "Do not add any intro/outro or backticks.\n\n"
-        "=== OUTPUT TEMPLATE (copy exactly) ===\n"
-        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
-        "=== TEXT TO ANALYZE (verbatim) ===\n"
+        "Analyze the TEXT below strictly according to the Veritas Schema (6 sections): "
+        "1. Fact, 2. Bias, 3. Misinformation Patterns, 4. Reasoning Fallacies, "
+        "5. Explanation, and 6. Revision. "
+        "Each section must appear in order and with the same headings. "
+        "Do not include or display any template, instructions, or commentary. "
+        "Output only the 6 formatted sections and nothing else.\n\n"
+        "TEXT TO ANALYZE:\n"
         f"{input_text}"
     )
 
@@ -1905,6 +1906,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
