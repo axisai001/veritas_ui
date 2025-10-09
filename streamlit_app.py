@@ -1409,9 +1409,9 @@ with tabs[0]:
 
         bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
-            submitted = st.form_submit_button("Analyze")
+            submitted = st.form_submit_button("Engage Veritas")
         with bcol2:
-            new_analysis = st.form_submit_button("New Analysis")
+            new_analysis = st.form_submit_button("Reset Canvas")
 
     # NEW: safer reset handler for New Analysis
     if 'new_analysis' in locals() and new_analysis:
@@ -1961,6 +1961,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
