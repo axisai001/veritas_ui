@@ -770,7 +770,7 @@ def _run_safety_precheck(user_text: str) -> str | None:
     Local Contextual Safety Distinction Layer (CSDL)
     Enforces Tier 1 vs Tier 2 security before model execution.
     Returns a Tier 2 safety message if triggered; otherwise None.
-    (Cited: AXIS Security Protocol Handbook § IV; Veritas Schema § I–II)
+    (Cited: AXIS Security Protocol Handbook Section IV; Veritas Schema Sections I-II)
     """
 
     text = user_text.strip().lower()
@@ -1911,6 +1911,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
