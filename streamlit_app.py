@@ -1083,19 +1083,29 @@ button[kind="primary"], button[kind="secondary"],
   width: auto !important; min-width: 180px !important; height: auto !important;
   display: inline-flex !important; align-items: center !important; justify-content: center !important;
 }}
-.v-card {{ background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 16px; padding: 18px; }}
-#analyze-card h3 {{ margin: 0 0 .5rem !important; }}
-#analyze-card [data-testid="stTextArea"] label,
-#analyze-card [data-testid="stFileUploader"] label {{ margin-top: 0 !important; }}
-.v-actions {{ display: inline-flex; gap: 1.0rem; align-items: center;
-  padding: .45rem .75rem; border-radius: 10px; background: rgba(0,0,0,0.65); }}
-.v-actions a {{ color: #fff !important; text-decoration: none; font-weight: 600; }}
-.v-actions a:hover {{ text-decoration: underline; }}
-.v-actions .copy-note {{ color:#fff; opacity:.8; font-size:.85rem; }}
-#vFooter {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 9999;
-  text-align: center; font-size: 12px; opacity: .85;
-  background: rgba(0,0,0,0.75); color: #fff; padding: 6px 8px; }}
+}}
+.stForm button[type="submit"],
+.stForm [data-testid="baseButton-primary"],
+.stForm [data-testid="baseButton-secondary"] {{
+  white-space: nowrap !important; word-break: normal !important; overflow: visible !important;
+  width: auto !important; min-width: 180px !important; height: auto !important;
+  display: inline-flex !important; align-items: center !important; justify-content: center !important;
+}}
+
+/* === Veritas Action Buttons === */
+.stForm button[type="submit"] {{
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+}}
+.stForm button[type="submit"]:first-child {{
+    background: linear-gradient(90deg, #ff8c32, #e97c25) !important;
+    color: #111418 !important;
+}}
+.stForm button[type="submit"]:nth-child(2) {{
+    background: rgba(255,255,255,0.08) !important;
+    border: 1px solid rgba(255,255,255,0.25) !important;
+    color: #fff !important;
+}}
 
 /* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
 .stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
@@ -1961,6 +1971,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
