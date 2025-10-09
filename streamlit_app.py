@@ -1369,18 +1369,18 @@ with tabs[0]:
         st.session_state["user_input_box"] = ""
 
     with st.form("analysis_form"):
-    st.markdown("""
-        <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
-        <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-            Bias, Misinformation, and Reasoning Fallacy Detection
-        </p>
-    """, unsafe_allow_html=True)
-    st.text_area(
-        "Paste or type text to analyze",
-        height=200,
-        key="user_input_box",
-        help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
-    )
+        st.markdown("""
+            <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
+            <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
+                Bias, Misinformation, and Reasoning Fallacy Detection
+            </p>
+        """, unsafe_allow_html=True)
+        st.text_area(
+            "Paste or type text to analyze",
+            height=200,
+            key="user_input_box",
+            help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
+        )
 
         doc = st.file_uploader(
             f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
@@ -1920,6 +1920,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
