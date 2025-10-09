@@ -1293,10 +1293,10 @@ def show_login():
     st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
     if st.session_state["auth_view"] == "user":
-    # ---- Normal User Login with hCaptcha ----
-    with st.form("login_form_user"):
-        login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
-        pwd = st.text_input("Password", type="password")
+        # ---- Normal User Login with hCaptcha ----
+        with st.form("login_form_user"):
+            login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
+            pwd = st.text_input("Password", type="password")
 
         # --- hCaptcha verification ---
         verified = st_hcaptcha(
@@ -1984,6 +1984,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
