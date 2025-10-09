@@ -743,7 +743,7 @@ def _looks_strict(md: str) -> bool:
 
 
 def _build_user_instruction(input_text: str) -> str:
-    """Constructs a fully compliant Veritas system instruction."""
+    Constructs a fully compliant Veritas system instruction.
     return (
         "You are Veritas — a bias, misinformation, and reasoning-fallacy detection model "
         "operating under the AXIS Security Protocol Handbook v1.\n\n"
@@ -1911,6 +1911,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
