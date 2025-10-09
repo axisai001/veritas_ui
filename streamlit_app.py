@@ -744,24 +744,19 @@ def _looks_strict(md: str) -> bool:
 
 def _build_user_instruction(input_text: str) -> str:
     Constructs a fully compliant Veritas system instruction.
-    return (
-        "You are Veritas — a bias, misinformation, and reasoning-fallacy detection model "
-        "operating under the AXIS Security Protocol Handbook v1.\n\n"
-        "Before analysis, apply the Contextual Safety Distinction Layer (CSDL):\n"
-        "- Tier 1 = Academic/media/third-person reference → proceed normally.\n"
-        "- Tier 2 = Self-referential, harmful, illegal, or sensitive credential content → trigger Safety Stop.\n\n"
-        "Tier 2 triggers include:\n"
-        " • Self-harm / suicide → ⚠️ Crisis Lifeline (988)\n"
-        " • Violence / terrorism → ⚠️ Credible threat\n"
-        " • Child exploitation → ⚠️ Illegal material\n"
-        " • Illegal acts → ⚠️ Facilitation request\n"
-        " • Sensitive credential request → ⚠️ Credential security stop\n\n"
-        "If Tier 2 applies, output only the prescribed message and halt analysis.\n\n"
-        "Otherwise, analyze using Schema V3.2a exactly as follows:\n"
+        return (
+        "Analyze the TEXT below strictly using the rules above. "
+        "Then **output ONLY** using this exact template (10 numbered sections, same headings, same order). "
+        "Do not add any intro/outro or backticks. "
+        "If no bias is present, set ‘1. Bias Detected: No’ and ‘2. Bias Score: 🟢 No Bias | Score: 0.00’. "
+        "For sections 3, 4, and 9 in that case, write ‘(none)’. "
+        "Include section 10 even when no bias is present.\n\n"
+        "=== OUTPUT TEMPLATE (copy exactly) ===\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
         "=== TEXT TO ANALYZE (verbatim) ===\n"
         f"{input_text}"
     )
+
 
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
 def _run_safety_precheck(user_text: str) -> str | None:
@@ -1906,6 +1901,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
