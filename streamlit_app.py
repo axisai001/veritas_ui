@@ -1505,10 +1505,10 @@ with tabs[0]:
         st.stop()
 
     # --- Prompt Injection / Disclosure Detection ---
-if _detect_prompt_injection(final_input):
-    log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-    st.warning("⚠️ Security Protocol Triggered: Disclosure attempt blocked.")
-    st.stop()
+    if _detect_prompt_injection(final_input):
+        log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
+        st.warning("⚠️ Security Protocol Triggered: Disclosure attempt blocked.")
+        st.stop()
 
     # --- Safe Tier-1 input → proceed to Veritas schema generation ---
     user_instruction = _build_user_instruction(final_input)
@@ -1953,6 +1953,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
