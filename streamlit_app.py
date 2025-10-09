@@ -771,7 +771,6 @@ def _run_safety_precheck(user_text: str) -> str | None:
     Returns a Tier 2 safety message if triggered; otherwise None.
     (Cited: AXIS Security Protocol Handbook Section IV; Veritas Schema Sections I-II)
     """
-
     text = user_text.strip().lower()
 
     # --- Tier 2: Self-harm / suicide intent ---
@@ -1910,6 +1909,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
