@@ -850,28 +850,19 @@ def _run_safety_precheck(user_text: str) -> str | None:
 def _detect_prompt_injection(text: str) -> bool:
     """
     Detects prompt-injection or system-prompt disclosure attempts.
-    Returns True if user input appears to request or reveal Veritas' internal schema, system prompt, or logic.
+    Triggers on any input requesting to reveal internal prompts, schemas, or instructions.
     """
-    lowered = text.lower()
-    suspicious_keywords = [
-        "what is your prompt",
-        "show your prompt",
-        "display your system prompt",
-        "ignore previous instructions",
-        "bypass safety",
-        "act as",
-        "reveal system",
-        "system message",
-        "developer message",
-        "prompt leak",
-        "show hidden prompt",
-        "send the schema",
-        "output the template",
-        "show veritas schema",
-        "print the prompt",
-        "show your system message"
+    lowered = text.lower().strip()
+    patterns = [
+        r"\b(show|display|print|reveal|send|give|share)\b.*\b(prompt|schema|system|instructions?|rules?)\b",
+        r"\bwhat\s+is\s+(your|the)\s+(prompt|system|schema)\b",
+        r"\b(ignore|bypass)\s+(all\s+)?(previous|safety|security)\s+instructions\b",
+        r"\b(i\s+want\s+to\s+see\s+(your|the)\s+(prompt|schema|system))\b",
     ]
-    return any(k in lowered for k in suspicious_keywords)
+    for pattern in patterns:
+        if re.search(pattern, lowered):
+            return True
+    return False
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -1953,6 +1944,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
