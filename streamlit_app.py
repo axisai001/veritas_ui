@@ -709,6 +709,8 @@ STRICT_OUTPUT_TEMPLATE = """
 
 6. Revision:
 <Provide the full revised version of the original text, rewritten to be inclusive, factual, and logically sound while preserving the author’s intent.>
+""".strip()
+
 # ===== Enforcement Helpers (Schema V3.2a & Safety Compliance) =====
 import re
 
@@ -1906,6 +1908,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
