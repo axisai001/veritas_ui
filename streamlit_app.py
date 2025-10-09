@@ -708,8 +708,12 @@ STRICT_OUTPUT_TEMPLATE = """
 <Clarify detected issues per tone-length matrix.>
 
 6. Revision:
-<REWRITE the passage directly. Produce the revised, unbiased, factual version of the text. 
-Do NOT describe how to revise; output only the new version.>
+<Rewrite the entire text directly and completely. 
+Produce a single, polished version that is inclusive, factual, and logically sound 
+while preserving the author’s original intent and tone. 
+All previously detected bias, misinformation patterns, and reasoning fallacies 
+must be corrected, rephrased, or removed entirely. 
+Do NOT explain how to revise; output only the fully revised text.>
 """.strip()
 
 # ===== Enforcement Helpers (Schema V3.2a & Safety Compliance) =====
@@ -1973,6 +1977,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
