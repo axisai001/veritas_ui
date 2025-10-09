@@ -1487,6 +1487,32 @@ with tabs[0]:
             {"role": "user", "content": user_instruction},
         ],
     )
+
+    # --- Extract and display Veritas report ---
+    try:
+        prog.progress(70, text="Processing model response…")
+        final_report = resp.choices[0].message.content.strip()
+
+        # Safety check: enforce strict schema output
+        if not _looks_strict(final_report):
+            log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+            st.error("Veritas produced a non-compliant output. Please retry.")
+            st.stop()
+
+        public_id = _gen_public_report_id()
+        internal_id = _gen_internal_report_id()
+        log_analysis(public_id, internal_id, final_report)
+
+        prog.progress(100, text="Analysis complete ✓")
+        st.success(f"✅ Report generated — ID: {public_id}")
+        st.markdown(final_report)
+        st.session_state["last_reply"] = final_report
+        st.session_state["history"].append({"role": "assistant", "content": final_report})
+
+    except Exception as e:
+        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+        st.error("⚠️ There was an issue retrieving the Veritas report.")
+        st.stop()
     
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -1877,6 +1903,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
