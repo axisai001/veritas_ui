@@ -1299,10 +1299,7 @@ def show_login():
             pwd = st.text_input("Password", type="password")
 
             # --- hCaptcha verification ---
-            verified = st_hcaptcha(
-                sitekey=st.secrets["HCAPTCHA_SITE_KEY"],
-                secret=st.secrets["HCAPTCHA_SECRET_KEY"]
-            )
+            verified = st_hcaptcha(sitekey=st.secrets["HCAPTCHA_SITE_KEY"])
 
             submit = st.form_submit_button("Enter")
 
@@ -1984,6 +1981,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
