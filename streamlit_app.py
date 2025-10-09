@@ -754,19 +754,20 @@ def _looks_strict(md: str) -> bool:
 
 def _build_user_instruction(input_text: str) -> str:
     return (
-        "Analyze the TEXT below strictly using the Veritas Schema standards (Facts, Bias, Misinformation Patterns, Reasoning Fallacies, Explanation, Revision). "
-        "Follow the template exactly — six numbered sections, same headings, same order, no extra commentary. "
-        "For the **Revision** section, you must rewrite the entire passage completely and directly, "
-        "producing a single polished version that is inclusive, factual, and logically sound. "
-        "All previously detected bias, misinformation patterns, and reasoning fallacies must be corrected or removed. "
-        "Do NOT explain how to revise — only output the fully rewritten text itself. "
-        "If no bias, misinformation, or reasoning fallacies are detected, still provide a clear and unbiased rewritten version for consistency.\n\n"
-        "=== OUTPUT TEMPLATE (copy exactly) ===\n"
+        "You are Veritas, a factual analysis and correction model. "
+        "Analyze the TEXT below strictly following the six-section schema: "
+        "1 Fact, 2 Bias, 3 Misinformation Patterns, 4 Reasoning Fallacies, 5 Explanation, 6 Revision. "
+        "Output only those six numbered sections—nothing else. "
+        "Do NOT include any headers such as '=== OUTPUT TEMPLATE (copy exactly) ===' or explanatory text. "
+        "Each section must appear once and in the same order. "
+        "For the **Revision** section, rewrite the entire passage completely and directly, producing a single polished version "
+        "that is inclusive, factual, and logically sound while preserving the author’s original intent and tone. "
+        "All previously detected bias, misinformation patterns, and reasoning fallacies must be corrected, rephrased, or removed. "
+        "Do NOT explain how to revise; output only the fully rewritten text.\n\n"
         f"{STRICT_OUTPUT_TEMPLATE}\n\n"
         "=== TEXT TO ANALYZE (verbatim) ===\n"
         f"{input_text}"
     )
-
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
 def _run_safety_precheck(user_text: str) -> str | None:
     """
@@ -1970,6 +1971,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
