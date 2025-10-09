@@ -1362,7 +1362,7 @@ tabs = st.tabs(tab_names)
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
-    st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
+    # st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
 
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
@@ -1920,6 +1920,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
