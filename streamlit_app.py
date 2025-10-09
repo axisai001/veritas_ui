@@ -1495,10 +1495,27 @@ with tabs[0]:
         st.markdown(final_report)
         st.stop()
 
-    # --- Prompt Injection / Disclosure Detection ---
+        # --- Prompt Injection / Disclosure Detection ---
     if _detect_prompt_injection(final_input):
         log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-        st.warning("⚠️ Security Protocol Triggered: Disclosure attempt blocked.")
+
+        st.markdown("""
+        <div style="
+            background-color: #7a0000;
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            font-weight: 600;
+            margin-top: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+        ">
+        ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
+        Veritas has detected an attempt to reveal internal schema, system instructions, or secure prompt logic.<br>
+        This action has been logged for security auditing and the analysis has been terminated.
+        </div>
+        """, unsafe_allow_html=True)
+
         st.stop()
 
     # --- Safe Tier-1 input → proceed to Veritas schema generation ---
@@ -1944,6 +1961,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
