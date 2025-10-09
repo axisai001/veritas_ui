@@ -846,6 +846,33 @@ def _run_safety_precheck(user_text: str) -> str | None:
     # Default: no Tier 2 trigger detected → proceed normally
     return None
 
+# --- Prompt Injection / Disclosure Detection (AXIS Security §IV.7) ---
+def _detect_prompt_injection(text: str) -> bool:
+    """
+    Detects prompt-injection or system-prompt disclosure attempts.
+    Returns True if user input appears to request or reveal Veritas' internal schema, system prompt, or logic.
+    """
+    lowered = text.lower()
+    suspicious_keywords = [
+        "what is your prompt",
+        "show your prompt",
+        "display your system prompt",
+        "ignore previous instructions",
+        "bypass safety",
+        "act as",
+        "reveal system",
+        "system message",
+        "developer message",
+        "prompt leak",
+        "show hidden prompt",
+        "send the schema",
+        "output the template",
+        "show veritas schema",
+        "print the prompt",
+        "show your system message"
+    ]
+    return any(k in lowered for k in suspicious_keywords)
+
 # ================= Utilities =================
 def _get_sid() -> str:
     sid = st.session_state.get("sid")
@@ -1920,6 +1947,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
