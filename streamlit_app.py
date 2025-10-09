@@ -1077,14 +1077,13 @@ button[kind="primary"], button[kind="secondary"],
   font-size: 0.95rem !important; font-weight: 500 !important;
 }}
 
-/* Standard form button alignment */
 .stForm button[type="submit"],
 .stForm [data-testid="baseButton-primary"],
-.stForm [data-testid="baseButton-secondary"] {
+.stForm [data-testid="baseButton-secondary"] {{
   white-space: nowrap !important; word-break: normal !important; overflow: visible !important;
   width: auto !important; min-width: 180px !important; height: auto !important;
   display: inline-flex !important; align-items: center !important; justify-content: center !important;
-}
+}}
 
 /* === Veritas Action Buttons === */
 .stForm button[type="submit"] {
@@ -1965,6 +1964,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
