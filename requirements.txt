@@ -17,4 +17,4 @@ reportlab==4.2.2
 # Optional: load environment variables from .env
 python-dotenv==1.0.1
 
-pip install streamlit-hcaptcha
+streamlit-hcaptcha
