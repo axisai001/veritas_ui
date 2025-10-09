@@ -33,7 +33,6 @@ from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from collections import deque
 from pathlib import Path
-from streamlit_hcaptcha import st_hcaptcha
 
 import pandas as pd
 import streamlit as st
@@ -1293,32 +1292,23 @@ def show_login():
     st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
     if st.session_state["auth_view"] == "user":
-        # ---- Normal User Login with hCaptcha ----
+        # ---- Normal User Login ----
         with st.form("login_form_user"):
             login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
             pwd = st.text_input("Password", type="password")
-
-            # --- hCaptcha verification ---
-            verified = st_hcaptcha(sitekey=st.secrets["HCAPTCHA_SITE_KEY"])
-
             submit = st.form_submit_button("Enter")
 
         if submit:
-            if not verified:
-                st.error("⚠️ Please complete the CAPTCHA before logging in.")
-                st.stop()
             if _is_locked():
                 remaining = int(st.session_state["_locked_until"] - time.time())
-                mins = max(0, remaining // 60)
-                secs = max(0, remaining % 60)
+                mins = max(0, remaining // 60); secs = max(0, remaining % 60)
                 st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
                 st.stop()
             if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
-                st.error("network error")
-                st.stop()
+                st.error("network error"); st.stop()
             if pwd == APP_PASSWORD:
                 st.session_state["authed"] = True
-                st.session_state["is_admin"] = False
+                st.session_state["is_admin"] = False  # regular user
                 st.session_state["login_id"] = (login_id or "").strip()
                 st.session_state["_fail_times"].clear()
                 st.session_state["_locked_until"] = 0.0
@@ -1981,64 +1971,6 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
