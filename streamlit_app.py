@@ -656,7 +656,7 @@ STRICT_OUTPUT_TEMPLATE = """
 4. Revision:
 <Rewrite the entire text directly and completely. 
 Produce a single, polished version that is inclusive, factual, and logically sound 
-while preserving the author’s original intent and tone. 
+while preserving the author's original intent and tone. 
 All previously detected bias, misinformation patterns, and reasoning fallacies 
 must be corrected, rephrased, or removed entirely. 
 Do NOT explain how to revise; output only the fully revised text.>
@@ -1915,6 +1915,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
