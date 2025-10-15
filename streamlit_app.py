@@ -647,7 +647,7 @@ STRICT_OUTPUT_TEMPLATE = """
 
 2. Bias:
 - Detected: <Yes/No>
-- Type(s): <bias type(s) if present, aligned with Bias Typology §II>
+- Type(s): <bias type(s) if present, aligned with Bias Typology Section II>
 - Example(s): "<biased phrase 1>", "<biased phrase 2>"
 
 3. Explanation:
@@ -1915,6 +1915,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
