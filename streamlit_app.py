@@ -697,21 +697,31 @@ def _looks_strict(md: str) -> bool:
 
 
 def _build_user_instruction(input_text: str) -> str:
-    return (
-        "You are Veritas, a factual analysis and correction model. "
-        "Analyze the TEXT below strictly following the six-section schema: "
-        "1 Fact, 2 Bias, 3 Explanation, 4 Revision. "
-        "Output only those four numbered sections—nothing else. "
-        "Do NOT include any headers such as '=== OUTPUT TEMPLATE (copy exactly) ===' or explanatory text. "
-        "Each section must appear once and in the same order. "
-        "For the **Revision** section, rewrite the entire passage completely and directly, producing a single polished version "
-        "that is inclusive, factual, and logically sound while preserving the author’s original intent and tone. "
-        "All previously detected bias must be corrected, rephrased, or removed. "
-        "Do NOT explain how to revise; output only the fully rewritten text.\n\n"
-        f"{STRICT_OUTPUT_TEMPLATE}\n\n"
-        "=== TEXT TO ANALYZE (verbatim) ===\n"
-        f"{input_text}"
-    )
+    """
+    Build the Veritas analysis instruction prompt for the model.
+    """
+    return f"""You are Veritas, a factual analysis and correction model.
+Analyze the TEXT below strictly following the four-section schema:
+1. Fact
+2. Bias
+3. Explanation
+4. Revision
+
+Output only those four numbered sections — nothing else.
+Do NOT include any headers such as "=== OUTPUT TEMPLATE (copy exactly) ===" or explanatory text.
+Each section must appear once and in the same order.
+
+For the Revision section, rewrite the entire passage completely and directly,
+producing a single polished version that is inclusive, factual, and logically sound,
+while preserving the author's original intent and tone.
+All previously detected bias must be corrected, rephrased, or removed.
+Do NOT explain how to revise; output only the fully rewritten text.
+
+{STRICT_OUTPUT_TEMPLATE}
+
+=== TEXT TO ANALYZE (verbatim) ===
+{input_text}
+"""
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
 def _run_safety_precheck(user_text: str) -> str | None:
     """
@@ -1915,6 +1925,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
