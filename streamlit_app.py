@@ -641,7 +641,7 @@ mappings:​
 - Visual/Representation Bias → Cultural Bias​
 - False Balance → Media Bias
 
-STRICT_OUTPUT_TEMPLATE = """
+STRICT_OUTPUT_TEMPLATE = """ 
 1. Fact:
 - <empirical or uncontested statement(s) extracted from text>
 
@@ -660,7 +660,7 @@ while preserving the author's original intent and tone.
 All previously detected bias, misinformation patterns, and reasoning fallacies
 must be corrected, rephrased, or removed entirely.
 Do NOT explain how to revise; output only the fully revised text.>
-""".strip()
+"""
 
 # ===== Enforcement Helpers (Schema V3.2a & Safety Compliance) =====
 import re
@@ -1915,6 +1915,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
