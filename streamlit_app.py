@@ -668,8 +668,8 @@ import re
 SECTION_REGEXES = [
     r"^\s*(?:1\.\s*)?Fact:",
     r"^\s*(?:2\.\s*)?Bias:",
-    r"^\s*(?:5\.\s*)?Explanation:",
-    r"^\s*(?:6\.\s*)?Revision:",
+    r"^\s*(?:3\.\s*)?Explanation:",
+    r"^\s*(?:4\.\s*)?Revision:",
 ]
 
 def _looks_strict(md: str) -> bool:
@@ -1925,6 +1925,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
