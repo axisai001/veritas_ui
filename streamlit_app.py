@@ -640,7 +640,7 @@ mappings:​
 - Gatekeeping/Exclusivity → Selection Bias​
 - Visual/Representation Bias → Cultural Bias​
 - False Balance → Media Bias
-
+"""
 STRICT_OUTPUT_TEMPLATE = """ 
 1. Fact:
 - <empirical or uncontested statement(s) extracted from text>
@@ -1925,6 +1925,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
