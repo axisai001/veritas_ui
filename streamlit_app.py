@@ -1388,7 +1388,13 @@ with tabs[0]:
         _safe_rerun()
 
     # --- Handle Veritas Analysis only when submitted ---
-if submitted:
+    if submitted:
+        # --- Detect if this is a Red Team test ---
+        redteam_flag = 0
+        user_login = st.session_state.get("login_id", "").lower()
+        if "redteam" in user_login or "tester" in user_login:
+            redteam_flag = 1
+
     if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
         st.error("network error")
         st.stop()
@@ -1415,12 +1421,14 @@ if submitted:
                 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
                     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
                     if ext == "pdf":
-                        if PdfReader is None: return ""
+                        if PdfReader is None:
+                            return ""
                         reader = PdfReader(io.BytesIO(file_bytes))
                         parts = [page.extract_text() or "" for page in reader.pages]
                         return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
                     elif ext == "docx":
-                        if docx is None: return ""
+                        if docx is None:
+                            return ""
                         buf = io.BytesIO(file_bytes)
                         doc_obj = docx.Document(buf)
                         text = "\n".join(p.text for p in doc_obj.paragraphs)
@@ -1971,6 +1979,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
