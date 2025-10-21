@@ -1387,10 +1387,11 @@ with tabs[0]:
         st.session_state["doc_uploader_key"] += 1
         _safe_rerun()
 
-    if 'submitted' in locals() and submitted:
-        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-            st.error("network error")
-            st.stop()
+    # --- Handle Veritas Analysis only when submitted ---
+if submitted:
+    if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+        st.error("network error")
+        st.stop()
 
     try:
         prog = st.progress(0, text="Preparing…")
@@ -1399,8 +1400,10 @@ with tabs[0]:
 
     user_text = st.session_state.get("user_input_box", "").strip()
     extracted = ""
-    try: prog.progress(10)
-    except Exception: pass
+    try:
+        prog.progress(10)
+    except Exception:
+        pass
 
     if doc is not None:
         size_mb = doc.size / (1024 * 1024)
@@ -1414,10 +1417,7 @@ with tabs[0]:
                     if ext == "pdf":
                         if PdfReader is None: return ""
                         reader = PdfReader(io.BytesIO(file_bytes))
-                        parts = []
-                        for page in reader.pages:
-                            try: parts.append(page.extract_text() or "")
-                            except Exception: continue
+                        parts = [page.extract_text() or "" for page in reader.pages]
                         return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
                     elif ext == "docx":
                         if docx is None: return ""
@@ -1426,65 +1426,46 @@ with tabs[0]:
                         text = "\n".join(p.text for p in doc_obj.paragraphs)
                         return text[:MAX_EXTRACT_CHARS]
                     elif ext in ("txt", "md", "csv"):
-                        def _safe_decode(b: bytes) -> str:
-                            for enc in ("utf-8", "utf-16", "latin-1"):
-                                try: return b.decode(enc)
-                                except Exception: continue
-                            return b.decode("utf-8", errors="ignore")
-                        return _safe_decode(file_bytes)[:MAX_EXTRACT_CHARS]
+                        return file_bytes.decode("utf-8", errors="ignore")[:MAX_EXTRACT_CHARS]
                     return ""
                 extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
         except Exception as e:
-            log_error_event(kind="EXTRACT", route="/extract", http_status=500, detail=repr(e))
+            log_error_event("EXTRACT", "/extract", 500, repr(e))
             st.error("network error")
             st.stop()
 
-        # ✅ FIXED — moved OUTSIDE the exception block so it always runs
+    # ✅ Build combined input only during submit
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
     if not final_input:
         st.error("Please enter some text or upload a document.")
         st.stop()
 
-    # --- OpenAI call ---
     api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
     if not api_key:
         st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
         st.stop()
 
-    # --- Tier-1 / Tier-2 Local Safety Enforcement (AXIS § IV) ---
+    # --- Tier-1 / Tier-2 Local Safety Enforcement ---
     safety_message = _run_safety_precheck(final_input)
     if safety_message:
-        final_report = safety_message
-        st.markdown(final_report)
+        st.markdown(safety_message)
         st.stop()
 
-        # --- Prompt Injection / Disclosure Detection ---
+    # --- Prompt Injection / Disclosure Detection ---
     if _detect_prompt_injection(final_input):
         log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-
         st.markdown("""
-        <div style="
-            background-color: #7a0000;
-            color: white;
-            padding: 1rem;
-            border-radius: 10px;
-            font-weight: 600;
-            margin-top: 1rem;
-            margin-bottom: 1rem;
-            text-align: center;
-        ">
+        <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
         ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
-        Veritas has detected an attempt to reveal internal schema, system instructions, or secure prompt logic.<br>
-        This action has been logged for security auditing and the analysis has been terminated.
+        Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
+        Action logged; analysis terminated.
         </div>
         """, unsafe_allow_html=True)
-
         st.stop()
 
-    # --- Safe Tier-1 input → proceed to Veritas schema generation ---
+    # --- Proceed with Veritas analysis ---
     user_instruction = _build_user_instruction(final_input)
-
     try:
         prog.progress(40, text="Contacting model…")
     except Exception:
@@ -1501,12 +1482,9 @@ with tabs[0]:
         ],
     )
 
-        # --- Extract and display Veritas report ---
     try:
         prog.progress(70, text="Processing model response…")
         final_report = resp.choices[0].message.content.strip()
-
-        # --- Append standard Veritas closing message ---
         closing_line = (
             "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
             "in the text provided. If you have any further questions or need additional analysis, "
@@ -1515,7 +1493,6 @@ with tabs[0]:
         if "feel free to ask The Prism" not in final_report:
             final_report = final_report.rstrip() + "\n\n" + closing_line
 
-        # Safety check: enforce strict schema output
         if not _looks_strict(final_report):
             log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
             st.error("Veritas produced a non-compliant output. Please retry.")
@@ -1535,6 +1512,9 @@ with tabs[0]:
         log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
         st.error("⚠️ There was an issue retrieving the Veritas report.")
         st.stop()
+
+else:
+    st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -1991,6 +1971,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
