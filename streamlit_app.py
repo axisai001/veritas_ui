@@ -1273,11 +1273,22 @@ def show_login():
             if pwd == APP_PASSWORD:
                 st.session_state["authed"] = True
                 st.session_state["is_admin"] = False  # regular user
-                st.session_state["login_id"] = (login_id or "").strip()
+
+                login_id_clean = (login_id or "").strip().lower()
+                st.session_state["login_id"] = login_id_clean
                 st.session_state["_fail_times"].clear()
                 st.session_state["_locked_until"] = 0.0
-                log_auth_event("login_success", True, login_id=st.session_state["login_id"], credential_label="APP_PASSWORD")
-                st.success("Logged in.")
+
+                # ✅ Detect if this login belongs to a Red Team tester
+                if login_id_clean in REDTEAM_EMAILS:
+                    st.session_state["is_redteam"] = True
+                    log_auth_event("redteam_login", True, login_id=login_id_clean, credential_label="APP_PASSWORD")
+                    st.success("🧪 Red Team tester session active — all inputs/outputs will be logged.")
+                else:
+                    st.session_state["is_redteam"] = False
+                    log_auth_event("login_success", True, login_id=login_id_clean, credential_label="APP_PASSWORD")
+                    st.success("Logged in.")
+
                 _safe_rerun()
             else:
                 _note_failed_login(attempted_secret=pwd)
@@ -2000,6 +2011,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
