@@ -1367,7 +1367,7 @@ tabs = st.tabs(tab_names)
 with tabs[0]:
     if st.session_state.get("is_redteam", False):
         st.markdown("""
-        <div style="background-color:#4A148C;color:white;padding:0.75rem;border-radius:8px;margin-bottom:1rem;">
+        <div style="background-color:#B71C1C;color:white;padding:0.75rem;border-radius:8px;margin-bottom:1rem;">
         🧪 <b>Red Team Mode Active:</b> All inputs and outputs are being logged for testing.
         </div>
         """, unsafe_allow_html=True)
@@ -2020,6 +2020,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
