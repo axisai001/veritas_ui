@@ -1920,11 +1920,76 @@ if st.session_state.get("is_admin", False):
                         st.info("No local background to remove.")
             st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
 
+            # ---- Red Team Tracker (new) ----
+with st.tabs(["🧪 Red Team Tracker"])[0]:
+    st.write("### 🧪 Red Team Tracker — Phase 1")
+    st.caption("Monitor and export all Red Team test sessions, including tester ID, IP address, inputs, and Veritas outputs.")
+
+    # --- DB schema patch: ensure redteam_flag column exists ---
+    try:
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
+        cur.execute("PRAGMA table_info(analyses)")
+        cols = [r[1] for r in cur.fetchall()]
+        if "redteam_flag" not in cols:
+            cur.execute("ALTER TABLE analyses ADD COLUMN redteam_flag INTEGER DEFAULT 0;")
+            con.commit()
+        con.close()
+    except Exception as e:
+        st.warning(f"Schema check failed: {e}")
+
+    # --- Load recent red-team analyses ---
+    try:
+        con = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("""
+            SELECT timestamp_utc, login_id, remote_addr, conversation_json
+            FROM analyses
+            WHERE conversation_json LIKE '%assistant_reply%' AND redteam_flag=1
+            ORDER BY id DESC
+            LIMIT 500
+        """, con)
+        con.close()
+    except Exception as e:
+        st.error(f"DB load error: {e}")
+        df = pd.DataFrame()
+
+    # --- Parse conversation JSON safely ---
+    if not df.empty:
+        def parse_conv(js):
+            try:
+                d = json.loads(js)
+                return d.get("user_prompt",""), d.get("assistant_reply","")
+            except Exception:
+                return "",""
+        df[["Input","Output"]] = df["conversation_json"].apply(lambda x: pd.Series(parse_conv(x)))
+        df.drop(columns=["conversation_json"], inplace=True)
+
+        # --- Show summary ---
+        st.write(f"**Total Logged Red Team Tests:** {len(df)}")
+        st.dataframe(
+            df[["timestamp_utc","login_id","remote_addr","Input","Output"]],
+            use_container_width=True,
+            hide_index=True,
+            height=500
+        )
+
+        # --- Download log as CSV ---
+        csv_data = df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Download Red Team Tracker CSV",
+            data=csv_data,
+            file_name="redteam_tracker.csv",
+            mime="text/csv"
+        )
+    else:
+        st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
+
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
