@@ -1724,6 +1724,7 @@ with tabs[3]:
 if st.session_state.get("is_admin", False):
     with tabs[-1]:
         st.write("### Admin")
+        st.success("✅ Admin block is active")
 
         if st.button("Exit Admin"):
             st.session_state["is_admin"] = False
@@ -1990,6 +1991,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
