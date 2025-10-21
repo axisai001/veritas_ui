@@ -1510,6 +1510,19 @@ with tabs[0]:
         internal_id = _gen_internal_report_id()
         log_analysis(public_id, internal_id, final_report)
 
+        # --- Flag Red Team input in DB if applicable ---
+        try:
+            con = sqlite3.connect(DB_PATH)
+            cur = con.cursor()
+            cur.execute(
+                "UPDATE analyses SET redteam_flag=? WHERE internal_report_id=?",
+                (redteam_flag, internal_id)
+             )
+            con.commit()
+            con.close()
+        except Exception as e:
+            log_error_event("REDTEAM_FLAG", "/analyze", 500, repr(e))
+
         prog.progress(100, text="Analysis complete ✓")
         st.success(f"✅ Report generated — ID: {public_id}")
         st.markdown(final_report)
@@ -1979,6 +1992,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
