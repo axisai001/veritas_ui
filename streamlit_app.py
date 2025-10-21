@@ -1365,7 +1365,12 @@ tabs = st.tabs(tab_names)
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
-    # st.markdown('<div class="v-card" id="analyze-card">', unsafe_allow_html=True)
+    if st.session_state.get("is_redteam", False):
+        st.markdown("""
+        <div style="background-color:#4A148C;color:white;padding:0.75rem;border-radius:8px;margin-bottom:1rem;">
+        🧪 <b>Red Team Mode Active:</b> All inputs and outputs are being logged for testing.
+        </div>
+        """, unsafe_allow_html=True)
 
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
@@ -1411,10 +1416,14 @@ with tabs[0]:
     # --- Handle Veritas Analysis only when submitted ---
 if submitted:
     # --- Detect if this is a Red Team test ---
-    redteam_flag = 0
     user_login = st.session_state.get("login_id", "").lower()
-    if "redteam" in user_login or "tester" in user_login:
-        redteam_flag = 1
+    redteam_flag = 1 if (
+        st.session_state.get("is_redteam", False)
+        or user_login in REDTEAM_EMAILS
+        or "redteam" in user_login
+        or "tester" in user_login
+    ) else 0
+
 
     if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
         st.error("network error")
@@ -2011,6 +2020,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
