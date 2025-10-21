@@ -129,6 +129,16 @@ ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai"}
 _raw = os.environ.get("ADMIN_EMAILS", "")
 if _raw:
     ADMIN_EMAILS |= {e.strip().lower() for e in _raw.split(",") if e.strip()}
+
+# --- Red Team testers (explicit allowlist) ---
+# Add the private emails of all approved Red Team testers here.
+REDTEAM_EMAILS = {
+    "leger.erika19@gmail.com",
+    "a.ryan.parra@outlook.com",
+}
+_raw_red = os.environ.get("REDTEAM_EMAILS", "")
+if _raw_red:
+    REDTEAM_EMAILS |= {e.strip().lower() for e in _raw_red.split(",") if e.strip()}
 # --- Safe timezone ---
 def _safe_zoneinfo(name: str, fallback: str = "UTC") -> ZoneInfo:
     try:
@@ -1990,6 +2000,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
