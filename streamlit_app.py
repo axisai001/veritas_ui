@@ -1729,7 +1729,13 @@ if st.session_state.get("is_admin", False):
             st.session_state["is_admin"] = False
             _safe_rerun()
 
-        sub1, sub2, sub3, sub4 = st.tabs(["🕘 History", "📂 Data Explorer", "🧹 Maintenance", "🎨 Branding"])
+        sub1, sub2, sub3, sub4, sub5 = st.tabs([
+            "🕘 History", 
+            "📂 Data Explorer", 
+            "🧹 Maintenance", 
+            "🎨 Branding", 
+            "🧪 Red Team Tracker"
+        ])
 
         # ---- History
         with sub1:
@@ -1984,6 +1990,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
