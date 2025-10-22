@@ -2037,69 +2037,66 @@ if st.session_state.get("is_admin", False):
             st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
 
         # ---- Red Team Tracker ----
-        with sub5:
-            st.write("#### 🧪 Red Team Tracker — Phase 1")
-            st.caption("Monitor and export all Red Team test sessions, including tester ID, IP address, inputs, and Veritas outputs.")
+with sub5:
+    st.write("#### 🧪 Red Team Tracker — Phase 1")
+    st.caption("Monitor and export all Red Team test sessions. Each analysis is stored daily in CSV and database.")
 
-            try:
-                con = sqlite3.connect(DB_PATH)
-                cur = con.cursor()
-                cur.execute("PRAGMA table_info(analyses)")
-                cols = [r[1] for r in cur.fetchall()]
-                if "redteam_flag" not in cols:
-                    cur.execute("ALTER TABLE analyses ADD COLUMN redteam_flag INTEGER DEFAULT 0;")
-                    con.commit()
-                con.close()
-            except Exception as e:
-                st.warning(f"Schema check failed: {e}")
+    # Load Red Team CSV (primary source)
+    try:
+        redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
+    except Exception:
+        redteam_df = pd.DataFrame()
 
-            try:
-                con = sqlite3.connect(DB_PATH)
-                df = pd.read_sql_query("""
-                    SELECT timestamp_utc, login_id, remote_addr, conversation_json
-                    FROM analyses
-                    WHERE conversation_json LIKE '%assistant_reply%' AND redteam_flag=1
-                    ORDER BY id DESC
-                    LIMIT 500
-                """, con)
-                con.close()
-            except Exception as e:
-                st.error(f"DB load error: {e}")
-                df = pd.DataFrame()
+    # If empty, show info message
+    if redteam_df.empty:
+        st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
+    else:
+        # Sort newest first
+        redteam_df = redteam_df.sort_values(by="timestamp_utc", ascending=False)
 
-            if not df.empty:
-                def parse_conv(js):
-                    try:
-                        d = json.loads(js)
-                        return d.get("user_prompt",""), d.get("assistant_reply","")
-                    except Exception:
-                        return "",""
-                df[["Input","Output"]] = df["conversation_json"].apply(lambda x: pd.Series(parse_conv(x)))
-                df.drop(columns=["conversation_json"], inplace=True)
+        # Show today's data summary
+        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today_df = redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)]
 
-                st.write(f"**Total Logged Red Team Tests:** {len(df)}")
-                st.dataframe(
-                    df[["timestamp_utc","login_id","remote_addr","Input","Output"]],
-                    use_container_width=True,
-                    hide_index=True,
-                    height=500
-                )
+        st.write(f"**Total Logged Tests:** {len(redteam_df)} | **Today's Tests:** {len(today_df)}")
 
-                csv_data = df.to_csv(index=False).encode("utf-8")
-                st.download_button(
-                    label="📥 Download Red Team Tracker CSV",
-                    data=csv_data,
-                    file_name="redteam_tracker.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
+        # Filter toggle
+        show_today = st.checkbox("Show only today's logs", value=False)
+        display_df = today_df if show_today else redteam_df
+
+        # Display data table
+        st.dataframe(
+            display_df,
+            use_container_width=True,
+            hide_index=True,
+            height=500
+        )
+
+        # Daily CSV download
+        filename = f"redteam_logs_{today_str}.csv"
+        csv_data = display_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label=f"📥 Download {'Today' if show_today else 'All'} Red Team Logs",
+            data=csv_data,
+            file_name=filename,
+            mime="text/csv"
+        )
+
+        # Optional: add daily summary counts by tester
+        st.markdown("#### 📊 Summary by Tester (Today)")
+        if not today_df.empty:
+            summary = today_df.groupby("login_id")["test_id"].count().reset_index()
+            summary.columns = ["Tester", "Tests Submitted"]
+            st.table(summary)
+        else:
+            st.caption("No Red Team submissions logged today.")
 
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
