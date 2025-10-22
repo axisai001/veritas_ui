@@ -357,35 +357,38 @@ BG_ALLOWED_EXTENSIONS  = {"svg", "png", "jpg", "jpeg", "webp"}
 def _init_db():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS auth_events (
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS ack_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
-            event_type TEXT,
-            login_id TEXT,
             session_id TEXT,
-            tracking_id TEXT,
-            credential_label TEXT,
-            success INTEGER,
-            hashed_attempt_prefix TEXT,
+            login_id TEXT,
+            acknowledged INTEGER,
+            privacy_url TEXT,
+            terms_url TEXT,
             remote_addr TEXT,
             user_agent TEXT
         )
     """)
+
+    # Red Team verification checks (audit)
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS analyses (
+        CREATE TABLE IF NOT EXISTS redteam_checks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
-            public_report_id TEXT,
             internal_report_id TEXT,
-            session_id TEXT,
+            public_report_id TEXT,
             login_id TEXT,
-            remote_addr TEXT,
-            user_agent TEXT,
-            conversation_chars INTEGER,
-            conversation_json TEXT
+            test_id TEXT,
+            test_name TEXT,
+            severity TEXT,
+            detail TEXT
         )
     """)
+
+    con.commit()
+    con.close()
+    
     cur.execute("""
         CREATE TABLE IF NOT EXISTS feedback (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2024,6 +2027,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
