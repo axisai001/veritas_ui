@@ -505,6 +505,7 @@ _init_csv(
         "user_input",
         "model_output",
     ]
+)
     try:
         # Create file with header if missing
         if not os.path.exists(REDTEAM_CHECKS_CSV):
@@ -2146,6 +2147,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
