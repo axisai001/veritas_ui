@@ -2063,6 +2063,10 @@ if st.session_state.get("is_admin", False):
             today_logs = len(redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)])
             st.write(f"**Total Logs:** {total_logs}  |  **Today's Logs:** {today_logs}")
 
+            # --- Force Refresh button ---
+            if st.button("🔄 Force Refresh Logs"):
+                st.experimental_rerun()
+
             # Display logs
             st.dataframe(display_df, use_container_width=True, hide_index=True, height=500)
 
@@ -2083,6 +2087,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
