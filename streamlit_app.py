@@ -995,21 +995,34 @@ def log_ack_event(acknowledged: bool):
         pass
         
     # --- Log individual Red Team test results ---
-def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail):
-    """
-    Logs a Red Team test result to both CSV and SQLite DB.
-    Ensures DB commit and CSV sync properly.
-    """
-    ts = datetime.now(timezone.utc).isoformat()
-    test_name = TESTS_SPEC.get(test_id, {}).get("name", "Manual RedTeam Test")
+    def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail):
+        """
+        Logs a Red Team test result to CSV (viewable in Admin tab).
+        This follows the same design as Feedback and Support trackers.
+        """
+        try:
+            ts = datetime.now(timezone.utc).isoformat()
+            test_name = "Manual Red Team Test"
 
-    # --- CSV Write ---
-    try:
-        with open(REDTEAM_CHECKS_CSV, "a", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow([ts, internal_id, public_id, login_id, test_id, test_name, severity, detail])
-    except Exception as e:
-        log_error_event("REDTEAM_CSV_WRITE", "/analyze", 500, repr(e))
+            with open(REDTEAM_CHECKS_CSV, "a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    ts,
+                    internal_id,
+                    public_id,
+                    login_id,
+                    test_id,
+                    test_name,
+                    severity,
+                    detail
+                ])
+
+            # Optional: confirmation in the Streamlit interface
+            st.toast("✅ Red Team log recorded", icon="🧪")
+
+        except Exception as e:
+            log_error_event("REDTEAM_CSV_WRITE", "/analyze", 500, repr(e))
+            st.error("⚠️ Failed to record Red Team log.")
 
     # --- DB Write (using _db_exec for safety & commit) ---
     try:
@@ -2087,6 +2100,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
