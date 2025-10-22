@@ -1616,12 +1616,21 @@ if submitted:
                     severity="info",
                     detail="Red Team test successfully logged via Veritas analysis."
                 )
+                st.success("✅ Red Team log recorded successfully.")
         except Exception as e:
-            log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
-            st.error("⚠️ There was an issue retrieving the Veritas report.")
-            st.stop()
+            log_error_event("REDTEAM_LOGGING", "/analyze", 500, repr(e))
 
-# ✅ Must align flush-left with “if submitted:”
+        # ✅ Display final Veritas analysis
+        prog.progress(100, text="Analysis complete ✓")
+        st.success(f"✅ Report generated — ID: {public_id}")
+        st.markdown(final_report)
+
+    except Exception as e:
+        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+        st.error("⚠️ There was an issue retrieving the Veritas report.")
+        st.stop()
+
+# ✅ Dedent this! Align with `if submitted:` (no spaces before it)
 else:
     st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
@@ -2069,6 +2078,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
