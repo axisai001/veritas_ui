@@ -993,6 +993,52 @@ def log_ack_event(acknowledged: bool):
                  (ts, sid, login_id, 1 if acknowledged else 0, PRIVACY_URL, TERMS_URL, addr, ua))
     except Exception:
         pass
+        
+    # --- Log individual Red Team test results ---
+    def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail):
+        """
+        Logs a Red Team test result to both the CSV and SQLite database.
+        """
+        ts = datetime.now(timezone.utc).isoformat()
+
+        # ✅ Write to CSV
+        try:
+            with open(REDTEAM_CHECKS_CSV, "a", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerow([
+                    ts,
+                    internal_id,
+                    public_id,
+                    login_id,
+                    test_id,
+                    TESTS_SPEC.get(test_id, {}).get("name", "Unknown Test"),
+                    severity,
+                    detail
+                 ])
+        except Exception as e:
+            log_error_event("REDTEAM_CSV_WRITE", "/analyze", 500, repr(e))
+
+        # ✅ Write to Database
+        try:
+            con = sqlite3.connect(DB_PATH)
+            cur = con.cursor()
+            cur.execute("""
+                INSERT INTO redteam_checks
+                (timestamp_utc, internal_report_id, public_report_id, login_id, test_id, test_name, severity, detail)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                ts,
+                internal_id,
+                public_id,
+                 login_id,
+                test_id,
+                TESTS_SPEC.get(test_id, {}).get("name", "Unknown Test"),
+                severity,
+                detail
+            ))
+            con.commit()
+            con.close()
+        except Exception as e:
+            log_error_event("REDTEAM_DB_WRITE", "/analyze", 500, repr(e))
 
 # ---- Pruning helpers ----
 def _prune_csv_by_ttl(path: str, ttl_days: int):
@@ -2046,6 +2092,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
