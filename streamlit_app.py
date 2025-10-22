@@ -492,8 +492,8 @@ _init_csv(ACK_CSV,      ["timestamp_utc","session_id","login_id","acknowledged",
 # Red Team verification checks (audit)
 REDTEAM_CHECKS_CSV = os.path.join(DATA_DIR, "redteam_checks.csv")
 _init_csv(
-    REDTEAM_CHECKS_CSV,
-    [
+    def _verify_redteam_csv():
+    required = [
         "timestamp_utc",
         "internal_report_id",
         "public_report_id",
@@ -503,9 +503,54 @@ _init_csv(
         "severity",
         "detail",
         "user_input",
-        "model_output"
+        "model_output",
     ]
-)
+    try:
+        # Create file with header if missing
+        if not os.path.exists(REDTEAM_CHECKS_CSV):
+            with open(REDTEAM_CHECKS_CSV, "w", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerow(required)
+            return
+
+        # Read existing header and rows
+        with open(REDTEAM_CHECKS_CSV, "r", encoding="utf-8", newline="") as f:
+            rdr = csv.reader(f)
+            rows = list(rdr)
+
+        if not rows:
+            # empty file — write header
+            with open(REDTEAM_CHECKS_CSV, "w", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerow(required)
+            return
+
+        old_header = rows[0]
+        data_rows = rows[1:] if len(rows) > 1 else []
+
+        # If header missing required columns, normalize and rewrite
+        if any(col not in old_header for col in required) or old_header == []:
+            normalized = []
+            for r in data_rows:
+                r = list(r)
+                if len(r) < len(required):
+                    r += [""] * (len(required) - len(r))
+                normalized.append(r[: len(required)])
+            with open(REDTEAM_CHECKS_CSV, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(required)
+                writer.writerows(normalized)
+            # Lightweight UI feedback during startup (harmless if headless)
+            try:
+                st.warning("🧩 Red Team CSV headers repaired and existing data preserved.")
+            except Exception:
+                pass
+    except Exception as e:
+        try:
+            st.error(f"⚠️ Could not verify Red Team CSV headers: {e}")
+        except Exception:
+            pass
+
+# Run verifier at startup
+_verify_redteam_csv()
 
 # Default tagline + logo autodetect
 CURRENT_TAGLINE = (os.environ.get("VERITAS_TAGLINE", "") or "").strip()
@@ -2101,6 +2146,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
