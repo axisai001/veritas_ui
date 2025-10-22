@@ -1617,9 +1617,9 @@ if submitted:
                     detail="Red Team test successfully logged via Veritas analysis."
                 )
         except Exception as e:
-        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
-        st.error("⚠️ There was an issue retrieving the Veritas report.")
-        st.stop()
+            log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+            st.error("⚠️ There was an issue retrieving the Veritas report.")
+            st.stop()
 
 # ✅ Must align flush-left with “if submitted:”
 else:
@@ -2069,6 +2069,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
