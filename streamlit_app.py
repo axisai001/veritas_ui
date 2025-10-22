@@ -467,6 +467,10 @@ _init_csv(ERRORS_CSV,   ["timestamp_utc","error_id","request_id","route","kind",
 _init_csv(SUPPORT_CSV,  ["timestamp_utc","timestamp_utc","ticket_id","full_name","email","bias_report_id","issue","session_id","login_id","user_agent"] if False else ["timestamp_utc","ticket_id","full_name","email","bias_report_id","issue","session_id","login_id","user_agent"])
 _init_csv(ACK_CSV,      ["timestamp_utc","session_id","login_id","acknowledged","privacy_url","terms_url","remote_addr","user_agent"])
 
+# Red Team verification checks (audit)
+REDTEAM_CHECKS_CSV = os.path.join(DATA_DIR, "redteam_checks.csv")
+_init_csv(REDTEAM_CHECKS_CSV, ["timestamp_utc","internal_report_id","public_report_id","login_id","test_id","test_name","severity","detail"])
+
 # Default tagline + logo autodetect
 CURRENT_TAGLINE = (os.environ.get("VERITAS_TAGLINE", "") or "").strip()
 CURRENT_LOGO_FILENAME = None
@@ -2020,6 +2024,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
