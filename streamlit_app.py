@@ -1622,6 +1622,19 @@ if submitted:
             con.close()
         except Exception as e:
             log_error_event("REDTEAM_FLAG", "/analyze", 500, repr(e))
+                # --- Record Red Team test results if applicable ---
+        if redteam_flag:
+            try:
+                _record_test_result(
+                    internal_id,
+                    public_id,
+                    st.session_state.get("login_id", ""),
+                    "MANUAL",  # placeholder for test ID (e.g., A1, B4, etc.)
+                    "medium",  # default severity
+                    "Red Team submission detected and logged automatically."
+                )
+            except Exception as e:
+                log_error_event("REDTEAM_LOG_FAIL", "/analyze", 500, repr(e))
 
         prog.progress(100, text="Analysis complete ✓")
         st.success(f"✅ Report generated — ID: {public_id}")
@@ -2092,6 +2105,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
