@@ -1622,8 +1622,8 @@ if submitted:
         st.error("⚠️ There was an issue retrieving the Veritas report.")
         st.stop()
 
-        else:
-            st.caption("Paste text or upload a document, then click **Engage Veritas**.")
+else:
+    st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
 # -------------------- Feedback Tab --------------------
 with tabs[1]:
@@ -2069,6 +2069,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
