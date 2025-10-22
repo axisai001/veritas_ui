@@ -2126,12 +2126,25 @@ if st.session_state.get("is_admin", False):
 
             # Add daily filter and summary
             today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            show_today = st.checkbox("Show only today's Red Team logs", value=False)
-            display_df = redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)] if show_today else redteam_df
 
-            total_logs = len(redteam_df)
-            today_logs = len(redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)])
-            st.write(f"**Total Logs:** {total_logs}  |  **Today's Logs:** {today_logs}")
+            # Make sure required columns exist
+            if "timestamp_utc" not in redteam_df.columns:
+                st.warning("⚠️ Red Team CSV found but missing headers. Attempting repair...")
+                _verify_redteam_csv()
+                redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
+
+            if "timestamp_utc" in redteam_df.columns:
+                show_today = st.checkbox("Show only today's Red Team logs", value=False)
+                display_df = (
+                    redteam_df[redteam_df["timestamp_utc"].astype(str).str.startswith(today_str)]
+                    if show_today else redteam_df
+                )
+                total_logs = len(redteam_df)
+                today_logs = len(display_df)
+                st.write(f"**Total Logs:** {total_logs}  |  **Today's Logs:** {today_logs}")
+            else:
+                st.error("Red Team CSV is missing the 'timestamp_utc' column. Please restart the app after verification.")
+                display_df = pd.DataFrame()
 
             # --- Force Refresh button ---
             if st.button("🔄 Force Refresh Logs"):
@@ -2157,6 +2170,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
