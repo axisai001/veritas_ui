@@ -1605,28 +1605,20 @@ if submitted:
         internal_id = _gen_internal_report_id()
         log_analysis(public_id, internal_id, final_report)
 
-# --- Flag Red Team input in DB if applicable ---
-try:
-    if redteam_flag == 1:
-        _record_test_result(
-            internal_id=internal_id,
-            public_id=public_id,
-            login_id=st.session_state.get("login_id", "unknown"),
-            test_id="manual_redteam",  # or unique ID for each test type
-            severity="info",
-            detail="Red Team test successfully logged via Veritas analysis."
-        )
-except Exception as e:
-    log_error_event("REDTEAM_LOGGING", "/analyze", 500, repr(e))
+        # --- Flag Red Team input in DB if applicable ---
+        try:
+            if redteam_flag == 1:
+                _record_test_result(
+                    internal_id=internal_id,
+                    public_id=public_id,
+                    login_id=st.session_state.get("login_id", "unknown"),
+                    test_id="manual_redteam",
+                    severity="info",
+                    detail="Red Team test successfully logged via Veritas analysis."
+                )
+        except Exception as e:
+            log_error_event("REDTEAM_LOGGING", "/analyze", 500, repr(e))
 
-        prog.progress(100, text="Analysis complete ✓")
-        st.success(f"✅ Report generated — ID: {public_id}")
-        st.markdown(final_report)
-        st.session_state["last_reply"] = final_report
-        st.session_state["history"].append({"role": "assistant", "content": final_report})
-
-    except Exception as e:
-        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
         st.error("⚠️ There was an issue retrieving the Veritas report.")
         st.stop()
 
@@ -2077,6 +2069,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
