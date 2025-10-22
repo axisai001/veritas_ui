@@ -2065,7 +2065,7 @@ if st.session_state.get("is_admin", False):
 
             # --- Force Refresh button ---
             if st.button("🔄 Force Refresh Logs"):
-                st.experimental_rerun()
+                st.rerun()
 
             # Display logs
             st.dataframe(display_df, use_container_width=True, hide_index=True, height=500)
@@ -2087,6 +2087,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
