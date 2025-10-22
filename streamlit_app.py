@@ -357,38 +357,42 @@ BG_ALLOWED_EXTENSIONS  = {"svg", "png", "jpg", "jpeg", "webp"}
 def _init_db():
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS ack_events (
+
+    # Auth events
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
-            session_id TEXT,
+            event_type TEXT,
             login_id TEXT,
-            acknowledged INTEGER,
-            privacy_url TEXT,
-            terms_url TEXT,
+            session_id TEXT,
+            tracking_id TEXT,
+            credential_label TEXT,
+            success INTEGER,
+            hashed_attempt_prefix TEXT,
             remote_addr TEXT,
             user_agent TEXT
         )
     """)
 
-    # Red Team verification checks (audit)
+    # Analyses
     cur.execute("""
-        CREATE TABLE IF NOT EXISTS redteam_checks (
+        CREATE TABLE IF NOT EXISTS analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
-            internal_report_id TEXT,
             public_report_id TEXT,
+            internal_report_id TEXT,
+            session_id TEXT,
             login_id TEXT,
-            test_id TEXT,
-            test_name TEXT,
-            severity TEXT,
-            detail TEXT
+            remote_addr TEXT,
+            user_agent TEXT,
+            conversation_chars INTEGER,
+            conversation_json TEXT,
+            redteam_flag INTEGER DEFAULT 0
         )
     """)
 
-    con.commit()
-    con.close()
-    
+    # Feedback
     cur.execute("""
         CREATE TABLE IF NOT EXISTS feedback (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -402,6 +406,8 @@ def _init_db():
             ua TEXT
         )
     """)
+
+    # Errors
     cur.execute("""
         CREATE TABLE IF NOT EXISTS errors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -418,6 +424,8 @@ def _init_db():
             user_agent TEXT
         )
     """)
+
+    # Support tickets
     cur.execute("""
         CREATE TABLE IF NOT EXISTS support_tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -432,6 +440,8 @@ def _init_db():
             user_agent TEXT
         )
     """)
+
+    # Acknowledgments
     cur.execute("""
         CREATE TABLE IF NOT EXISTS ack_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -445,13 +455,22 @@ def _init_db():
             user_agent TEXT
         )
     """)
-    con.commit()
-    con.close()
 
-def _db_exec(query: str, params: tuple):
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    cur.execute(query, params)
+    # ✅ Red Team verification checks (audit)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS redteam_checks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            internal_report_id TEXT,
+            public_report_id TEXT,
+            login_id TEXT,
+            test_id TEXT,
+            test_name TEXT,
+            severity TEXT,
+            detail TEXT
+        )
+    """)
+
     con.commit()
     con.close()
 
@@ -2027,6 +2046,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
