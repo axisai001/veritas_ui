@@ -997,25 +997,30 @@ def log_ack_event(acknowledged: bool):
     # --- Log individual Red Team test results ---
 def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail):
     """
-    Logs a Red Team test result to both the CSV and SQLite database.
+    Logs a Red Team test result to both CSV and SQLite DB.
+    Ensures DB commit and CSV sync properly.
     """
     ts = datetime.now(timezone.utc).isoformat()
+    test_name = TESTS_SPEC.get(test_id, {}).get("name", "Manual RedTeam Test")
 
-    # ✅ Write to CSV
+    # --- CSV Write ---
     try:
         with open(REDTEAM_CHECKS_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([
-                ts,
-                internal_id,
-                public_id,
-                login_id,
-                test_id,
-                TESTS_SPEC.get(test_id, {}).get("name", "Unknown Test"),
-                severity,
-                detail
-            ])
+            writer = csv.writer(f)
+            writer.writerow([ts, internal_id, public_id, login_id, test_id, test_name, severity, detail])
     except Exception as e:
         log_error_event("REDTEAM_CSV_WRITE", "/analyze", 500, repr(e))
+
+    # --- DB Write (using _db_exec for safety & commit) ---
+    try:
+        _db_exec(
+            """INSERT INTO redteam_checks
+               (timestamp_utc, internal_report_id, public_report_id, login_id, test_id, test_name, severity, detail)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (ts, internal_id, public_id, login_id, test_id, test_name, severity, detail)
+        )
+    except Exception as e:
+        log_error_event("REDTEAM_DB_WRITE", "/analyze", 500, repr(e))
 
     # ✅ Write to Database
     try:
@@ -2078,6 +2083,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
