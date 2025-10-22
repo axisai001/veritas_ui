@@ -2037,65 +2037,59 @@ if st.session_state.get("is_admin", False):
             st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
 
         # ---- Red Team Tracker ----
-with sub5:
-    st.write("#### 🧪 Red Team Tracker — Phase 1")
-    st.caption("Monitor and export all Red Team test sessions. Each analysis is stored daily in CSV and database.")
+        with sub5:
+            st.write("#### 🧪 Red Team Tracker — Phase 1")
+            st.caption("Monitor and export all Red Team test sessions. Each analysis is stored daily in CSV and database.")
 
-    # Load Red Team CSV (primary source)
-    try:
-        redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
-    except Exception:
-        redteam_df = pd.DataFrame()
+            try:
+                # Load from dedicated Red Team CSV
+                redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
+            except Exception as e:
+                st.error(f"Error loading Red Team CSV: {e}")
+                redteam_df = pd.DataFrame()
 
-    # If empty, show info message
-    if redteam_df.empty:
-        st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
-    else:
-        # Sort newest first
-        redteam_df = redteam_df.sort_values(by="timestamp_utc", ascending=False)
+            if redteam_df.empty:
+                st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
+            else:
+                # Sort newest first
+                redteam_df = redteam_df.sort_values(by="timestamp_utc", ascending=False)
 
-        # Show today's data summary
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        today_df = redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)]
+            # Convert timestamps for display
+            try:
+                redteam_df["timestamp_utc"] = pd.to_datetime(redteam_df["timestamp_utc"]).dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
 
-        st.write(f"**Total Logged Tests:** {len(redteam_df)} | **Today's Tests:** {len(today_df)}")
+            # Add daily filter and summary
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            show_today = st.checkbox("Show only today's Red Team logs", value=False)
+            display_df = redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)] if show_today else redteam_df
 
-        # Filter toggle
-        show_today = st.checkbox("Show only today's logs", value=False)
-        display_df = today_df if show_today else redteam_df
+            total_logs = len(redteam_df)
+            today_logs = len(redteam_df[redteam_df["timestamp_utc"].str.startswith(today_str)])
+            st.write(f"**Total Logs:** {total_logs}  |  **Today's Logs:** {today_logs}")
 
-        # Display data table
-        st.dataframe(
-            display_df,
-            use_container_width=True,
-            hide_index=True,
-            height=500
-        )
+            # Display logs
+            st.dataframe(display_df, use_container_width=True, hide_index=True, height=500)
 
-        # Daily CSV download
-        filename = f"redteam_logs_{today_str}.csv"
-        csv_data = display_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label=f"📥 Download {'Today' if show_today else 'All'} Red Team Logs",
-            data=csv_data,
-            file_name=filename,
-            mime="text/csv"
-        )
+            # Download buttons
+            all_csv = redteam_df.to_csv(index=False).encode("utf-8")
+            today_csv = display_df.to_csv(index=False).encode("utf-8")
+            st.download_button("📥 Download All Logs", data=all_csv, file_name="redteam_logs_all.csv", mime="text/csv")
+            st.download_button("📅 Download Today's Logs", data=today_csv, file_name=f"redteam_logs_{today_str}.csv", mime="text/csv")
 
-        # Optional: add daily summary counts by tester
-        st.markdown("#### 📊 Summary by Tester (Today)")
-        if not today_df.empty:
-            summary = today_df.groupby("login_id")["test_id"].count().reset_index()
+            # Optional tester summary
+            st.markdown("#### 📊 Summary by Tester")
+            summary = display_df.groupby("login_id")["test_id"].count().reset_index()
             summary.columns = ["Tester", "Tests Submitted"]
             st.table(summary)
-        else:
-            st.caption("No Red Team submissions logged today.")
 
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
