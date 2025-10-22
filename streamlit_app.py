@@ -491,7 +491,21 @@ _init_csv(ACK_CSV,      ["timestamp_utc","session_id","login_id","acknowledged",
 
 # Red Team verification checks (audit)
 REDTEAM_CHECKS_CSV = os.path.join(DATA_DIR, "redteam_checks.csv")
-_init_csv(REDTEAM_CHECKS_CSV, ["timestamp_utc","internal_report_id","public_report_id","login_id","test_id","test_name","severity","detail"])
+_init_csv(
+    REDTEAM_CHECKS_CSV,
+    [
+        "timestamp_utc",
+        "internal_report_id",
+        "public_report_id",
+        "login_id",
+        "test_id",
+        "test_name",
+        "severity",
+        "detail",
+        "user_input",
+        "model_output"
+    ]
+)
 
 # Default tagline + logo autodetect
 CURRENT_TAGLINE = (os.environ.get("VERITAS_TAGLINE", "") or "").strip()
@@ -996,15 +1010,17 @@ def log_ack_event(acknowledged: bool):
 
 
 # --- Log individual Red Team test results ---
-def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail):
+def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail,
+                        user_input: str = "", model_output: str = ""):
     """
-    Logs a Red Team test result to CSV (viewable in Admin tab).
-    This follows the same design as Feedback and Support trackers.
+    Logs a Red Team test result (including tester input + Veritas output)
+    to CSV and database for viewing in the Admin Red Team Tracker.
     """
     try:
         ts = datetime.now(timezone.utc).isoformat()
         test_name = "Manual Red Team Test"
 
+        # --- CSV Write (adds full input/output for audit) ---
         with open(REDTEAM_CHECKS_CSV, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -1015,49 +1031,30 @@ def _record_test_result(internal_id, public_id, login_id, test_id, severity, det
                 test_id,
                 test_name,
                 severity,
-                detail
+                detail,
+                user_input.strip()[:5000],    # keep input readable (up to 5k chars)
+                model_output.strip()[:8000]   # store trimmed report
             ])
 
-        # Optional: confirmation in the Streamlit interface
+        # --- DB Write (metadata only for performance) ---
+        try:
+            con = sqlite3.connect(DB_PATH)
+            cur = con.cursor()
+            cur.execute("""
+                INSERT INTO redteam_checks
+                (timestamp_utc, internal_report_id, public_report_id, login_id, test_id, test_name, severity, detail)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ts, internal_id, public_id, login_id, test_id, test_name, severity, detail))
+            con.commit()
+            con.close()
+        except Exception as e:
+            log_error_event("REDTEAM_DB_WRITE", "/analyze", 500, repr(e))
+
         st.toast("✅ Red Team log recorded", icon="🧪")
 
     except Exception as e:
         log_error_event("REDTEAM_CSV_WRITE", "/analyze", 500, repr(e))
         st.error("⚠️ Failed to record Red Team log.")
-        
-    # --- DB Write (using _db_exec for safety & commit) ---
-    try:
-        _db_exec(
-            """INSERT INTO redteam_checks
-               (timestamp_utc, internal_report_id, public_report_id, login_id, test_id, test_name, severity, detail)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ts, internal_id, public_id, login_id, test_id, test_name, severity, detail)
-        )
-    except Exception as e:
-        log_error_event("REDTEAM_DB_WRITE", "/analyze", 500, repr(e))
-
-    # ✅ Write to Database
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-        cur.execute("""
-            INSERT INTO redteam_checks
-            (timestamp_utc, internal_report_id, public_report_id, login_id, test_id, test_name, severity, detail)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            ts,
-            internal_id,
-            public_id,
-            login_id,
-            test_id,
-            TESTS_SPEC.get(test_id, {}).get("name", "Unknown Test"),
-            severity,
-            detail
-        ))
-        con.commit()
-        con.close()
-    except Exception as e:
-        log_error_event("REDTEAM_DB_WRITE", "/analyze", 500, repr(e))
 
 # ---- Pruning helpers ----
 def _prune_csv_by_ttl(path: str, ttl_days: int):
@@ -1633,9 +1630,12 @@ if submitted:
                     login_id=st.session_state.get("login_id", "unknown"),
                     test_id="manual_redteam",
                     severity="info",
-                    detail="Red Team test successfully logged via Veritas analysis."
+                    detail="Red Team test successfully logged via Veritas analysis.",
+                    user_input=final_input,
+                    model_output=final_report
                 )
                 st.success("✅ Red Team log recorded successfully.")
+
         except Exception as e:
             log_error_event("REDTEAM_LOGGING", "/analyze", 500, repr(e))
 
@@ -2101,6 +2101,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
