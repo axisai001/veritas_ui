@@ -966,7 +966,7 @@ def detect_intent(text: str) -> Dict[str, str]:
     if re.search(cred_pattern, lowered):
         return {"intent": "security_request", "reason": "credential_request"}
 
-    # ---------- Prompt injection / override attempts ----------
+        # ---------- Prompt injection / override attempts ----------
     injection_patterns = [
         r"ignore\s+(all|previous)\s+(rules?|instructions?|directives?)",
         r"reveal\s+(your|the)\s+(system\s*prompt|internal\s*(schema|configuration|setup|details?)|instructions?|rules?)",
@@ -975,6 +975,10 @@ def detect_intent(text: str) -> Dict[str, str]:
         r"open\s+(secure|protected)\s*(data|files?|keys?)",
         r"expose\s+(secret|hidden|internal)\s*(data|information|prompt|rules?)",
         r"run\s+code|execute\s+(script|command)|shell|sudo",
+
+        # ----- ADD THESE TWO LINES (minimal additions) -----
+        r"\b(print|display|expose)\b.*\b(internal|hidden|system|prompt|instructions?|settings|configuration|schema)\b",
+        r"\b(internal|hidden)\s+(instructions|settings|configuration|schema)\b",
     ]
     for pat in injection_patterns:
         if re.search(pat, lowered):
@@ -2273,6 +2277,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
