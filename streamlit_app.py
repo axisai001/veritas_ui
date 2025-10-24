@@ -1711,58 +1711,19 @@ if submitted:
         # ✅ Build combined input only during submit
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
+    if submitted:
     if not final_input:
         st.error("Please enter some text or upload a document.")
         st.stop()
 
     prog = st.progress(0)
 
-    # ---------- Scope & Security Gate (color-coded) ----------
-    intent = detect_intent(final_input)
+    # ... your color-coded gate system ...
 
-    # 🟧 Out-of-scope / Generative request
-    if intent.get("intent") == "generative":
-        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
-        st.markdown(f"""
-        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#2b1a00;">
-            <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
-            It cannot generate plans, roleplay content, or operational instructions.<br><br>
-            <small>Run ID: <code>{st.session_state.get('request_id', _gen_request_id())}</code></small>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
-
-    # 🔴 Prompt-injection attempt
-    elif intent.get("intent") == "prompt_injection":
-        log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
-        log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-        st.markdown("""
-        <div style="background-color:#8B0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
-        ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
-        Veritas detected an attempt to reveal internal schema or prompt logic.<br>
-        Action logged; analysis terminated.
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
-
-    # 🟥 Credential / Security request
-    elif intent.get("intent") == "security_request":
-        log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
-        log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
-        st.markdown("""
-        <div style="background-color:#4B0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
-        🔒 <strong>Sensitive Credential Request Blocked</strong><br>
-        For safety and compliance, Veritas does not process credential or access-key requests.<br>
-        Action logged and session secured.
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
-
-    # ✅ Bias-analysis path (allowed) — continues to model call
     elif intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
 
-        # 🔽 Now continue with Safety and Injection gates
+        # 🔽 Safety + Injection checks
         safety_message = _run_safety_precheck(final_input)
         if safety_message:
             st.markdown(safety_message)
@@ -1780,6 +1741,54 @@ if submitted:
             """, unsafe_allow_html=True)
             st.stop()
 
+        # 🔽 Proceed to Veritas analysis (model call)
+        user_instruction = _build_user_instruction(final_input)
+
+        try:
+            prog.progress(40, text="Contacting model…")
+        except Exception:
+            prog.progress(40)
+
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=MODEL,
+            temperature=ANALYSIS_TEMPERATURE,
+            messages=[
+                {"role": "system", "content": IDENTITY_PROMPT},
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_instruction},
+            ],
+        )
+
+        try:
+            prog.progress(70, text="Processing model response…")
+            final_report = resp.choices[0].message.content.strip()
+            closing_line = (
+                "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
+                "in the text provided. If you have any further questions or need additional analysis, "
+                "feel free to ask The Prism."
+            )
+            if "feel free to ask The Prism" not in final_report:
+                final_report = final_report.rstrip() + "\n\n" + closing_line
+
+            if not _looks_strict(final_report):
+                log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+                st.error("Veritas produced a non-compliant output. Please retry.")
+                st.stop()
+
+            public_id = _gen_public_report_id()
+            internal_id = _gen_internal_report_id()
+            log_analysis(public_id, internal_id, final_report)
+
+            prog.progress(100, text="Analysis complete ✓")
+            st.success(f"✅ Report generated — ID: {public_id}")
+            st.markdown(final_report)
+
+        except Exception as e:
+            log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+            st.error("⚠️ There was an issue retrieving the Veritas report.")
+            st.stop()
+            
         # 🔽 Proceed to Veritas analysis (model call)
         user_instruction = _build_user_instruction(final_input)
         ...
@@ -2306,6 +2315,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
