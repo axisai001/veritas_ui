@@ -1674,122 +1674,143 @@ if submitted:
     if not final_input:
         st.error("Please enter some text or upload a document.")
         st.stop()
-    else:
-        # ✅ Progress bar must be inside the submit block
-        prog = st.progress(0)
 
-        # ✅ Scope/Security gate
-        intent = detect_intent(final_input)
+    # Progress bar
+    prog = st.progress(0)
 
-        if intent.get("intent") == "generative":
-            log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
-            st.markdown("""
-            <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#FFFFFF;">
-                <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
-                It cannot generate plans, roleplay content, or operational instructions.<br><br>
-            </div>
-            """, unsafe_allow_html=True)
-            st.stop()
+    # ---------- Pre-safety check (Tier 2 immediate stops) ----------
+    safety_msg = _run_safety_precheck(final_input)
+    if safety_msg:
+        log_rule_trigger("safety_stop", "tier2_trigger", final_input[:800])
+        try:
+            prog.progress(100, text="Safety stop ✓")
+        except Exception:
+            pass
+        st.markdown(f"<div style='background:#330000;border:2px solid #ff4c4c;color:#fff;padding:1rem;border-radius:10px;'>{safety_msg}</div>", unsafe_allow_html=True)
+        st.stop()
 
-        elif intent.get("intent") == "security_request":
-            log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
-            log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
-            st.markdown("""
-            <div style="
-                background-color:#8B0000;
-                color:#FFFFFF;
-                padding:1rem;
-                border-radius:10px;
-                font-weight:600;
-                text-align:center;
-                border:2px solid #FF4C4C;
-            ">
-                🔒 <strong>Sensitive Credential Request Blocked</strong><br>
-                For safety and legal compliance under AXIS Security Protocol Section IV.6,<br>
-                Veritas does not process credential or access-key requests.<br><br>
-                Action logged and session secured.
-            </div>
-            """, unsafe_allow_html=True)
-            st.stop()
+    # ---------- Intent / scope gate ----------
+    intent = detect_intent(final_input)
 
-        elif intent.get("intent") == "bias_analysis":
-            st.info("✅ Veritas is processing your bias analysis request…")
-            # (model call continues here)
-    
-    # Prepare model call
+    if intent.get("intent") == "prompt_injection":
+        # explicit refusal for prompt disclosure / override attempts
+        log_rule_trigger("injection_block", intent.get("reason", "prompt_injection"), final_input[:800])
+        st.markdown("""
+        <div style="background:#0b1e2a;border:2px solid #2aa198;padding:1rem;border-radius:10px;color:#e6f1f5;">
+            <strong>🔐 Protected Instructions</strong><br>
+            I can’t reveal internal prompts, schemas, or system instructions, and I won’t ignore safety rules.
+            Please provide the text you want analyzed for bias.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    if intent.get("intent") == "generative":
+        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
+        st.markdown("""
+        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#FFFFFF;">
+            <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
+            It cannot generate plans, roleplay content, or operational instructions.<br><br>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    if intent.get("intent") == "security_request":
+        log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
+        log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
+        st.markdown("""
+        <div style="
+            background-color:#8B0000;
+            color:#FFFFFF;
+            padding:1rem;
+            border-radius:10px;
+            font-weight:600;
+            text-align:center;
+            border:2px solid #FF4C4C;
+        ">
+            🔒 <strong>Sensitive Credential Request Blocked</strong><br>
+            For safety and legal compliance under AXIS Security Protocol Section IV.6,<br>
+            Veritas does not process credential or access-key requests.<br><br>
+            Action logged and session secured.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # If we reach here, proceed with bias analysis
+    st.info("✅ Veritas is processing your bias analysis request…")
+
+    # ---------- Model call (fixed indentation) ----------
     try:
         prog.progress(40, text="Contacting model…")
     except Exception:
-        pass
+        pass  # progress bar is optional; do not gate logic
 
-        api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-        if not api_key:
-            st.error("OPENAI_API_KEY is not configured.")
-            st.stop()
+    api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+    if not api_key:
+        st.error("OPENAI_API_KEY is not configured.")
+        st.stop()
 
-        user_instruction = _build_user_instruction(final_input)
+    user_instruction = _build_user_instruction(final_input)
+
+    try:
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=MODEL,
+            temperature=ANALYSIS_TEMPERATURE,
+            messages=[
+                {"role": "system", "content": IDENTITY_PROMPT},
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": user_instruction},
+            ],
+        )
 
         try:
-            client = OpenAI(api_key=api_key)
-            resp = client.chat.completions.create(
-                model=MODEL,
-                temperature=ANALYSIS_TEMPERATURE,
-                messages=[
-                    {"role": "system", "content": IDENTITY_PROMPT},
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_instruction},
-                ],
-            )
+            prog.progress(70, text="Processing model response…")
+        except Exception:
+            pass
 
-            try:
-                prog.progress(70, text="Processing model response…")
-            except Exception:
-                pass
-
-            final_report = (resp.choices[0].message.content or "").strip()
-            if not final_report:
-                st.error("⚠️ No response returned by Veritas.")
-                st.stop()
-
-            # Optional schema enforcement (kept since it already exists)
-            if not _looks_strict(final_report):
-                log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-                st.error("Veritas produced a non-compliant output. Please retry.")
-                st.stop()
-
-            public_id = _gen_public_report_id()
-            internal_id = _gen_internal_report_id()
-            log_analysis(public_id, internal_id, final_report)
-
-            if redteam_flag == 1:
-                _record_test_result(
-                    internal_id=internal_id,
-                    public_id=public_id,
-                    login_id=st.session_state.get("login_id", "unknown"),
-                    test_id="manual_redteam",
-                    severity="info",
-                    detail="Red Team test successfully logged via Veritas analysis.",
-                    user_input=final_input,
-                    model_output=final_report
-                )
-                st.success("✅ Red Team log recorded successfully.")
-
-            try:
-                prog.progress(100, text="Analysis complete ✓")
-            except Exception:
-                pass
-
-            st.success(f"✅ Report generated — ID: {public_id}")
-            st.markdown(final_report)
-
-        except Exception as e:
-            try:
-                prog.progress(0)
-            except Exception:
-                pass
-            log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
-            st.error("⚠️ There was an issue retrieving the Veritas report.")
+        final_report = (resp.choices[0].message.content or "").strip()
+        if not final_report:
+            st.error("⚠️ No response returned by Veritas.")
             st.stop()
+
+        if not _looks_strict(final_report):
+            log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+            st.error("Veritas produced a non-compliant output. Please retry.")
+            st.stop()
+
+        public_id = _gen_public_report_id()
+        internal_id = _gen_internal_report_id()
+        log_analysis(public_id, internal_id, final_report)
+
+        if redteam_flag == 1:
+            _record_test_result(
+                internal_id=internal_id,
+                public_id=public_id,
+                login_id=st.session_state.get("login_id", "unknown"),
+                test_id="manual_redteam",
+                severity="info",
+                detail="Red Team test successfully logged via Veritas analysis.",
+                user_input=final_input,
+                model_output=final_report
+            )
+            st.success("✅ Red Team log recorded successfully.")
+
+        try:
+            prog.progress(100, text="Analysis complete ✓")
+        except Exception:
+            pass
+
+        st.success(f"✅ Report generated — ID: {public_id}")
+        st.markdown(final_report)
+
+    except Exception as e:
+        try:
+            prog.progress(0)
+        except Exception:
+            pass
+        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+        st.error("⚠️ There was an issue retrieving the Veritas report.")
+        st.stop()
 
 else:
     st.caption("Paste text or upload a document, then click **Engage Veritas**.")
@@ -2255,6 +2276,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
