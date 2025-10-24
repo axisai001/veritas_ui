@@ -1671,48 +1671,51 @@ if submitted:
     # Build the final input
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
     if not final_input:
-        st.error("Please enter some text or upload a document.")
+    st.error("Please enter some text or upload a document.")
+    st.stop()
+
+    # (end early if empty)
+else:
+    # ✅ Progress bar must be inside the submit block
+    prog = st.progress(0)
+
+    # ✅ Scope/Security gate
+    intent = detect_intent(final_input)
+
+    if intent.get("intent") == "generative":
+        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
+        st.markdown("""
+        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#FFFFFF;">
+            <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
+            It cannot generate plans, roleplay content, or operational instructions.<br><br>
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
 
-    # Progress bar
-prog = st.progress(0)
+    elif intent.get("intent") == "security_request":
+        log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
+        log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
+        st.markdown("""
+        <div style="
+            background-color:#8B0000;
+            color:#FFFFFF;
+            padding:1rem;
+            border-radius:10px;
+            font-weight:600;
+            text-align:center;
+            border:2px solid #FF4C4C;
+        ">
+            🔒 <strong>Sensitive Credential Request Blocked</strong><br>
+            For safety and legal compliance under AXIS Security Protocol Section IV.6,<br>
+            Veritas does not process credential or access-key requests.<br><br>
+            Action logged and session secured.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
-# Scope/Security gate  (MUST be inside `if submitted:`)
-intent = detect_intent(final_input)
-
-if intent.get("intent") == "generative":
-    log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
-    st.markdown("""
-    <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#FFFFFF;">
-        <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
-        It cannot generate plans, roleplay content, or operational instructions.<br><br>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
-
-elif intent.get("intent") == "security_request":
-    log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
-    log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
-    st.markdown("""
-    <div style="
-        background-color:#8B0000;
-        color:#FFFFFF;
-        padding:1rem;
-        border-radius:10px;
-        font-weight:600;
-        text-align:center;
-        border:2px solid #FF4C4C;
-    ">
-        🔒 <strong>Sensitive Credential Request Blocked</strong><br>
-        For safety and legal compliance under AXIS Security Protocol Section IV.6,<br>
-        Veritas does not process credential or access-key requests.<br><br>
-        Action logged and session secured.
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
-
-elif intent.get("intent") == "bias_analysis":
-    st.info("✅ Veritas is processing your bias analysis request…")
+    elif intent.get("intent") == "bias_analysis":
+        st.info("✅ Veritas is processing your bias analysis request…")
+        # (model call continues here)
     # Prepare model call
     try:
         prog.progress(40, text="Contacting model…")
@@ -2252,6 +2255,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
