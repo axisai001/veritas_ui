@@ -1736,7 +1736,7 @@ if submitted:
         st.stop()
 
     # ✅ Bias-analysis path (allowed)
-    elif intent.get("intent") == "bias_analysis":
+        elif intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
 
         user_instruction = _build_user_instruction(final_input)
@@ -1747,27 +1747,26 @@ if submitted:
             except Exception:
                 prog.progress(40)
 
-        client = OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model=MODEL,
-            temperature=ANALYSIS_TEMPERATURE,
-            messages=[
-                {"role": "system", "content": IDENTITY_PROMPT},
-                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                {"role": "user", "content": user_instruction},
-            ],
-        )
+        try:
+            client = OpenAI(api_key=api_key)
+            resp = client.chat.completions.create(
+                model=MODEL,
+                temperature=ANALYSIS_TEMPERATURE,
+                messages=[
+                    {"role": "system", "content": IDENTITY_PROMPT},
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_instruction},
+                ],
+            )
 
-        if prog:
-            prog.progress(70, text="Processing model response…")
+            if prog:
+                prog.progress(70, text="Processing model response…")
 
-        final_report = resp.choices[0].message.content.strip()
-        st.markdown(final_report)
-
-        if prog:
-            prog.progress(100, text="Analysis complete ✓")
-            st.success(f"✅ Report generated — ID: {public_id}")
+            final_report = resp.choices[0].message.content.strip()
             st.markdown(final_report)
+
+            if prog:
+                prog.progress(100, text="Analysis complete ✓")
 
         except Exception as e:
             log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
@@ -2300,6 +2299,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
