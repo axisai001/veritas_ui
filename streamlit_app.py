@@ -954,9 +954,7 @@ def detect_intent(text: str) -> Dict[str, str]:
     """
     Detects whether a prompt is intended for bias analysis (allowed)
     or is a generative / unsafe / out-of-scope request (blocked).
-
-    Supports enterprise, government, healthcare, academic, and general
-    professional contexts.
+    Tuned to prioritize academic, institutional, and policy contexts.
     """
     if not text or not text.strip():
         return {"intent": "unknown", "reason": "empty"}
@@ -982,22 +980,8 @@ def detect_intent(text: str) -> Dict[str, str]:
         if re.search(pat, lowered):
             return {"intent": "prompt_injection", "reason": f"injection:{pat}"}
 
-    # ---------- Generative / roleplay / creative tasks ----------
-    gen_keywords = [
-        r"\b(write|create|draft|generate|produce|compose|outline|plan|prepare|design|build|develop)\b",
-        r"\b(list|steps|step-by-step|how to|guide|roadmap)\b",
-        r"\b(act as|roleplay|pretend|simulate|become)\b",
-        r"\b(give feedback|critique|review)\b",
-        r"\b(code|program|script|algorithm)\b",
-    ]
-    for pat in gen_keywords:
-        if re.search(pat, lowered):
-            return {"intent": "generative", "reason": f"keyword:{pat}"}
-
-    # ---------- Professional / Institutional bias analysis cues ----------
-    # Covers academia, government, healthcare, enterprise, and media
+    # ---------- Academic / Institutional / Policy bias cues ----------
     analysis_cues = [
-        # Common across regulated or policy environments
         "bias", "evaluate", "assessment", "audit", "review", "analyze", "analysis",
         "institution", "policy", "regulation", "compliance", "procedure", "governance",
         "organization", "department", "training", "report", "memorandum", "notice",
@@ -1006,16 +990,27 @@ def detect_intent(text: str) -> Dict[str, str]:
         "language use", "tone", "messaging", "public communication",
         "clinical", "patient", "staff", "employee", "agency", "board", "committee"
     ]
-    if any(cue in lowered for cue in analysis_cues):
+    # ✅ Match entire words; prevents partial "write a policy" from triggering false positives
+    if any(re.search(rf"\b{cue}\b", lowered) for cue in analysis_cues):
         return {"intent": "bias_analysis", "reason": "institutional_or_professional_context"}
 
-    # ---------- Heuristic fallback ----------
-    # Long, factual, or multi-sentence text defaults to safe analysis
+    # ---------- Generative / creative / roleplay ----------
+    gen_patterns = [
+        r"\b(write|create|draft|generate|produce|compose|outline|plan|prepare|design|develop)\b",
+        r"\b(list|steps|step[-\s]?by[-\s]?step|how to|guide|roadmap)\b",
+        r"\b(act as|roleplay|pretend|simulate|become)\b",
+        r"\b(code|program|script|algorithm)\b",
+    ]
+    for pat in gen_patterns:
+        if re.search(pat, lowered):
+            return {"intent": "generative", "reason": f"keyword:{pat}"}
+
+    # ---------- Fallback heuristics ----------
     sentence_count = max(1, len(re.findall(r"[.!?]\s+", text)))
-    if len(text) > 150 and sentence_count >= 2:
+    if len(text) > 100 and sentence_count >= 1:
         return {"intent": "bias_analysis", "reason": "multi_sentence_default_safe"}
 
-    # ---------- Final fallback ----------
+    # Default safe path
     return {"intent": "bias_analysis", "reason": "default_safe"}
 
 # ================= Utilities =================
@@ -2278,6 +2273,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
