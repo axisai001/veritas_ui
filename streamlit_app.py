@@ -1735,20 +1735,19 @@ if submitted:
         """, unsafe_allow_html=True)
         st.stop()
 
-    # ✅ Bias-analysis path (allowed)
+        # ---------- Veritas Bias Analysis ----------
     elif intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
-        # (your bias-analysis code continues here…)
 
         user_instruction = _build_user_instruction(final_input)
 
-        if prog:
-            try:
-                prog.progress(40, text="Contacting model…")
-            except Exception:
-                prog.progress(40)
+        # 🟩 Initialize progress safely
+        prog = st.progress(0)
 
         try:
+            if prog:
+                prog.progress(40, text="Contacting model…")
+
             client = OpenAI(api_key=api_key)
             resp = client.chat.completions.create(
                 model=MODEL,
@@ -1770,6 +1769,8 @@ if submitted:
                 prog.progress(100, text="Analysis complete ✓")
 
         except Exception as e:
+            if prog:
+                prog.progress(0)
             log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
             st.error("⚠️ There was an issue retrieving the Veritas report.")
             st.stop()
@@ -2300,6 +2301,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
