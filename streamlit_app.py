@@ -1704,15 +1704,7 @@ if submitted:
         """, unsafe_allow_html=True)
         st.stop()
 
-    # ✅ Proceed to Veritas analysis...
-    user_instruction = _build_user_instruction(final_input)
-    ...
-
-    user_instruction = _build_user_instruction(final_input)
-    ...
-
-
-    # --- Proceed with Veritas analysis ---
+    # ✅ Proceed with Veritas analysis
     user_instruction = _build_user_instruction(final_input)
     try:
         prog.progress(40, text="Contacting model…")
@@ -1749,7 +1741,7 @@ if submitted:
         public_id = _gen_public_report_id()
         internal_id = _gen_internal_report_id()
         log_analysis(public_id, internal_id, final_report)
-
+        
         # --- Flag Red Team input in DB if applicable ---
         try:
             if redteam_flag == 1:
@@ -2243,6 +2235,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
