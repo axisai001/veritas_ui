@@ -921,6 +921,62 @@ def _detect_prompt_injection(text: str) -> bool:
         if re.search(pattern, lowered):
             return True
     return False
+# ----------------- Scope Gate: canonical message & intent detection -----------------
+SCOPE_MESSAGE = (
+    "**Out of scope:** Veritas only analyzes supplied text for bias and related issues. "
+    "I cannot generate step-by-step plans, roleplay content, operational instructions, "
+    "or provide credentials. Please paste the text you want analyzed for bias."
+)
+
+RULE_TRIGGERS_CSV = os.path.join(DATA_DIR, "rule_triggers.csv")
+_init_csv(RULE_TRIGGERS_CSV, ["timestamp_utc","run_id","login_id","rule_kind","reason","input_sample"])
+
+def log_rule_trigger(kind: str, reason: str, input_sample: str = ""):
+    try:
+        ts = datetime.now(timezone.utc).isoformat()
+        run_id = st.session_state.get("request_id") or _gen_request_id()
+        login_id = st.session_state.get("login_id", "")
+        sample = (input_sample or "")[:800]
+        with open(RULE_TRIGGERS_CSV, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([ts, run_id, login_id, kind, reason, sample])
+        try:
+            _db_exec(
+                """INSERT INTO errors (timestamp_utc,error_id,request_id,route,kind,http_status,detail,session_id,login_id,user_agent)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (ts, _gen_error_id(), run_id, "/analyze", kind.upper(), 200, reason[:400], _get_sid(), login_id, "streamlit")
+            )
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+def detect_intent(text: str) -> Dict[str, str]:
+    if not text or not text.strip():
+        return {"intent": "unknown", "reason": "empty"}
+    lowered = text.strip().lower()
+    cred_pattern = r"(api\s*key|access\s*token|password|secret\s*key|private\s*key|credentials?)"
+    if re.search(cred_pattern, lowered):
+        return {"intent": "generative", "reason": "credential_request"}
+    gen_keywords = [
+        r"\b(write|create|draft|generate|produce|compose|outline|plan|prepare|design|build|develop)\b",
+        r"\b(list|steps|step-by-step|how to|guide)\b",
+        r"\b(act as|roleplay|act like|become)\b",
+        r"\b(give feedback|critique|review|evaluate)\b",
+        r"\b(code|program|script|api key|open secure|expose secret)\b"
+    ]
+    short_thresh = 160
+    is_short = len(text.strip()) < short_thresh
+    for pat in gen_keywords:
+        if re.search(pat, lowered):
+            return {"intent": "generative", "reason": f"keyword:{pat}"}
+    sentence_count = max(1, len(re.findall(r"[.!?]\s+", text)))
+    if sentence_count >= 2 and len(text.strip()) >= max(200, short_thresh):
+        return {"intent": "analysis", "reason": "long_text_multiple_sentences"}
+    if "?" in text and is_short:
+        return {"intent": "generative", "reason": "short_question"}
+    if re.search(r"\".+\"|“.+”|‘.+’|cite:|according to|research|study", lowered):
+        return {"intent": "analysis", "reason": "contains_quote_or_citation"}
+    return {"intent": "generative", "reason": "fallback_conservative"}
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -1621,23 +1677,36 @@ if submitted:
         st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
         st.stop()
 
-    # --- Tier-1 / Tier-2 Local Safety Enforcement ---
-    safety_message = _run_safety_precheck(final_input)
-    if safety_message:
-        st.markdown(safety_message)
-        st.stop()
+# ---------- Scope Gate (deny generative requests) ----------
+intent = detect_intent(final_input)
+if intent.get("intent") == "generative":
+    log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
+    st.markdown(f"""
+    <div style="background:#FFF4E5;border:1px solid #FFD7A6;padding:0.8rem;border-radius:8px;">
+        <strong>Out of scope:</strong> Veritas only analyzes supplied text for bias and related issues.
+        It cannot generate plans, roleplay content, or operational instructions.<br>
+        <small>Run ID: <code>{st.session_state.get('request_id', _gen_request_id())}</code></small>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
-    # --- Prompt Injection / Disclosure Detection ---
-    if _detect_prompt_injection(final_input):
-        log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-        st.markdown("""
-        <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
-        ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
-        Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
-        Action logged; analysis terminated.
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
+# --------- Now proceed with existing Safety and Injection gates ----------
+safety_message = _run_safety_precheck(final_input)
+if safety_message:
+    st.markdown(safety_message)
+    st.stop()
+
+if _detect_prompt_injection(final_input):
+    log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
+    log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
+    st.markdown("""
+    <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
+    ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
+    Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
+    Action logged; analysis terminated.
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()
 
     # --- Proceed with Veritas analysis ---
     user_instruction = _build_user_instruction(final_input)
@@ -2170,6 +2239,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
