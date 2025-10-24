@@ -1600,23 +1600,27 @@ with tabs[0]:
         bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
             submitted = st.form_submit_button("Engage Veritas")
-        with bcol2:
-            new_analysis = st.form_submit_button("Reset Canvas")
+            with bcol2:
+        new_analysis = st.form_submit_button("Reset Canvas")
 
     # NEW: safer reset handler for New Analysis
     if 'new_analysis' in locals() and new_analysis:
-        # Do not write directly to the text-area's key here. Use the clear flag, which is honored above.
         st.session_state["_clear_text_box"] = True
         st.session_state["last_reply"] = ""
         st.session_state["history"] = []
-        # Force the file_uploader to remount with a fresh key (clears the selected file)
         st.session_state["doc_uploader_key"] += 1
         _safe_rerun()
 
-    # --- Handle Veritas Analysis only when submitted ---
+# --- Retrieve user text and uploaded text safely before submit handling ---
+user_text = st.session_state.get("user_input_box", "").strip()
+extracted = st.session_state.get("extracted_text", "")
+
+# --- Handle Veritas Analysis only when submitted ---
 if submitted:
     # --- Detect if this is a Red Team test ---
     user_login = st.session_state.get("login_id", "").lower()
+    ...
+
     redteam_flag = 1 if (
         st.session_state.get("is_redteam", False)
         or user_login in REDTEAM_EMAILS
@@ -2234,6 +2238,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
