@@ -1707,46 +1707,80 @@ if submitted:
             st.error("network error")
             st.stop()
 
+    if submitted:
     # ✅ Build combined input only during submit
-final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
-if not final_input:
-    st.error("Please enter some text or upload a document.")
-    st.stop()
+    if not final_input:
+        st.error("Please enter some text or upload a document.")
+        st.stop()
 
-# ✅ Scope Gate (must be here, inside submitted)
-intent = detect_intent(final_input)
-if intent.get("intent") == "generative":
-    log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
-    st.markdown(f"""
-    <div style="background:#FFF4E5;border:1px solid #FFD7A6;padding:0.8rem;border-radius:8px;">
-        <strong>Out of scope:</strong> Veritas only analyzes supplied text for bias and related issues.
-        It cannot generate plans, roleplay content, or operational instructions.<br>
-        <small>Run ID: <code>{st.session_state.get('request_id', _gen_request_id())}</code></small>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
+    # ---------- Scope & Security Gate (color-coded) ----------
+    intent = detect_intent(final_input)
 
-# ✅ Continue with Safety and Injection gates
-safety_message = _run_safety_precheck(final_input)
-if safety_message:
-    st.markdown(safety_message)
-    st.stop()
+    # 🟧 Out-of-scope / Generative request
+    if intent.get("intent") == "generative":
+        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
+        st.markdown(f"""
+        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#2b1a00;">
+            <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
+            It cannot generate plans, roleplay content, or operational instructions.<br><br>
+            <small>Run ID: <code>{st.session_state.get('request_id', _gen_request_id())}</code></small>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
-if _detect_prompt_injection(final_input):
-    log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
-    log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-    st.markdown("""
-    <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
-    ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
-    Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
-    Action logged; analysis terminated.
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
+    # 🔴 Prompt-injection attempt
+    elif intent.get("intent") == "prompt_injection":
+        log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
+        log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
+        st.markdown("""
+        <div style="background-color:#8B0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
+        ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
+        Veritas detected an attempt to reveal internal schema or prompt logic.<br>
+        Action logged; analysis terminated.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
-# ✅ Proceed with Veritas analysis — (DEDENTED BLOCK)
-user_instruction = _build_user_instruction(final_input)
+    # 🟥 Credential / Security request
+    elif intent.get("intent") == "security_request":
+        log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
+        log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
+        st.markdown("""
+        <div style="background-color:#4B0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
+        🔒 <strong>Sensitive Credential Request Blocked</strong><br>
+        For safety and compliance, Veritas does not process credential or access-key requests.<br>
+        Action logged and session secured.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # ✅ Bias-analysis path (allowed) — continues to model call
+    elif intent.get("intent") == "bias_analysis":
+        st.info("✅ Veritas is processing your bias analysis request…")
+
+        # 🔽 Now continue with Safety and Injection gates
+        safety_message = _run_safety_precheck(final_input)
+        if safety_message:
+            st.markdown(safety_message)
+            st.stop()
+
+        if _detect_prompt_injection(final_input):
+            log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
+            log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
+            st.markdown("""
+            <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
+            ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
+            Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
+            Action logged; analysis terminated.
+            </div>
+            """, unsafe_allow_html=True)
+            st.stop()
+
+        # 🔽 Proceed to Veritas analysis (model call)
+        user_instruction = _build_user_instruction(final_input)
+        ...
 try:
     prog.progress(40, text="Contacting model…")
 except Exception:
@@ -2270,6 +2304,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
