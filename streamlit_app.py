@@ -1675,9 +1675,9 @@ if submitted:
         st.stop()
 
     # Progress bar
-    prog = st.progress(0)
+prog = st.progress(0)
 
-    # Scope/Security gate
+# Scope/Security gate  (MUST be inside `if submitted:`)
 intent = detect_intent(final_input)
 
 if intent.get("intent") == "generative":
@@ -1711,10 +1711,10 @@ elif intent.get("intent") == "security_request":
     """, unsafe_allow_html=True)
     st.stop()
 
-    # Bias-analysis path
-    if intent.get("intent") == "bias_analysis":
-        st.info("✅ Veritas is processing your bias analysis request…")
-
+elif intent.get("intent") == "bias_analysis":
+    st.info("✅ Veritas is processing your bias analysis request…")
+    # (your model-call code continues here unchanged)
+    
         # Prepare model call
         try:
             prog.progress(40, text="Contacting model…")
@@ -2254,6 +2254,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
