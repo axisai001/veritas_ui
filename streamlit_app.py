@@ -1665,6 +1665,7 @@ if submitted:
             st.error("network error")
             st.stop()
 
+    if submitted:
     # ✅ Build combined input only during submit
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
@@ -1672,52 +1673,41 @@ if submitted:
         st.error("Please enter some text or upload a document.")
         st.stop()
 
-    api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-    if not api_key:
-        st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
+    # ✅ Scope Gate (must be here, inside submitted)
+    intent = detect_intent(final_input)
+    if intent.get("intent") == "generative":
+        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
+        st.markdown(f"""
+        <div style="background:#FFF4E5;border:1px solid #FFD7A6;padding:0.8rem;border-radius:8px;">
+            <strong>Out of scope:</strong> Veritas only analyzes supplied text for bias and related issues.
+            It cannot generate plans, roleplay content, or operational instructions.<br>
+            <small>Run ID: <code>{st.session_state.get('request_id', _gen_request_id())}</code></small>
+        </div>
+        """, unsafe_allow_html=True)
         st.stop()
 
-# ------------------------------------------------------------
-# Combine text from user input and any extracted upload text
-# ------------------------------------------------------------
-user_text = st.session_state.get("user_input", "")
-extracted = st.session_state.get("extracted_text", "")
-final_input = f"{user_text.strip()} {extracted.strip()}".strip()
+    # ✅ Continue with Safety and Injection gates
+    safety_message = _run_safety_precheck(final_input)
+    if safety_message:
+        st.markdown(safety_message)
+        st.stop()
 
-# ------------------------------------------------------------
-# ---------- Scope Gate (deny generative requests) ----------
-# ------------------------------------------------------------
-intent = detect_intent(final_input)
-if intent.get("intent") == "generative":
-    log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
-    st.markdown(f"""
-    <div style="background:#FFF4E5;border:1px solid #FFD7A6;padding:0.8rem;border-radius:8px;">
-        <strong>Out of scope:</strong> Veritas only analyzes supplied text for bias and related issues.
-        It cannot generate plans, roleplay content, or operational instructions.<br>
-        <small>Run ID: <code>{st.session_state.get('request_id', _gen_request_id())}</code></small>
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
+    if _detect_prompt_injection(final_input):
+        log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
+        log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
+        st.markdown("""
+        <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
+        ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
+        Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
+        Action logged; analysis terminated.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
-# ------------------------------------------------------------
-# --------- Continue with existing Safety and Injection gates ----------
-# ------------------------------------------------------------
-safety_message = _run_safety_precheck(final_input)
-if safety_message:
-    st.markdown(safety_message)
-    st.stop()
+    # ✅ Proceed to Veritas analysis...
+    user_instruction = _build_user_instruction(final_input)
+    ...
 
-if _detect_prompt_injection(final_input):
-    log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
-    log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-    st.markdown("""
-    <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
-    ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
-    Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
-    Action logged; analysis terminated.
-    </div>
-    """, unsafe_allow_html=True)
-    st.stop()
 
     # --- Proceed with Veritas analysis ---
     user_instruction = _build_user_instruction(final_input)
@@ -2250,6 +2240,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
