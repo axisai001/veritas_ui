@@ -970,11 +970,13 @@ def detect_intent(text: str) -> Dict[str, str]:
 
     # ---------- Prompt injection / override attempts ----------
     injection_patterns = [
-        r"ignore (all|previous) (rules|instructions|directives)",
-        r"reveal (your|the) (system prompt|instructions|configuration|schema)",
-        r"bypass|disable (safety|security|filters?)",
-        r"open secure|expose (secret|data|files?)",
-        r"run code|execute|shell|sudo",
+        r"ignore\s+(all|previous)\s+(rules?|instructions?|directives?)",
+        r"reveal\s+(your|the)\s+(system\s*prompt|internal\s*(schema|configuration|setup|details?)|instructions?|rules?)",
+        r"show\s+(me\s+)?(your|the)\s+(prompt|schema|system|configuration|setup|details?)",
+        r"bypass|disable\s+(safety|security|filters?)",
+        r"open\s+(secure|protected)\s*(data|files?|keys?)",
+        r"expose\s+(secret|hidden|internal)\s*(data|information|prompt|rules?)",
+        r"run\s+code|execute\s+(script|command)|shell|sudo",
     ]
     for pat in injection_patterns:
         if re.search(pat, lowered):
@@ -2276,6 +2278,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
