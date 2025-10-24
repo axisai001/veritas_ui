@@ -1703,8 +1703,8 @@ if _detect_prompt_injection(final_input):
     """, unsafe_allow_html=True)
     st.stop()
 
-# ✅ Proceed to Veritas analysis...
-user_instruction = _build_user_instruction(final_input)
+    # ✅ Proceed with Veritas analysis...
+    user_instruction = _build_user_instruction(final_input)
     try:
         prog.progress(40, text="Contacting model…")
     except Exception:
@@ -2234,6 +2234,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
