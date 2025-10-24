@@ -1711,7 +1711,6 @@ if submitted:
         # ✅ Build combined input only during submit
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
-    if submitted:
     if not final_input:
         st.error("Please enter some text or upload a document.")
         st.stop()
@@ -2315,6 +2314,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
