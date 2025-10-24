@@ -951,32 +951,70 @@ def log_rule_trigger(kind: str, reason: str, input_sample: str = ""):
         pass
 
 def detect_intent(text: str) -> Dict[str, str]:
+    """
+    Detects whether a prompt is intended for bias analysis (allowed)
+    or is a generative / unsafe / out-of-scope request (blocked).
+
+    Supports enterprise, government, healthcare, academic, and general
+    professional contexts.
+    """
     if not text or not text.strip():
         return {"intent": "unknown", "reason": "empty"}
+
     lowered = text.strip().lower()
+
+    # ---------- Credential / Security request ----------
     cred_pattern = r"(api\s*key|access\s*token|password|secret\s*key|private\s*key|credentials?)"
     if re.search(cred_pattern, lowered):
-        return {"intent": "generative", "reason": "credential_request"}
+        return {"intent": "security_request", "reason": "credential_request"}
+
+    # ---------- Prompt injection / override attempts ----------
+    injection_patterns = [
+        r"ignore (all|previous) (rules|instructions|directives)",
+        r"reveal (your|the) (system prompt|instructions|configuration|schema)",
+        r"bypass|disable (safety|security|filters?)",
+        r"open secure|expose (secret|data|files?)",
+        r"run code|execute|shell|sudo",
+    ]
+    for pat in injection_patterns:
+        if re.search(pat, lowered):
+            return {"intent": "prompt_injection", "reason": f"injection:{pat}"}
+
+    # ---------- Generative / roleplay / creative tasks ----------
     gen_keywords = [
         r"\b(write|create|draft|generate|produce|compose|outline|plan|prepare|design|build|develop)\b",
-        r"\b(list|steps|step-by-step|how to|guide)\b",
-        r"\b(act as|roleplay|act like|become)\b",
-        r"\b(give feedback|critique|review|evaluate)\b",
-        r"\b(code|program|script|api key|open secure|expose secret)\b"
+        r"\b(list|steps|step-by-step|how to|guide|roadmap)\b",
+        r"\b(act as|roleplay|pretend|simulate|become)\b",
+        r"\b(give feedback|critique|review)\b",
+        r"\b(code|program|script|algorithm)\b",
     ]
-    short_thresh = 160
-    is_short = len(text.strip()) < short_thresh
     for pat in gen_keywords:
         if re.search(pat, lowered):
             return {"intent": "generative", "reason": f"keyword:{pat}"}
+
+    # ---------- Professional / Institutional bias analysis cues ----------
+    # Covers academia, government, healthcare, enterprise, and media
+    analysis_cues = [
+        # Common across regulated or policy environments
+        "bias", "evaluate", "assessment", "audit", "review", "analyze", "analysis",
+        "institution", "policy", "regulation", "compliance", "procedure", "governance",
+        "organization", "department", "training", "report", "memorandum", "notice",
+        "study", "research", "program", "initiative", "implementation",
+        "diversity", "equity", "inclusion", "representation", "fairness",
+        "language use", "tone", "messaging", "public communication",
+        "clinical", "patient", "staff", "employee", "agency", "board", "committee"
+    ]
+    if any(cue in lowered for cue in analysis_cues):
+        return {"intent": "bias_analysis", "reason": "institutional_or_professional_context"}
+
+    # ---------- Heuristic fallback ----------
+    # Long, factual, or multi-sentence text defaults to safe analysis
     sentence_count = max(1, len(re.findall(r"[.!?]\s+", text)))
-    if sentence_count >= 2 and len(text.strip()) >= max(200, short_thresh):
-        return {"intent": "analysis", "reason": "long_text_multiple_sentences"}
-    if "?" in text and is_short:
-        return {"intent": "generative", "reason": "short_question"}
-    if re.search(r"\".+\"|“.+”|‘.+’|cite:|according to|research|study", lowered):
-        return {"intent": "analysis", "reason": "contains_quote_or_citation"}
-    return {"intent": "generative", "reason": "fallback_conservative"}
+    if len(text) > 150 and sentence_count >= 2:
+        return {"intent": "bias_analysis", "reason": "multi_sentence_default_safe"}
+
+    # ---------- Final fallback ----------
+    return {"intent": "bias_analysis", "reason": "default_safe"}
 
 # ================= Utilities =================
 def _get_sid() -> str:
@@ -2238,6 +2276,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
