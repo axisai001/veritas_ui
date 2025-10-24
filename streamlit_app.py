@@ -1657,8 +1657,6 @@ extracted = st.session_state.get("extracted_text", "")
 if submitted:
     # --- Detect if this is a Red Team test ---
     user_login = st.session_state.get("login_id", "").lower()
-    ...
-
     redteam_flag = 1 if (
         st.session_state.get("is_redteam", False)
         or user_login in REDTEAM_EMAILS
@@ -1666,65 +1664,21 @@ if submitted:
         or "tester" in user_login
     ) else 0
 
-    try:
-        prog = st.progress(0, text="Preparing…")
-    except TypeError:
-        prog = st.progress(0)
-
+    # Pull latest text (typed + extracted)
     user_text = st.session_state.get("user_input_box", "").strip()
-    extracted = ""
-    try:
-        prog.progress(10)
-    except Exception:
-        pass
+    extracted = extracted or ""
 
-    if doc is not None:
-        size_mb = doc.size / (1024 * 1024)
-        if size_mb > MAX_UPLOAD_MB:
-            st.error(f"File too large ({size_mb:.1f} MB). Max {int(MAX_UPLOAD_MB)} MB.")
-            st.stop()
-        try:
-            with st.spinner("Extracting document…"):
-                def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
-                    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-                    if ext == "pdf":
-                        if PdfReader is None: return ""
-                        reader = PdfReader(io.BytesIO(file_bytes))
-                        parts = [page.extract_text() or "" for page in reader.pages]
-                        return "\n\n".join(parts)[:MAX_EXTRACT_CHARS]
-                    elif ext == "docx":
-                        if docx is None: return ""
-                        buf = io.BytesIO(file_bytes)
-                        doc_obj = docx.Document(buf)
-                        text = "\n".join(p.text for p in doc_obj.paragraphs)
-                        return text[:MAX_EXTRACT_CHARS]
-                    elif ext in ("txt", "md", "csv"):
-                        return file_bytes.decode("utf-8", errors="ignore")[:MAX_EXTRACT_CHARS]
-                    return ""
-                extracted = (extract_text_from_file(doc.getvalue(), doc.name) or "").strip()
-        except Exception as e:
-            log_error_event("EXTRACT", "/extract", 500, repr(e))
-            st.error("network error")
-            st.stop()
-
-    # ---------- Initialize progress tracker ----------
-prog = None
-
-if submitted:
-    # ✅ Build combined input only during submit
+    # Build the final input
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
     if not final_input:
         st.error("Please enter some text or upload a document.")
         st.stop()
 
-    # ✅ Create progress bar
+    # Progress bar
     prog = st.progress(0)
 
-    # ---------- Scope & Security Gate ----------
+    # Scope/Security gate
     intent = detect_intent(final_input)
-
-    # 🟧 Out-of-scope / Generative request
     if intent.get("intent") == "generative":
         log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
         st.markdown("""
@@ -1735,18 +1689,42 @@ if submitted:
         """, unsafe_allow_html=True)
         st.stop()
 
-            # ---------- Veritas Bias Analysis ----------
-    elif intent.get("intent") == "bias_analysis":
+    # Run safety checks
+    safety_message = _run_safety_precheck(final_input)
+    if safety_message:
+        st.markdown(safety_message)
+        st.stop()
+
+    if _detect_prompt_injection(final_input):
+        log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
+        log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
+        st.markdown("""
+        <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
+        ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
+        Veritas detected an attempt to reveal internal schema or prompt logic.<br>
+        Action logged; analysis terminated.
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # Bias-analysis path
+    if intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
 
-        # Always reinitialize progress safely inside submit
-        prog = st.progress(0)
+        # Prepare model call
+        try:
+            prog.progress(40, text="Contacting model…")
+        except Exception:
+            pass
+
+        api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+        if not api_key:
+            st.error("OPENAI_API_KEY is not configured.")
+            st.stop()
+
         user_instruction = _build_user_instruction(final_input)
 
         try:
-            if prog:
-                prog.progress(40, text="Contacting model…")
-
             client = OpenAI(api_key=api_key)
             resp = client.chat.completions.create(
                 model=MODEL,
@@ -1758,94 +1736,56 @@ if submitted:
                 ],
             )
 
-            if prog:
+            try:
                 prog.progress(70, text="Processing model response…")
+            except Exception:
+                pass
 
-            # Extract and render report
-            final_report = resp.choices[0].message.content.strip()
-
+            final_report = (resp.choices[0].message.content or "").strip()
             if not final_report:
                 st.error("⚠️ No response returned by Veritas.")
                 st.stop()
 
+            # Optional schema enforcement (kept since it already exists)
+            if not _looks_strict(final_report):
+                log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+                st.error("Veritas produced a non-compliant output. Please retry.")
+                st.stop()
+
+            public_id = _gen_public_report_id()
+            internal_id = _gen_internal_report_id()
+            log_analysis(public_id, internal_id, final_report)
+
+            if redteam_flag == 1:
+                _record_test_result(
+                    internal_id=internal_id,
+                    public_id=public_id,
+                    login_id=st.session_state.get("login_id", "unknown"),
+                    test_id="manual_redteam",
+                    severity="info",
+                    detail="Red Team test successfully logged via Veritas analysis.",
+                    user_input=final_input,
+                    model_output=final_report
+                )
+                st.success("✅ Red Team log recorded successfully.")
+
+            try:
+                prog.progress(100, text="Analysis complete ✓")
+            except Exception:
+                pass
+
+            st.success(f"✅ Report generated — ID: {public_id}")
             st.markdown(final_report)
 
-            if prog:
-                prog.progress(100, text="Analysis complete ✓")
-
         except Exception as e:
-            # Safety rollback if anything fails
             try:
-                if prog:
-                    prog.progress(0)
+                prog.progress(0)
             except Exception:
                 pass
             log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
             st.error("⚠️ There was an issue retrieving the Veritas report.")
             st.stop()
-            
-        # 🔽 Proceed to Veritas analysis (model call)
-        user_instruction = _build_user_instruction(final_input)
-        ...
-try:
-    prog.progress(40, text="Contacting model…")
-except Exception:
-    prog.progress(40)
 
-client = OpenAI(api_key=api_key)
-resp = client.chat.completions.create(
-    model=MODEL,
-    temperature=ANALYSIS_TEMPERATURE,
-    messages=[
-        {"role": "system", "content": IDENTITY_PROMPT},
-        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-        {"role": "user", "content": user_instruction},
-    ],
-)
-
-try:
-    prog.progress(70, text="Processing model response…")
-    final_report = resp.choices[0].message.content.strip()
-    closing_line = (
-        "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
-        "in the text provided. If you have any further questions or need additional analysis, "
-        "feel free to ask The Prism."
-    )
-    if "feel free to ask The Prism" not in final_report:
-        final_report = final_report.rstrip() + "\n\n" + closing_line
-
-    if not _looks_strict(final_report):
-        log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-        st.error("Veritas produced a non-compliant output. Please retry.")
-        st.stop()
-
-    public_id = _gen_public_report_id()
-    internal_id = _gen_internal_report_id()
-    log_analysis(public_id, internal_id, final_report)
-
-    if redteam_flag == 1:
-        _record_test_result(
-            internal_id=internal_id,
-            public_id=public_id,
-            login_id=st.session_state.get("login_id", "unknown"),
-            test_id="manual_redteam",
-            severity="info",
-            detail="Red Team test successfully logged via Veritas analysis.",
-            user_input=final_input,
-            model_output=final_report
-        )
-        st.success("✅ Red Team log recorded successfully.")
-
-    prog.progress(100, text="Analysis complete ✓")
-    st.success(f"✅ Report generated — ID: {public_id}")
-    st.markdown(final_report)
-
-except Exception as e:
-    log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
-    st.error("⚠️ There was an issue retrieving the Veritas report.")
-    st.stop()
-
-# ✅ Dedent this! Align with `if submitted:` (no spaces before it)
 else:
     st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
@@ -2310,6 +2250,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
