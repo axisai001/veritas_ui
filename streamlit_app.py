@@ -1677,7 +1677,16 @@ if submitted:
         st.error("Missing OpenAI API key. Set OPENAI_API_KEY.")
         st.stop()
 
+# ------------------------------------------------------------
+# Combine text from user input and any extracted upload text
+# ------------------------------------------------------------
+user_text = st.session_state.get("user_input", "")
+extracted = st.session_state.get("extracted_text", "")
+final_input = f"{user_text.strip()} {extracted.strip()}".strip()
+
+# ------------------------------------------------------------
 # ---------- Scope Gate (deny generative requests) ----------
+# ------------------------------------------------------------
 intent = detect_intent(final_input)
 if intent.get("intent") == "generative":
     log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
@@ -1690,7 +1699,9 @@ if intent.get("intent") == "generative":
     """, unsafe_allow_html=True)
     st.stop()
 
-# --------- Now proceed with existing Safety and Injection gates ----------
+# ------------------------------------------------------------
+# --------- Continue with existing Safety and Injection gates ----------
+# ------------------------------------------------------------
 safety_message = _run_safety_precheck(final_input)
 if safety_message:
     st.markdown(safety_message)
@@ -2239,6 +2250,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
