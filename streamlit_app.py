@@ -1713,13 +1713,11 @@ elif intent.get("intent") == "security_request":
 
 elif intent.get("intent") == "bias_analysis":
     st.info("✅ Veritas is processing your bias analysis request…")
-    # (your model-call code continues here unchanged)
-    
-        # Prepare model call
-        try:
-            prog.progress(40, text="Contacting model…")
-        except Exception:
-            pass
+    # Prepare model call
+    try:
+        prog.progress(40, text="Contacting model…")
+    except Exception:
+        pass
 
         api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
         if not api_key:
@@ -2254,6 +2252,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
