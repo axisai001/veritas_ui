@@ -1715,6 +1715,8 @@ if submitted:
         st.error("Please enter some text or upload a document.")
         st.stop()
 
+    prog = st.progress(0)
+
     # ---------- Scope & Security Gate (color-coded) ----------
     intent = detect_intent(final_input)
 
@@ -2304,6 +2306,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
