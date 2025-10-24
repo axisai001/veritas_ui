@@ -1715,7 +1715,7 @@ if submitted:
         st.error("Please enter some text or upload a document.")
         st.stop()
     
-    if submitted
+    if submitted:
         prog = st.progress(0)
 
     # ... your color-coded gate system ...
@@ -2315,6 +2315,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
