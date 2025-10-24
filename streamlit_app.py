@@ -1682,7 +1682,7 @@ if submitted:
     if intent.get("intent") == "generative":
         log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
         st.markdown("""
-        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#2b1a00;">
+        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#FFFFFF;">
             <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
             It cannot generate plans, roleplay content, or operational instructions.<br><br>
         </div>
@@ -2250,6 +2250,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
