@@ -1736,8 +1736,9 @@ if submitted:
         st.stop()
 
     # ✅ Bias-analysis path (allowed)
-        elif intent.get("intent") == "bias_analysis":
+    elif intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
+        # (your bias-analysis code continues here…)
 
         user_instruction = _build_user_instruction(final_input)
 
@@ -2299,6 +2300,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
