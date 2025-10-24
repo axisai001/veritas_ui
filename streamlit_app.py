@@ -1673,8 +1673,6 @@ if submitted:
     if not final_input:
     st.error("Please enter some text or upload a document.")
     st.stop()
-
-    # (end early if empty)
 else:
     # ✅ Progress bar must be inside the submit block
     prog = st.progress(0)
@@ -2255,6 +2253,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
