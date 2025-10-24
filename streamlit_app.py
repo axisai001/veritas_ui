@@ -1707,47 +1707,45 @@ if submitted:
             st.error("network error")
             st.stop()
 
-    if submitted:
-        # ✅ Build combined input only during submit
-        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+    # ---------- Initialize progress tracker ----------
+prog = None
+
+if submitted:
+    # ✅ Build combined input only during submit
+    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
     if not final_input:
         st.error("Please enter some text or upload a document.")
         st.stop()
-    
-    if submitted:
-        prog = st.progress(0)
 
-    # ... your color-coded gate system ...
+    # ✅ Create progress bar
+    prog = st.progress(0)
 
+    # ---------- Scope & Security Gate ----------
+    intent = detect_intent(final_input)
+
+    # 🟧 Out-of-scope / Generative request
+    if intent.get("intent") == "generative":
+        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
+        st.markdown("""
+        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#2b1a00;">
+            <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
+            It cannot generate plans, roleplay content, or operational instructions.<br><br>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
+
+    # ✅ Bias-analysis path (allowed)
     elif intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
 
-        # 🔽 Safety + Injection checks
-        safety_message = _run_safety_precheck(final_input)
-        if safety_message:
-            st.markdown(safety_message)
-            st.stop()
-
-        if _detect_prompt_injection(final_input):
-            log_rule_trigger("injection_block", "prompt_disclosure_attempt", final_input[:800])
-            log_error_event("PROMPT_INJECTION", "/analyze", 403, "Prompt disclosure attempt blocked")
-            st.markdown("""
-            <div style="background-color:#7a0000;color:white;padding:1rem;border-radius:10px;font-weight:600;text-align:center;">
-            ⚠️ <strong>Disclosure Attempt Blocked under AXIS Security §IV.7</strong><br>
-            Veritas has detected an attempt to reveal internal schema or prompt logic.<br>
-            Action logged; analysis terminated.
-            </div>
-            """, unsafe_allow_html=True)
-            st.stop()
-
-        # 🔽 Proceed to Veritas analysis (model call)
         user_instruction = _build_user_instruction(final_input)
 
-        try:
-            prog.progress(40, text="Contacting model…")
-        except Exception:
-            prog.progress(40)
+        if prog:
+            try:
+                prog.progress(40, text="Contacting model…")
+            except Exception:
+                prog.progress(40)
 
         client = OpenAI(api_key=api_key)
         resp = client.chat.completions.create(
@@ -1760,26 +1758,13 @@ if submitted:
             ],
         )
 
-        try:
+        if prog:
             prog.progress(70, text="Processing model response…")
-            final_report = resp.choices[0].message.content.strip()
-            closing_line = (
-                "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
-                "in the text provided. If you have any further questions or need additional analysis, "
-                "feel free to ask The Prism."
-            )
-            if "feel free to ask The Prism" not in final_report:
-                final_report = final_report.rstrip() + "\n\n" + closing_line
 
-            if not _looks_strict(final_report):
-                log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-                st.error("Veritas produced a non-compliant output. Please retry.")
-                st.stop()
+        final_report = resp.choices[0].message.content.strip()
+        st.markdown(final_report)
 
-            public_id = _gen_public_report_id()
-            internal_id = _gen_internal_report_id()
-            log_analysis(public_id, internal_id, final_report)
-
+        if prog:
             prog.progress(100, text="Analysis complete ✓")
             st.success(f"✅ Report generated — ID: {public_id}")
             st.markdown(final_report)
@@ -2315,6 +2300,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
