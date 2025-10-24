@@ -1745,71 +1745,65 @@ if _detect_prompt_injection(final_input):
     """, unsafe_allow_html=True)
     st.stop()
 
-    # ✅ Proceed with Veritas analysis...
-    user_instruction = _build_user_instruction(final_input)
-    try:
-        prog.progress(40, text="Contacting model…")
-    except Exception:
-        prog.progress(40)
+# ✅ Proceed with Veritas analysis — (DEDENTED BLOCK)
+user_instruction = _build_user_instruction(final_input)
+try:
+    prog.progress(40, text="Contacting model…")
+except Exception:
+    prog.progress(40)
 
-    client = OpenAI(api_key=api_key)
-    resp = client.chat.completions.create(
-        model=MODEL,
-        temperature=ANALYSIS_TEMPERATURE,
-        messages=[
-            {"role": "system", "content": IDENTITY_PROMPT},
-            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-            {"role": "user", "content": user_instruction},
-        ],
+client = OpenAI(api_key=api_key)
+resp = client.chat.completions.create(
+    model=MODEL,
+    temperature=ANALYSIS_TEMPERATURE,
+    messages=[
+        {"role": "system", "content": IDENTITY_PROMPT},
+        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_instruction},
+    ],
+)
+
+try:
+    prog.progress(70, text="Processing model response…")
+    final_report = resp.choices[0].message.content.strip()
+    closing_line = (
+        "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
+        "in the text provided. If you have any further questions or need additional analysis, "
+        "feel free to ask The Prism."
     )
+    if "feel free to ask The Prism" not in final_report:
+        final_report = final_report.rstrip() + "\n\n" + closing_line
 
-    try:
-        prog.progress(70, text="Processing model response…")
-        final_report = resp.choices[0].message.content.strip()
-        closing_line = (
-            "This analysis has identified bias, misinformation patterns, and reasoning fallacies "
-            "in the text provided. If you have any further questions or need additional analysis, "
-            "feel free to ask The Prism."
-        )
-        if "feel free to ask The Prism" not in final_report:
-            final_report = final_report.rstrip() + "\n\n" + closing_line
-
-        if not _looks_strict(final_report):
-            log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-            st.error("Veritas produced a non-compliant output. Please retry.")
-            st.stop()
-
-        public_id = _gen_public_report_id()
-        internal_id = _gen_internal_report_id()
-        log_analysis(public_id, internal_id, final_report)
-        
-        # --- Flag Red Team input in DB if applicable ---
-        try:
-            if redteam_flag == 1:
-                _record_test_result(
-                    internal_id=internal_id,
-                    public_id=public_id,
-                    login_id=st.session_state.get("login_id", "unknown"),
-                    test_id="manual_redteam",
-                    severity="info",
-                    detail="Red Team test successfully logged via Veritas analysis.",
-                    user_input=final_input,
-                    model_output=final_report
-                )
-                st.success("✅ Red Team log recorded successfully.")
-
-        except Exception as e:
-            log_error_event("REDTEAM_LOGGING", "/analyze", 500, repr(e))
-
-        # ✅ Display final Veritas analysis
-        prog.progress(100, text="Analysis complete ✓")
-        st.success(f"✅ Report generated — ID: {public_id}")
-        st.markdown(final_report)
-
-    except Exception as e:
-        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
-        st.error("⚠️ There was an issue retrieving the Veritas report.")
+    if not _looks_strict(final_report):
+        log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+        st.error("Veritas produced a non-compliant output. Please retry.")
         st.stop()
+
+    public_id = _gen_public_report_id()
+    internal_id = _gen_internal_report_id()
+    log_analysis(public_id, internal_id, final_report)
+
+    if redteam_flag == 1:
+        _record_test_result(
+            internal_id=internal_id,
+            public_id=public_id,
+            login_id=st.session_state.get("login_id", "unknown"),
+            test_id="manual_redteam",
+            severity="info",
+            detail="Red Team test successfully logged via Veritas analysis.",
+            user_input=final_input,
+            model_output=final_report
+        )
+        st.success("✅ Red Team log recorded successfully.")
+
+    prog.progress(100, text="Analysis complete ✓")
+    st.success(f"✅ Report generated — ID: {public_id}")
+    st.markdown(final_report)
+
+except Exception as e:
+    log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+    st.error("⚠️ There was an issue retrieving the Veritas report.")
+    st.stop()
 
 # ✅ Dedent this! Align with `if submitted:` (no spaces before it)
 else:
@@ -2276,6 +2270,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
