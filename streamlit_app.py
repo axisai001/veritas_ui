@@ -1708,6 +1708,9 @@ if submitted:
     user_instruction = _build_user_instruction(final_input)
     ...
 
+    user_instruction = _build_user_instruction(final_input)
+    ...
+
 
     # --- Proceed with Veritas analysis ---
     user_instruction = _build_user_instruction(final_input)
@@ -2240,6 +2243,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
