@@ -1735,14 +1735,13 @@ if submitted:
         """, unsafe_allow_html=True)
         st.stop()
 
-        # ---------- Veritas Bias Analysis ----------
+            # ---------- Veritas Bias Analysis ----------
     elif intent.get("intent") == "bias_analysis":
         st.info("✅ Veritas is processing your bias analysis request…")
 
-        user_instruction = _build_user_instruction(final_input)
-
-        # 🟩 Initialize progress safely
+        # Always reinitialize progress safely inside submit
         prog = st.progress(0)
+        user_instruction = _build_user_instruction(final_input)
 
         try:
             if prog:
@@ -1762,15 +1761,25 @@ if submitted:
             if prog:
                 prog.progress(70, text="Processing model response…")
 
+            # Extract and render report
             final_report = resp.choices[0].message.content.strip()
+
+            if not final_report:
+                st.error("⚠️ No response returned by Veritas.")
+                st.stop()
+
             st.markdown(final_report)
 
             if prog:
                 prog.progress(100, text="Analysis complete ✓")
 
         except Exception as e:
-            if prog:
-                prog.progress(0)
+            # Safety rollback if anything fails
+            try:
+                if prog:
+                    prog.progress(0)
+            except Exception:
+                pass
             log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
             st.error("⚠️ There was an issue retrieving the Veritas report.")
             st.stop()
@@ -2301,6 +2310,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
