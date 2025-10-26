@@ -895,7 +895,6 @@ Example mappings:
 
 {STRICT_OUTPUT_TEMPLATE}
 
-=== TEXT TO ANALYZE (verbatim) ===
 {input_text}
 """
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
@@ -2586,6 +2585,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
