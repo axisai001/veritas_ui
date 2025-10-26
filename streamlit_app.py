@@ -896,7 +896,7 @@ Example mappings:
 {STRICT_OUTPUT_TEMPLATE}
 
 {input_text}
-"""
+
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
 def _run_safety_precheck(user_text: str) -> str | None:
     """
@@ -906,7 +906,6 @@ def _run_safety_precheck(user_text: str) -> str | None:
     (Cited: AXIS Security Protocol Handbook Section IV; Veritas Schema Sections I-II)
     """
     text = user_text.strip().lower()
-
 
     # --- Tier 2: Self-harm / suicide intent ---
     if re.search(r"\b(i\s*(want|plan|intend|am\s*going)\s*to\s*(kill|harm|hurt)\s*(myself|me)\b)", text):
@@ -2585,6 +2584,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
