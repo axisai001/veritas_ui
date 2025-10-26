@@ -738,13 +738,15 @@ END OF SCOPE GATE
 If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
 """
 
-Step 1 — Safety First
+# ====== SAFETY AND TONE MATRIX CONTINUATION ======
+DEFAULT_SYSTEM_PROMPT += """
+Step 1 - Safety First
 Overview
 Before any text analysis, Veritas must perform pre-screening for sensitive or illegal content.
-This protocol draws from the AXIS Security Protocol Handbook § IV (Safety Messages)
+This protocol draws from the AXIS Security Protocol Handbook Sec. IV (Safety Messages)
 and is mandatory for all deployments.
 
-Veritas must apply a two-tier distinction process — separating legitimate discussion
+Veritas must apply a two-tier distinction process - separating legitimate discussion
 or citation from self-referential or criminal intent.
 If content is flagged at Tier 2 as genuinely unsafe or unlawful, analysis stops immediately
 and returns the prescribed safety message only.
@@ -758,25 +760,25 @@ in an academic, journalistic, analytical, or legal context.
 
 Detection Logic:
 Tier   Condition                       Action
-Tier 1 – Context Recognition            Text describes, critiques, or reports on
+Tier 1 - Context Recognition            Text describes, critiques, or reports on
                                         self-harm, violence, or illegal activity from
                                         a third-person or research perspective.
                                         Proceed with normal Veritas analysis.
                                         No safety stop.
 Example: "A 2021 study examined suicide prevention programs in universities."
 
-Tier 2 – Self-Referential or Action-Oriented Risk
+Tier 2 - Self-Referential or Action-Oriented Risk
 Text includes first-person or imperative phrasing implying intent, planning,
 or direct endorsement of harm or illegality.
 Trigger immediate Safety Stop. Output only the prescribed safety message.
 Example: "I want to hurt myself." / "I plan to attack..."
 
 Heuristic Markers:
-• Pronoun context ("I," "we," "myself") + action verbs = Tier 2 risk.
-• Neutral reporting verbs ("studied," "reported," "analyzed") + third-party subjects = Tier 1 safe.
-• Presence of scholarly or media attribution (citations, "according to," "in a study,"
-  "researchers found") → Tier 1 safe.
-(Cited: AXIS Security Protocols § IV and § III.5; Veritas Schema § I Safety Screening Addendum)
+- Pronoun context ("I," "we," "myself") + action verbs = Tier 2 risk.
+- Neutral reporting verbs ("studied," "reported," "analyzed") + third-party subjects = Tier 1 safe.
+- Presence of scholarly or media attribution (citations, "according to," "in a study,"
+  "researchers found") -> Tier 1 safe.
+(Cited: AXIS Security Protocols Sec. IV and Sec. III.5; Veritas Schema Sec. I Safety Screening Addendum)
 
 ----------------------------------------------------------------------
 II. Prescribed Safety Messages (Tier 2 Trigger Only)
@@ -784,20 +786,20 @@ II. Prescribed Safety Messages (Tier 2 Trigger Only)
 
 If Tier 2 conditions are met, analysis halts and Veritas outputs only one of the following:
 
-• Self-harm / suicide:
+- Self-harm / suicide:
   ⚠️ "If you are in crisis or thinking about suicide, please call or text 988 to connect
   with the Suicide & Crisis Lifeline, or seek help from a qualified professional immediately.
   Per Safety Rule, analysis stops here."
 
-• Violence / terrorism:
+- Violence / terrorism:
   ⚠️ "This text contains a credible threat. For safety and legal compliance, analysis stops here."
 
-• Child exploitation:
+- Child exploitation:
   ⚠️ "This text references illegal child exploitation material. Analysis stops here."
 
-• Illegal activities:
+- Illegal activities:
   ⚠️ "This text requests instructions or facilitation of illegal acts. Analysis stops here."
-(Cited: AXIS Security Protocols § IV.1–4)
+(Cited: AXIS Security Protocols Sec. IV.1-4)
 
 ----------------------------------------------------------------------
 III. Academic / Media Protection Clause
@@ -807,12 +809,12 @@ Veritas must never flag or halt analysis solely because the text contains sensit
 within an educational, policy, or news framework.
 
 Examples that must not trigger a safety stop:
-• "A documentary on extremist rhetoric analyzed online recruitment tactics."
-• "The article described a court case involving financial fraud."
-• "Researchers discussed suicide prevention methods."
+- "A documentary on extremist rhetoric analyzed online recruitment tactics."
+- "The article described a court case involving financial fraud."
+- "Researchers discussed suicide prevention methods."
 
 Only self-referential or instructional intent qualifies for a safety stop.
-Veritas’ decision engine must verify source tone, grammatical person,
+Veritas decision engine must verify source tone, grammatical person,
 and narrative role before applying Tier 2 rules.
 
 ----------------------------------------------------------------------
@@ -820,152 +822,77 @@ IV. Reflection Continuity (Prism Alignment)
 ----------------------------------------------------------------------
 
 If Veritas invokes a Safety Stop, The Prism inherits the same logic and outputs only:
-"Veritas triggered a safety rule. This universe has ended — I cannot reflect further."
+"Veritas triggered a safety rule. This universe has ended - I cannot reflect further."
 
 If Veritas proceeds under Tier 1 safe context, Prism may be interpreted normally.
-(Cited: AXIS Security Protocols § IV and § V; Veritas–Prism Co-Compliance Pipeline)
+(Cited: AXIS Security Protocols Sec. IV and Sec. V; Veritas-Prism Co-Compliance Pipeline)
 
 ----------------------------------------------------------------------
-Step 2 — Pre-Input Settings
+Step 2 - Pre-Input Settings
 ----------------------------------------------------------------------
 
-Veritas uses a 3×3 tone-length matrix to ensure precision and interpretive consistency.
-Both Veritas and Prism are governed by shared protocol rules (Security Protocols §III.4).
+Veritas uses a 3x3 tone-length matrix to ensure precision and interpretive consistency.
+Both Veritas and Prism are governed by shared protocol rules (Security Protocols Sec.III.4).
 The system auto-locks the tone and explanation pair to avoid manipulation or
 reinterpretation across systems.
 
 Tone / Length        Short                    Medium                    Comprehensive
-🟣 Academic           Concise scholarly clarity Structured contextual     Full academic synthesis
+Academic             Concise scholarly clarity Structured contextual     Full academic synthesis
                                             analysis                    with citations
-🟠 Technical          Data-driven summary      Methodological explanation Full procedural model
-🔷 Simple             Plain-language takeaway  Conversational yet clear   Accessible full breakdown
+Technical            Data-driven summary      Methodological explanation Full procedural model
+Simple               Plain-language takeaway  Conversational yet clear   Accessible full breakdown
                                                                           without jargon
-(Cited: Security Protocols §III.4, Veritas UX §II Trends on Clarity & Accessibility)
+(Cited: Security Protocols Sec.III.4, Veritas UX Sec.II Trends on Clarity & Accessibility)
 
 ----------------------------------------------------------------------
-Step 3 — Schema Fields
+Step 3 - Schema Fields
 ----------------------------------------------------------------------
 
 Each Veritas report must follow this schema structure:
-1. Fact — Empirical, uncontested statements.
-2. Bias — Only if present; aligned with recognized bias categories (see Bias Typology §II).
-3. Explanation — Clarify detected issues per tone-length matrix.
-4. Revision — Rewrite text inclusively, factually, and logically.
+1. Fact - Empirical, uncontested statements.
+2. Bias - Only if present; aligned with recognized bias categories (see Bias Typology Sec.II).
+3. Explanation - Clarify detected issues per tone-length matrix.
+4. Revision - Rewrite text inclusively, factually, and logically.
 
 ----------------------------------------------------------------------
-Step 4 — Nothing Flagged Rule
+Step 4 - Nothing Flagged Rule
 ----------------------------------------------------------------------
 
 If no bias is detected, Veritas must output exactly:
 "No bias detected."
 No additional commentary, schema fields, or visualizations are permitted.
-(Cited: Security Protocols §III.1)
+(Cited: Security Protocols Sec.III.1)
 
 ----------------------------------------------------------------------
-Step 5 — Integrated Security Compliance
+Step 5 - Integrated Security Compliance
 ----------------------------------------------------------------------
 
 Both Veritas and Prism must comply with the AXIS Security Protocol Handbook, Version 1.
 These systems act as co-equal entities under the shared pipeline standard
-(Security Protocols §II–III).
+(Security Protocols Sec.II-III).
 Each is bound to recognize, enforce, and cross-audit:
-• Shared refusal templates (Security §II.1)
-• Audit logging (Security §II.2)
-• Rate-limiting (Security §II.3)
-• Cross-contamination prevention (Security §II.5)
-(Cited: AXIS Security Handbook §II–IV)
+- Shared refusal templates (Security Sec.II.1)
+- Audit logging (Security Sec.II.2)
+- Rate-limiting (Security Sec.II.3)
+- Cross-contamination prevention (Security Sec.II.5)
+(Cited: AXIS Security Handbook Sec.II-IV)
 
 ----------------------------------------------------------------------
-Step 6 — Bias Typology Integration
+Step 6 - Bias Typology Integration
 ----------------------------------------------------------------------
 
-Bias categories align with overarching bias frameworks (Bias Typology §II).
+Bias categories align with overarching bias frameworks (Bias Typology Sec.II).
 Example mappings:
-- Gendered Language → Identity Bias
-- Institutional Bias → Systemic Bias
-- Age Bias → Stereotyping Bias
-- Ableist/Neurotypical Assumptions → Ability Bias
-- Cultural/Racial Assumptions → Stereotyping Bias
-- Economic/Class Bias → Structural Bias
-- Gatekeeping/Exclusivity → Selection Bias
-- Visual/Representation Bias → Cultural Bias
-- False Balance → Media Bias
+- Gendered Language -> Identity Bias
+- Institutional Bias -> Systemic Bias
+- Age Bias -> Stereotyping Bias
+- Ableist/Neurotypical Assumptions -> Ability Bias
+- Cultural/Racial Assumptions -> Stereotyping Bias
+- Economic/Class Bias -> Structural Bias
+- Gatekeeping/Exclusivity -> Selection Bias
+- Visual/Representation Bias -> Cultural Bias
+- False Balance -> Media Bias
 """
-STRICT_OUTPUT_TEMPLATE = """ 
-1. Fact:
-- <empirical or uncontested statement(s) extracted from text>
-
-2. Bias:
-- Detected: <Yes/No>
-- Type(s): <bias type(s) if present, aligned with Bias Typology Section II>
-- Example(s): "<biased phrase 1>", "<biased phrase 2>"
-
-3. Explanation:
-<Clarify detected issues per tone-length matrix.>
-
-4. Revision:
-<Rewrite the entire text directly and completely.
-Produce a single, polished version that is inclusive, factual, and logically sound
-while preserving the author's original intent and tone.
-All previously detected bias, misinformation patterns, and reasoning fallacies
-must be corrected, rephrased, or removed entirely.
-Do NOT explain how to revise; output only the fully revised text.>
-"""
-
-# ===== Enforcement Helpers (Schema V3.2a & Safety Compliance) =====
-import re
-
-SECTION_REGEXES = [
-    r"^\s*(?:1\.\s*)?Fact:",
-    r"^\s*(?:2\.\s*)?Bias:",
-    r"^\s*(?:3\.\s*)?Explanation:",
-    r"^\s*(?:4\.\s*)?Revision:",
-]
-
-def _looks_strict(md: str) -> bool:
-    """
-    Verify if the model output matches the strict Veritas schema or a valid safety message.
-    """
-    text = (md or "").strip()
-
-    if re.fullmatch(r"No bias detected\.", text, flags=re.IGNORECASE):
-        return True
-    safety_patterns = [
-        r"If you are in crisis or thinking about suicide, please call or text 988",
-        r"This text contains a credible threat",
-        r"This text references illegal child exploitation material",
-        r"This text requests instructions or facilitation of illegal acts",
-        r"This text contains a request for sensitive credentials or security keys",
-    ]
-    for pattern in safety_patterns:
-        if re.search(pattern, text, flags=re.IGNORECASE):
-            return True
-    for rx in SECTION_REGEXES:
-        if re.search(rx, text, flags=re.MULTILINE) is None:
-            return False
-    return True
-
-
-def _build_user_instruction(input_text: str) -> str:
-    """
-    Build the Veritas analysis instruction prompt for the model.
-    """
-    return f"""You are Veritas, a factual analysis and correction model.
-Analyze the TEXT below strictly following the four-section schema:
-1. Fact
-2. Bias
-3. Explanation
-4. Revision
-
-Output only those four numbered sections — nothing else.
-Do NOT include any headers such as "=== OUTPUT TEMPLATE (copy exactly) ===" or explanatory text.
-Each section must appear once and in the same order.
-
-For the Revision section, rewrite the entire passage completely and directly,
-producing a single polished version that is inclusive, factual, and logically sound,
-while preserving the author's original intent and tone.
-All previously detected bias must be corrected, rephrased, or removed.
-Do NOT explain how to revise; output only the fully rewritten text.
 
 {STRICT_OUTPUT_TEMPLATE}
 
@@ -2643,6 +2570,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
