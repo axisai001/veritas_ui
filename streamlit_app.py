@@ -970,15 +970,31 @@ def route_refusal_category(prompt: str) -> tuple[str|None, str|None, list[str]]:
 
 # ===== Canonical refusal renderer =====
 def render_refusal(category: str, routing_rule_id: str, triggers: list[str]):
-    """Uniform refusal + telemetry logging."""
-    msg = REFUSAL_TEMPLATES.get(category, SCOPE_MESSAGE)
+    """Uniform refusal + telemetry logging (with canonical validation)."""
+    msg = validate_refusal_output(REFUSAL_TEMPLATES.get(category, SCOPE_MESSAGE))
+
     ts = datetime.now(timezone.utc).isoformat()
     rid = st.session_state.get("request_id") or secrets.token_hex(8)
     login_id = st.session_state.get("login_id", "")
     trigger_text = ", ".join(triggers)
-    with open(os.path.join(DATA_DIR, "refusal_telemetry.csv"), "a", newline="", encoding="utf-8") as f:
-        csv.writer(f).writerow([ts, rid, login_id, category, routing_rule_id, trigger_text])
-    st.markdown(f"**{msg}**")
+
+    try:
+        with open(os.path.join(DATA_DIR, "refusal_telemetry.csv"), "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([ts, rid, login_id, category, routing_rule_id, trigger_text])
+    except Exception:
+        pass
+
+    st.markdown(
+        f"""
+        <div style="background-color:#0b1e2a;border:2px solid #FF4C4C;
+                    padding:1rem;border-radius:10px;color:#e6f1f5;">
+            <strong>{msg}</strong><br><br>
+            <small><b>Refusal ID:</b> {routing_rule_id}&nbsp;&nbsp;|&nbsp;&nbsp;
+                   <b>Category:</b> {category}</small>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     st.stop()
 
 # ===== Text-to-Analyze gating =====
@@ -2441,6 +2457,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
