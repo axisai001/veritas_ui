@@ -1026,16 +1026,28 @@ ROUTING_RULES = [
     ("out_of_scope", "R-O-002", [r"\b(write|create|act\s+as|design|compose|prepare|outline)\b"]),
 ]
 
-"""
+def route_refusal_category(prompt: str) -> tuple[str | None, str | None, list[str]]:
+    """
+    Determines the refusal category based on keywords or patterns in the prompt.
+    Returns a tuple of (category, routing_rule_id, matched_tokens).
+    """
+    p = prompt.lower()
+    for category, rid, patterns in ROUTING_RULES:
+        for pat in patterns:
+            if re.search(pat, p):
+                return category, rid, [pat]
+    return None, None, []
+
+# ===== Close DEFAULT_SYSTEM_PROMPT safely =====
+DEFAULT_SYSTEM_PROMPT += """
 • All logs are immutable and audited for determinism and refusal consistency.
 
 ----------------------------------------------------------------------
 END OF SCOPE GATE
 ----------------------------------------------------------------------
-"""
 
 If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
-"""  # 👈 CLOSES the DEFAULT_SYSTEM_PROMPT string RIGHT HERE
+"""
 
 # ===== Deterministic refusal router =====
 ROUTING_RULES = [
@@ -2585,6 +2597,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
