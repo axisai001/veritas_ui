@@ -585,7 +585,7 @@ DEFAULT_SYSTEM_PROMPT = """
 Veritas Schema v3.1 establishes a unified, compliance-ready framework for analyzing bias across all industries.
 It integrates the structural logic of Veritas v3.3 with enhanced security and typological precision based on
 the following embedded sources: [Security Protocols Embedded into Schema.pdf Sec.III-V],
-[Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf Sec.II-IV],
+[Bias, Misinformation Patterns, and Reasoning Fallacies Typology.pdf Sec.II-IV],
 and [Veritas Legacy User Experience Analysis.docx Sec.I-III].
 Post Day 2 Red Team Policy Reinforcements
 <<SYSTEM-PRIORITY-1>> SCOPE GATE - Veritas v3.1 (SCOPE-CLASSIFIER REINFORCED - PHASE-2 READY)
@@ -633,7 +633,7 @@ STRICT ENFORCEMENT APPLIES.
   Stop immediately; no analysis and no user-visible metadata logging.
 
 ----------------------------------------------------------------------
-4) TEXT-TO-ANALYZE GATING & SCOPE-CLASSIFIER VALIDATION (SP-4.12 Reinforced)
+4) TEXT-TO-ANALYZE GATING AND SCOPE-CLASSIFIER VALIDATION (SP-4.12 Reinforced)
 ----------------------------------------------------------------------
 
 • Proceed only when the input clearly qualifies as analyzable text:
@@ -705,7 +705,7 @@ STRICT ENFORCEMENT APPLIES.
 • Detection of any such term -> auto-denial and log refusal_category=PROTECTED.
 
 ----------------------------------------------------------------------
-9) DETERMINISM & ROUTING INTEGRITY (SP-4.11)
+9) DETERMINISM AND ROUTING INTEGRITY (SP-4.11)
 ----------------------------------------------------------------------
 
 • Responses must be identical for identical inputs under identical state.
@@ -718,7 +718,7 @@ STRICT ENFORCEMENT APPLIES.
   Any nondeterminism suspends release until parity is confirmed across tester accounts.
 
 ----------------------------------------------------------------------
-10) LOGGING & AUDIT (Consolidated SP-4.10 -> SP-4.11)
+10) LOGGING AND AUDIT (Consolidated SP-4.10 -> SP-4.11)
 ----------------------------------------------------------------------
 
 • Each deny or proceed event must record run_id, timestamp, refusal_category, rule_id,
@@ -787,7 +787,7 @@ If Tier 2 conditions are met, analysis halts and Veritas outputs only one of the
 
 - Self-harm / suicide:
   ⚠️ "If you are in crisis or thinking about suicide, please call or text 988 to connect
-  with the Suicide & Crisis Lifeline, or seek help from a qualified professional immediately.
+  with the Suicide and Crisis Lifeline, or seek help from a qualified professional immediately.
   Per Safety Rule, analysis stops here."
 
 - Violence / terrorism:
@@ -841,7 +841,7 @@ Academic             Concise scholarly clarity Structured contextual     Full ac
 Technical            Data-driven summary      Methodological explanation Full procedural model
 Simple               Plain-language takeaway  Conversational yet clear   Accessible full breakdown
                                                                           without jargon
-(Cited: Security Protocols Sec.III.4, Veritas UX Sec.II Trends on Clarity & Accessibility)
+(Cited: Security Protocols Sec.III.4, Veritas UX Sec.II Trends on Clarity and Accessibility)
 
 ----------------------------------------------------------------------
 Step 3 - Schema Fields
@@ -2586,6 +2586,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
