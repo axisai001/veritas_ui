@@ -1064,6 +1064,7 @@ def render_refusal(category: str, routing_rule_id: str, triggers: list[str]):
         unsafe_allow_html=True,
     )
     st.stop()
+
 # ---------- Canonical Refusal Validator ----------
 def validate_refusal_output(output_text: str) -> str:
     """
@@ -2569,6 +2570,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
