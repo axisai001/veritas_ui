@@ -738,7 +738,6 @@ END OF SCOPE GATE
 If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
 """
 
-# ====== SAFETY AND TONE MATRIX CONTINUATION ======
 DEFAULT_SYSTEM_PROMPT += """
 Step 1 - Safety First
 Overview
@@ -2570,6 +2569,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
