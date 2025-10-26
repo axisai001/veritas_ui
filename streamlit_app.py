@@ -1026,12 +1026,13 @@ ROUTING_RULES = [
     ("out_of_scope", "R-O-002", [r"\b(write|create|act\s+as|design|compose|prepare|outline)\b"]),
 ]
 
-def route_refusal_...
+"""
 • All logs are immutable and audited for determinism and refusal consistency.
 
 ----------------------------------------------------------------------
 END OF SCOPE GATE
 ----------------------------------------------------------------------
+"""
 
 If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
 """  # 👈 CLOSES the DEFAULT_SYSTEM_PROMPT string RIGHT HERE
@@ -2584,6 +2585,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
