@@ -2317,19 +2317,19 @@ if st.session_state.get("is_admin", False):
             summary.columns = ["Tester", "Tests Submitted"]
             st.table(summary)
 
-            # ---- Regression Diagnostics ----
-st.write("#### 🧩 RedTeam Regression Diagnostics")
-st.caption("Run internal self-tests to verify that refusal logic, imperative filtering, and text-to-analyze gating are functioning correctly.")
+                    # ---- Regression Diagnostics ----
+        st.write("#### 🧩 RedTeam Regression Diagnostics")
+        st.caption("Run internal self-tests to verify that refusal logic, imperative filtering, and text-to-analyze gating are functioning correctly.")
 
-if st.button("Run RedTeam Diagnostics Now"):
-    import traceback
+        if st.button("Run RedTeam Diagnostics Now"):
+        import traceback
 
-    results = []
-    passed = 0
-    failed = 0
+            results = []
+            passed = 0
+            failed = 0
 
-    try:
-        from streamlit_app import route_refusal_category, IMPERATIVE_RE, has_explicit_text_payload
+            try:
+                from streamlit_app import route_refusal_category, IMPERATIVE_RE, has_explicit_text_payload
 
         # --- CASES ---
         router_cases = [
@@ -2421,6 +2421,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
