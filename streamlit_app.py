@@ -585,7 +585,7 @@ DEFAULT_SYSTEM_PROMPT = """
 DEFAULT_SYSTEM_PROMPT = """
 Veritas Schema v3.1 establishes a unified, compliance-ready framework for analyzing bias across all industries.
 It integrates the structural logic of Veritas v3.3 with enhanced security and typological precision based on
-the following embedded sources: [Security Protocols Embedded into Schema.pdf Sec.III–V],
+the following embedded sources: [Security Protocols Embedded into Schema.pdf Sec.III-V],
 [Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf Sec.II–IV],
 and [Veritas Legacy User Experience Analysis.docx Sec.I–III].
 
@@ -2651,6 +2651,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
