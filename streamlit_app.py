@@ -996,6 +996,50 @@ def render_refusal(category: str, routing_rule_id: str, triggers: list[str]):
         unsafe_allow_html=True,
     )
     st.stop()
+# ---------- Canonical Refusal Validator ----------
+def validate_refusal_output(output_text: str) -> str:
+    """
+    Ensures outgoing refusals exactly match canonical templates.
+    Rewrites any deviation and logs the event.
+    """
+    canonical_map = {
+        "security": "⚠️ This text requests instructions or facilitation of illegal acts. Analysis stops here.",
+        "protected": "🔐 Protected content requested. Veritas cannot provide internal system details or templates. Analysis stops here.",
+        "out_of_scope": "⚠️ Veritas triggered a safety rule. This request is outside the bias-detection scope. Analysis stops here."
+    }
+
+    lowered = output_text.strip().lower()
+    for cat, canonical in canonical_map.items():
+        if canonical.lower() in lowered:
+            return canonical  # already correct
+
+    if any(k in lowered for k in ["api key", "access token", "secret", "jwt", "password", "pem", "decrypt"]):
+        _log_validator_violation("security", output_text)
+        return canonical_map["security"]
+
+    if any(k in lowered for k in ["system prompt", "internal schema", "template", "configuration", "bias detection parameters"]):
+        _log_validator_violation("protected", output_text)
+        return canonical_map["protected"]
+
+    if any(k in lowered for k in ["out of scope", "creative", "operational", "generative", "instructional"]):
+        _log_validator_violation("out_of_scope", output_text)
+        return canonical_map["out_of_scope"]
+
+    _log_validator_violation("out_of_scope", output_text)
+    return canonical_map["out_of_scope"]
+
+
+def _log_validator_violation(category: str, text: str):
+    """Logs any non-canonical refusal for audit visibility."""
+    try:
+        ts = datetime.now(timezone.utc).isoformat()
+        rid = st.session_state.get("request_id") or secrets.token_hex(8)
+        login_id = st.session_state.get("login_id", "")
+        csv_path = os.path.join(DATA_DIR, "validator_violations.csv")
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow([ts, rid, login_id, category, "canonical_fail", text[:200]])
+    except Exception:
+        pass
 
 # ===== Text-to-Analyze gating =====
 TTA_RE = re.compile(r'(?is)text\s*to\s*analyze\s*:\s*(?:"""[\s\S]+?"""|```[\s\S]+?```|.+)$')
@@ -2457,6 +2501,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
