@@ -39,6 +39,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 import httpx
+import random
+random.seed(42)  # deterministic outcomes across sessions
 
 # ---------- Optional parsers for uploads ----------
 try:
@@ -2288,6 +2290,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
