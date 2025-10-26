@@ -1762,25 +1762,28 @@ if submitted:
     # ---------- Pre-safety check (Tier 2 immediate stops) ----------
     safety_msg = _run_safety_precheck(final_input)
     if safety_msg:
-        log_rule_trigger("safety_stop", "tier2_trigger", final_input[:800])
-        try:
-            prog.progress(100, text="Safety stop ✓")
-        except Exception:
-            pass
-        st.markdown(f"<div style='background:#330000;border:2px solid #ff4c4c;color:#fff;padding:1rem;border-radius:10px;'>{safety_msg}</div>", unsafe_allow_html=True)
+        ...
         st.stop()
 
-    # ---------- Imperative pre-filter (short-circuit) ----------
-    if IMPERATIVE_RE.search(final_input):
-        render_refusal(category="out_of_scope", routing_rule_id="R-O-001", triggers=["imperative"])
+    # --- Secrets detection ---
+    final_input, _ = detect_or_redact_secrets(final_input, refuse_on_detect=True)
 
-    # ---------- Deterministic router ----------
+    # --- Imperative pre-filter ---
+    if IMPERATIVE_RE.search(final_input):
+        render_refusal("out_of_scope", "R-O-001", ["imperative"])
+
+    # --- Deterministic router ---
     cat, rid, toks = route_refusal_category(final_input)
     if cat:
         render_refusal(cat, rid, toks)
 
+    # --- Text-to-Analyze gating ---
+    if not has_explicit_text_payload(final_input):
+        render_refusal("out_of_scope", "R-O-003", ["missing:Text to Analyze"])
+
     # ---------- Intent / scope gate ----------
     intent = detect_intent(final_input)
+
 
     if intent.get("intent") == "prompt_injection":
         render_refusal("protected", "R-P-000", ["prompt-injection"])
@@ -2332,6 +2335,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
