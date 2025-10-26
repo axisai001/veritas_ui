@@ -930,7 +930,7 @@ SCOPE_MESSAGE = (
     "or provide credentials. Please paste the text you want analyzed for bias."
 )
 
-# ===== Canonical Refusal Templates (1️⃣ section start) =====
+# ===== Canonical Refusal Templates =====
 REFUSAL_TEMPLATES = {
     "out_of_scope": (
         "⛔ Out of Scope: Veritas only analyzes supplied text for bias and related issues. "
@@ -947,11 +947,13 @@ REFUSAL_TEMPLATES = {
     ),
 }
 
+# ===== Imperative pre-filter =====
 IMPERATIVE_RE = re.compile(
     r"^\s*(write|create|compose|design|prepare|outline|act\s+as|provide|show|display|give|explain\s+how\s+to|list)\b",
     re.IGNORECASE
 )
 
+# ===== Deterministic refusal router =====
 ROUTING_RULES = [
     ("security",  "R-S-001", [r"\b(api\s*key|access\s*token|password|secret\s*key|private\s*key|credentials?)\b"]),
     ("protected", "R-P-001", [r"\b(system\s*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters))\b"]),
@@ -965,6 +967,46 @@ def route_refusal_category(prompt: str) -> tuple[str|None, str|None, list[str]]:
             if re.search(pat, p):
                 return category, rid, [pat]
     return None, None, []
+
+# ===== Canonical refusal renderer =====
+def render_refusal(category: str, routing_rule_id: str, triggers: list[str]):
+    """Uniform refusal + telemetry logging."""
+    msg = REFUSAL_TEMPLATES.get(category, SCOPE_MESSAGE)
+    ts = datetime.now(timezone.utc).isoformat()
+    rid = st.session_state.get("request_id") or secrets.token_hex(8)
+    login_id = st.session_state.get("login_id", "")
+    trigger_text = ", ".join(triggers)
+    with open(os.path.join(DATA_DIR, "refusal_telemetry.csv"), "a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow([ts, rid, login_id, category, routing_rule_id, trigger_text])
+    st.markdown(f"**{msg}**")
+    st.stop()
+
+# ===== Text-to-Analyze gating =====
+TTA_RE = re.compile(r'(?is)text\s*to\s*analyze\s*:\s*(?:"""[\s\S]+?"""|```[\s\S]+?```|.+)$')
+def has_explicit_text_payload(prompt: str) -> bool:
+    if TTA_RE.search(prompt):
+        return True
+    extracted = st.session_state.get("extracted_text", "")
+    return bool(extracted and extracted.strip())
+
+# ===== Secret detection & redaction =====
+SECRET_PATTERNS = [
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "[REDACTED-PEM]"),
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED-AWS-KEY]"),
+    (re.compile(r"sk-[A-Za-z0-9]{20,}"), "[REDACTED-OPENAI-KEY]"),
+    (re.compile(r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"), "[REDACTED-JWT]"),
+]
+
+def detect_or_redact_secrets(text: str, refuse_on_detect: bool = True) -> tuple[str, bool]:
+    detected = False
+    redacted = text
+    for rx, repl in SECRET_PATTERNS:
+        if rx.search(redacted):
+            detected = True
+            redacted = rx.sub(repl, redacted)
+    if detected and refuse_on_detect:
+        render_refusal("security", "R-S-002", ["secret-pattern"])
+    return redacted, detected
 
 RULE_TRIGGERS_CSV = os.path.join(DATA_DIR, "rule_triggers.csv")
 _init_csv(RULE_TRIGGERS_CSV, ["timestamp_utc","run_id","login_id","rule_kind","reason","input_sample"])
@@ -2290,6 +2332,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
