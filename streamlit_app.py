@@ -892,11 +892,6 @@ Example mappings:
 - Visual/Representation Bias -> Cultural Bias
 - False Balance -> Media Bias
 """
-
-{STRICT_OUTPUT_TEMPLATE}
-
-{input_text}
-
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
 def _run_safety_precheck(user_text: str) -> str | None:
     """
@@ -2597,6 +2592,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
