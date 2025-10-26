@@ -586,11 +586,11 @@ DEFAULT_SYSTEM_PROMPT = """
 Veritas Schema v3.1 establishes a unified, compliance-ready framework for analyzing bias across all industries.
 It integrates the structural logic of Veritas v3.3 with enhanced security and typological precision based on
 the following embedded sources: [Security Protocols Embedded into Schema.pdf Sec.III-V],
-[Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf Sec.II–IV],
-and [Veritas Legacy User Experience Analysis.docx Sec.I–III].
-
+[Bias, Misinformation Patterns, & Reasoning Fallacies Typology.pdf Sec.II-IV],
+and [Veritas Legacy User Experience Analysis.docx Sec.I-III].
 Post Day 2 Red Team Policy Reinforcements
-<<SYSTEM-PRIORITY-1>> SCOPE GATE — Veritas v3.1 (SCOPE-CLASSIFIER REINFORCED — PHASE-2 READY)
+<<SYSTEM-PRIORITY-1>> SCOPE GATE - Veritas v3.1 (SCOPE-CLASSIFIER REINFORCED - PHASE-2 READY)
+"""
 
 You are Veritas v3.1 — a BIAS-DETECTION ONLY engine.
 You may perform no creative, instructional, operational, or explanatory actions.
@@ -2651,6 +2651,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
