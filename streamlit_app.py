@@ -1726,51 +1726,37 @@ if submitted:
         st.markdown(f"<div style='background:#330000;border:2px solid #ff4c4c;color:#fff;padding:1rem;border-radius:10px;'>{safety_msg}</div>", unsafe_allow_html=True)
         st.stop()
 
+        # ---------- Pre-safety check (Tier 2 immediate stops) ----------
+    safety_msg = _run_safety_precheck(final_input)
+    if safety_msg:
+        log_rule_trigger("safety_stop", "tier2_trigger", final_input[:800])
+        try:
+            prog.progress(100, text="Safety stop ✓")
+        except Exception:
+            pass
+        st.markdown(f"<div style='background:#330000;border:2px solid #ff4c4c;color:#fff;padding:1rem;border-radius:10px;'>{safety_msg}</div>", unsafe_allow_html=True)
+        st.stop()
+
+    # ---------- Imperative pre-filter ----------
+    if IMPERATIVE_RE.search(final_input):
+        render_refusal("out_of_scope", "R-O-001", ["imperative"])
+
+    # ---------- Deterministic router ----------
+    cat, rid, toks = route_refusal_category(final_input)
+    if cat:
+        render_refusal(cat, rid, toks)
+
     # ---------- Intent / scope gate ----------
     intent = detect_intent(final_input)
 
     if intent.get("intent") == "prompt_injection":
-        # explicit refusal for prompt disclosure / override attempts
-        log_rule_trigger("injection_block", intent.get("reason", "prompt_injection"), final_input[:800])
-        st.markdown("""
-        <div style="background:#0b1e2a;border:2px solid #2aa198;padding:1rem;border-radius:10px;color:#e6f1f5;">
-            <strong>🔐 Protected Instructions</strong><br>
-            I can’t reveal internal prompts, schemas, or system instructions, and I won’t ignore safety rules.
-            Please provide the text you want analyzed for bias.
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
+        render_refusal("protected", "R-P-000", ["prompt-injection"])
 
     if intent.get("intent") == "generative":
-        log_rule_trigger("scope_denied", intent.get("reason", "generative_detected"), final_input[:800])
-        st.markdown("""
-        <div style="background:#FFA5001A;border:2px solid #FFA500;padding:1rem;border-radius:10px;color:#FFFFFF;">
-            <strong style="color:#FFA500;">⛔ Out of Scope:</strong> Veritas only analyzes supplied text for bias and related issues.<br>
-            It cannot generate plans, roleplay content, or operational instructions.<br><br>
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
+        render_refusal("out_of_scope", "R-O-000", ["generative_detected"])
 
     if intent.get("intent") == "security_request":
-        log_rule_trigger("security_block", "credential_request_detected", final_input[:800])
-        log_error_event("SECURITY_REQUEST", "/analyze", 403, "Sensitive credential request blocked")
-        st.markdown("""
-        <div style="
-            background-color:#8B0000;
-            color:#FFFFFF;
-            padding:1rem;
-            border-radius:10px;
-            font-weight:600;
-            text-align:center;
-            border:2px solid #FF4C4C;
-        ">
-            🔒 <strong>Sensitive Credential Request Blocked</strong><br>
-            For safety and legal compliance under AXIS Security Protocol Section IV.6,<br>
-            Veritas does not process credential or access-key requests.<br><br>
-            Action logged and session secured.
-        </div>
-        """, unsafe_allow_html=True)
-        st.stop()
+        render_refusal("security", "R-S-000", ["credential_request_detected"])
 
     # If we reach here, proceed with bias analysis
     st.info("✅ Veritas is processing your bias analysis request…")
@@ -2313,6 +2299,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
