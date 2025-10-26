@@ -928,6 +928,42 @@ SCOPE_MESSAGE = (
     "or provide credentials. Please paste the text you want analyzed for bias."
 )
 
+# ===== Canonical Refusal Templates (1️⃣ section start) =====
+REFUSAL_TEMPLATES = {
+    "out_of_scope": (
+        "⛔ Out of Scope: Veritas only analyzes supplied text for bias and related issues. "
+        "It cannot generate plans, roleplay content, or operational instructions."
+    ),
+    "protected": (
+        "🔐 Protected Instructions\n"
+        "I can’t reveal internal prompts, schemas, or system instructions, and I won’t ignore safety rules. "
+        "Please provide the text you want analyzed for bias."
+    ),
+    "security": (
+        "⚠️ This text contains a request for sensitive credentials or security keys. "
+        "For safety and legal compliance under AXIS Security Protocol Section IV.6, analysis stops here."
+    ),
+}
+
+IMPERATIVE_RE = re.compile(
+    r"^\s*(write|create|compose|design|prepare|outline|act\s+as|provide|show|display|give|explain\s+how\s+to|list)\b",
+    re.IGNORECASE
+)
+
+ROUTING_RULES = [
+    ("security",  "R-S-001", [r"\b(api\s*key|access\s*token|password|secret\s*key|private\s*key|credentials?)\b"]),
+    ("protected", "R-P-001", [r"\b(system\s*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters))\b"]),
+    ("out_of_scope", "R-O-002", [r"\b(write|create|act\s+as|design|compose|prepare|outline)\b"]),
+]
+
+def route_refusal_category(prompt: str) -> tuple[str|None, str|None, list[str]]:
+    p = prompt.lower()
+    for category, rid, patterns in ROUTING_RULES:
+        for pat in patterns:
+            if re.search(pat, p):
+                return category, rid, [pat]
+    return None, None, []
+
 RULE_TRIGGERS_CSV = os.path.join(DATA_DIR, "rule_triggers.csv")
 _init_csv(RULE_TRIGGERS_CSV, ["timestamp_utc","run_id","login_id","rule_kind","reason","input_sample"])
 
@@ -2277,6 +2313,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
