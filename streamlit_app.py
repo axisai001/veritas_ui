@@ -1755,7 +1755,7 @@ def _note_failed_login(attempted_secret: str = ""):
 def show_login():
     st.subheader("Sign In")
 
-    # 👇 Radio button to toggle between user and admin
+    # ---- User/Admin toggle ----
     auth_choice = st.radio(
         label="",
         options=["User", "Admin"],
@@ -1764,62 +1764,71 @@ def show_login():
         label_visibility="collapsed"
     )
 
-    # 👇 Update auth_view based on selection
     st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
-    # 👇 Normalization helper (keep it inside or right above this function)
+    # ---- Normalization helper ----
     def _norm(s: str) -> str:
         """Normalize and strip hidden spaces/newlines."""
         return unicodedata.normalize("NFC", str(s)).strip()
 
-    # 👇 Next, your login logic begins here (the user vs admin forms)
+    # ---- Normal User Login ----
     if st.session_state["auth_view"] == "user":
-        # ---- Normal User Login ----
         with st.form("login_form_user"):
-            login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
+            login_id = st.text_input(
+                "Login ID (optional)",
+                value=st.session_state.get("login_id", "")
+            )
             pwd = st.text_input("Password", type="password")
             submit = st.form_submit_button("Enter")
-        # (continue your login checks here...)
 
         if submit:
             if _is_locked():
                 remaining = int(st.session_state["_locked_until"] - time.time())
-                mins = max(0, remaining // 60); secs = max(0, remaining % 60)
+                mins = max(0, remaining // 60)
+                secs = max(0, remaining % 60)
                 st.error(f"Too many failed attempts. Try again in {mins}m {secs}s.")
                 st.stop()
+
             if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
-                st.error("network error"); st.stop()
-            # --- DEBUG (remove after verifying) ---
-            st.caption(f"DEBUG: APP_PASSWORD exists: {'APP_PASSWORD' in st.secrets}")
-            st.caption(f"DEBUG: APP_PASSWORD length: {len(str(st.secrets.get('APP_PASSWORD','')))}")
-            st.caption(f"DEBUG: First 3 chars: {str(st.secrets.get('APP_PASSWORD',''))[:3]}")
-            # --- END DEBUG ---
+                st.error("Network error")
+                st.stop()
+
+            # ✅ Secure password check using normalization
             if hmac.compare_digest(_norm(pwd), _norm(st.secrets["APP_PASSWORD"])):
                 st.session_state["authed"] = True
-                st.session_state["is_admin"] = False  # regular user
+                st.session_state["is_admin"] = False
 
                 login_id_clean = (login_id or "").strip().lower()
                 st.session_state["login_id"] = login_id_clean
                 st.session_state["_fail_times"].clear()
                 st.session_state["_locked_until"] = 0.0
 
-                # ✅ Detect if this login belongs to a Red Team tester
+                # ---- Red Team tester detection ----
                 if login_id_clean in REDTEAM_EMAILS:
                     st.session_state["is_redteam"] = True
-                    log_auth_event("redteam_login", True, login_id=login_id_clean, credential_label="APP_PASSWORD")
+                    log_auth_event(
+                        "redteam_login", True,
+                        login_id=login_id_clean,
+                        credential_label="APP_PASSWORD"
+                    )
                     st.success("🧪 Red Team tester session active — all inputs/outputs will be logged.")
                 else:
                     st.session_state["is_redteam"] = False
-                    log_auth_event("login_success", True, login_id=login_id_clean, credential_label="APP_PASSWORD")
-                    st.success("Logged in.")
+                    log_auth_event(
+                        "login_success", True,
+                        login_id=login_id_clean,
+                        credential_label="APP_PASSWORD"
+                    )
+                    st.success("✅ Logged in successfully.")
 
                 _safe_rerun()
+
             else:
                 _note_failed_login(attempted_secret=pwd)
-                st.error("Incorrect password")
+                st.error("Incorrect password. Please try again.")
 
     else:
-        # ---- Admin Login (separate) ----
+        # ---- Admin login block (unchanged or customized) ----
         if not ADMIN_PASSWORD:
             st.warning("Admin access is not configured on this instance.")
             st.stop()
@@ -2665,6 +2674,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
