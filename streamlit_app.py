@@ -1163,7 +1163,6 @@ SECRET_PATTERNS = [
     (re.compile(r"sk-[A-Za-z0-9]{20,}"), "[REDACTED-OPENAI-KEY]"),
     (re.compile(r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"), "[REDACTED-JWT]"),
 ]
-
 def detect_or_redact_secrets(text: str, refuse_on_detect: bool = True) -> tuple[str, bool]:
     detected = False
     redacted = text
@@ -2608,6 +2607,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
