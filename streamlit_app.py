@@ -1999,15 +1999,6 @@ if submitted:
         render_refusal("security", "R-S-000", ["credential_request_detected"])
     ...
 
-    if intent.get("intent") == "prompt_injection":
-        render_refusal("protected", "R-P-000", ["prompt-injection"])
-
-    if intent.get("intent") == "generative":
-        render_refusal("out_of_scope", "R-O-000", ["generative_detected"])
-
-    if intent.get("intent") == "security_request":
-        render_refusal("security", "R-S-000", ["credential_request_detected"])
-
     # If we reach here, proceed with bias analysis
     st.info("✅ Veritas is processing your bias analysis request…")
 
@@ -2640,6 +2631,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
