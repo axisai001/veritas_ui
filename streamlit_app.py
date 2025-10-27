@@ -1147,9 +1147,14 @@ def _log_validator_violation(category: str, text: str):
     except Exception:
         pass
 
-# ===== Text-to-Analyze gating =====
-TTA_RE = re.compile(r'(?is)text\s*to\s*analyze\s*:\s*(?:"""[\s\S]+?"""|```[\s\S]+?```|.+)$')
+# ===== Text-to-Analyze gating (improved detection) =====
+TTA_RE = re.compile(
+    r'(?is)(?:^|\n)\s*text\s*to\s*analyze\s*[:：]\s*(?:["“]{3}[\s\S]+?["”]{3}|```[\s\S]+?```|["“].+?["”]|.+)',
+    re.IGNORECASE
+)
+
 def has_explicit_text_payload(prompt: str) -> bool:
+    """Detects if the prompt includes a clearly analyzable text block."""
     if TTA_RE.search(prompt):
         return True
     extracted = st.session_state.get("extracted_text", "")
@@ -2616,6 +2621,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
