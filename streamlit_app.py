@@ -1785,7 +1785,12 @@ def _norm(s: str) -> str:
                 st.stop()
             if not rate_limiter("login", RATE_LIMIT_LOGIN, RATE_LIMIT_WINDOW_SEC):
                 st.error("network error"); st.stop()
-            if hmac.compare_digest(pwd.strip(), st.secrets["APP_PASSWORD"].strip()):
+            # --- DEBUG (remove after verifying) ---
+            st.caption(f"DEBUG: APP_PASSWORD exists: {'APP_PASSWORD' in st.secrets}")
+            st.caption(f"DEBUG: APP_PASSWORD length: {len(str(st.secrets.get('APP_PASSWORD','')))}")
+            st.caption(f"DEBUG: First 3 chars: {str(st.secrets.get('APP_PASSWORD',''))[:3]}")
+            # --- END DEBUG ---
+            if hmac.compare_digest(_norm(pwd), _norm(st.secrets["APP_PASSWORD"])):
                 st.session_state["authed"] = True
                 st.session_state["is_admin"] = False  # regular user
 
@@ -2656,6 +2661,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
