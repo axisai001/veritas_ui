@@ -1018,7 +1018,7 @@ IMPERATIVE_RE = re.compile(
 ROUTING_RULES = [
     # Expanded Security pattern: catches access tokens, API tokens, config file references
     ("security", "R-S-001", [
-        r"\b(api\s*key|access\s*token|api\s*token|password|secret\s*key|private\s*key|credentials?)\b",
+        r"\b(api(\s*|[-_])?(key|token)|access(\s*|[-_])?token|password|secret\s*key|private\s*key|credentials?)\b",
         r"\b(environment\s*variable|env\s*var|service\s*account\s*credential|production\s*config)\b",
         r"\b(retrieve|export|get|obtain)\s+(the\s+)?(api|access|service|secret|environment)\b"
     ]),
@@ -2606,6 +2606,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
