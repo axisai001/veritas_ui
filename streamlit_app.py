@@ -1935,6 +1935,14 @@ def _build_user_instruction(text: str) -> str:
         "and reasoning fallacies:\n\n" + text.strip()
     )
 
+# ---------- Basic output schema check ----------
+def _looks_strict(text: str) -> bool:
+    """
+    Verifies that the model output contains the expected Veritas sections.
+    """
+    required = ["fact", "bias", "explanation", "revision"]
+    return all(word in text.lower() for word in required)
+
 # --- Handle Veritas Analysis only when submitted ---
 if submitted:
     # --- Detect if this is a Red Team test ---
@@ -2642,6 +2650,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
