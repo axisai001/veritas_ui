@@ -578,7 +578,7 @@ if os.path.isdir(UPLOAD_FOLDER):
 STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 
 # ===== Identity + Veritas Prompts (EXACT as provided) =====
-IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
+IDENTITY_PROMPT = "I'm Veritas — a bias, disinformation, and fallacy detection tool."
 
 # ===== Default System Prompt (Veritas v3.1 - Phase 2 Ready) =====
 DEFAULT_SYSTEM_PROMPT = """
@@ -2650,6 +2650,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
