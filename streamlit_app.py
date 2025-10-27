@@ -1147,16 +1147,35 @@ def _log_validator_violation(category: str, text: str):
     except Exception:
         pass
 
-# ===== Text-to-Analyze gating (improved detection) =====
+# ===== Text-to-Analyze gating (auto-detect plain text) =====
 TTA_RE = re.compile(
     r'(?is)(?:^|\n)\s*text\s*to\s*analyze\s*[:：]\s*(?:["“]{3}[\s\S]+?["”]{3}|```[\s\S]+?```|["“].+?["”]|.+)',
     re.IGNORECASE
 )
 
 def has_explicit_text_payload(prompt: str) -> bool:
-    """Detects if the prompt includes a clearly analyzable text block."""
+    """
+    Detects analyzable content. Passes if either:
+    1. A "Text to Analyze:" block exists, OR
+    2. The text appears to be natural-language prose (≥ 10 words, minimal imperatives).
+    """
+    # Case 1: explicit label still works
     if TTA_RE.search(prompt):
         return True
+
+    # Case 2: heuristic auto-detection
+    text = prompt.strip()
+    if not text:
+        return False
+
+    # If there are at least 10 words and less than 10% imperatives, treat as prose
+    word_count = len(re.findall(r"\w+", text))
+    imperative_hits = len(re.findall(r"\b(write|create|draft|generate|explain|act as|design|develop)\b", text, re.IGNORECASE))
+
+    if word_count >= 10 and imperative_hits / max(1, word_count) < 0.1:
+        return True
+
+    # Case 3: extracted text from upload
     extracted = st.session_state.get("extracted_text", "")
     return bool(extracted and extracted.strip())
 
@@ -2621,6 +2640,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
