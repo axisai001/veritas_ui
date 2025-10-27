@@ -1016,9 +1016,23 @@ IMPERATIVE_RE = re.compile(
 
 # ===== Deterministic refusal router =====
 ROUTING_RULES = [
-    ("security",  "R-S-001", [r"\b(api\s*key|access\s*token|password|secret\s*key|private\s*key|credentials?)\b"]),
-    ("protected", "R-P-001", [r"\b(system\s*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters))\b"]),
-    ("out_of_scope", "R-O-002", [r"\b(write|create|act\s+as|design|compose|prepare|outline)\b"]),
+    # Expanded Security pattern: catches access tokens, API tokens, config file references
+    ("security", "R-S-001", [
+        r"\b(api\s*key|access\s*token|api\s*token|password|secret\s*key|private\s*key|credentials?)\b",
+        r"\b(environment\s*variable|env\s*var|service\s*account\s*credential|production\s*config)\b",
+        r"\b(retrieve|export|get|obtain)\s+(the\s+)?(api|access|service|secret|environment)\b"
+    ]),
+
+    # Expanded Protected pattern: catches hidden rules, verification logic, decision tree, etc.
+    ("protected", "R-P-001", [
+        r"\b(system\s*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters))\b",
+        r"\b(hidden|private|secret)\s+(rules?|tokens?|instructions?|list|logic|configuration|setup)\b",
+        r"\b(decision\s*tree|verification\s*rules?|detection\s*rules?|safety\s*overrides?)\b",
+    ]),
+
+    ("out_of_scope", "R-O-002", [
+        r"\b(write|create|act\s+as|design|compose|prepare|outline)\b"
+    ]),
 ]
 
 def route_refusal_category(prompt: str) -> tuple[str | None, str | None, list[str]]:
@@ -2592,6 +2606,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
