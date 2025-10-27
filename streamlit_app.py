@@ -1945,7 +1945,7 @@ if submitted:
             """,
             unsafe_allow_html=True,
         )
-                st.stop()
+        st.stop()
 
     # ---------- Secrets detection ----------
     final_input, _ = detect_or_redact_secrets(final_input, refuse_on_detect=True)
@@ -2609,6 +2609,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
