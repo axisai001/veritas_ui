@@ -1924,6 +1924,17 @@ with tabs[0]:
 user_text = st.session_state.get("user_input_box", "").strip()
 extracted = st.session_state.get("extracted_text", "")
 
+# ---------- Build user instruction for model ----------
+def _build_user_instruction(text: str) -> str:
+    """
+    Constructs the final instruction that is sent to the model.
+    Ensures the model always receives analyzable content framed correctly.
+    """
+    return (
+        "Analyze the following text for bias, misinformation, "
+        "and reasoning fallacies:\n\n" + text.strip()
+    )
+
 # --- Handle Veritas Analysis only when submitted ---
 if submitted:
     # --- Detect if this is a Red Team test ---
@@ -1985,17 +1996,6 @@ if submitted:
         # --- Text-to-Analyze gating ---
         if not has_explicit_text_payload(final_input):
             render_refusal("out_of_scope", "R-O-003", ["missing:Text to Analyze"])
-
-# ---------- Build user instruction for model ----------
-def _build_user_instruction(text: str) -> str:
-    """
-    Constructs the final instruction that is sent to the model.
-    Ensures the model always receives analyzable content framed correctly.
-    """
-    return (
-        "Analyze the following text for bias, misinformation, "
-        "and reasoning fallacies:\n\n" + text.strip()
-    )
 
     # ---------- Intent / scope gate ----------
     intent = detect_intent(final_input)
@@ -2642,6 +2642,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
