@@ -37,6 +37,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 import hmac
+import unicodedata
 import streamlit.components.v1 as components
 from openai import OpenAI
 import httpx
@@ -2651,6 +2652,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
