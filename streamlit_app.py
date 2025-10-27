@@ -1755,7 +1755,7 @@ def _note_failed_login(attempted_secret: str = ""):
 def show_login():
     st.subheader("Sign In")
 
-    # Hidden-label toggle between user/admin
+    # 👇 Radio button to toggle between user and admin
     auth_choice = st.radio(
         label="",
         options=["User", "Admin"],
@@ -1764,18 +1764,22 @@ def show_login():
         label_visibility="collapsed"
     )
 
-st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
-    
-def _norm(s: str) -> str:
-    """Normalize and strip hidden spaces/newlines."""
-    return unicodedata.normalize("NFC", str(s)).strip()
+    # 👇 Update auth_view based on selection
+    st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
+    # 👇 Normalization helper (keep it inside or right above this function)
+    def _norm(s: str) -> str:
+        """Normalize and strip hidden spaces/newlines."""
+        return unicodedata.normalize("NFC", str(s)).strip()
+
+    # 👇 Next, your login logic begins here (the user vs admin forms)
     if st.session_state["auth_view"] == "user":
         # ---- Normal User Login ----
         with st.form("login_form_user"):
             login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
             pwd = st.text_input("Password", type="password")
             submit = st.form_submit_button("Enter")
+        # (continue your login checks here...)
 
         if submit:
             if _is_locked():
@@ -2661,6 +2665,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
