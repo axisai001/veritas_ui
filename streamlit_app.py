@@ -1016,22 +1016,24 @@ IMPERATIVE_RE = re.compile(
 
 # ===== Deterministic refusal router =====
 ROUTING_RULES = [
-    # Expanded Security pattern: catches access tokens, API tokens, config file references
-    ("security", "R-S-001", [
+    # Prefer Security first
+    ("security",  "R-S-001", [
         r"\b(api(\s*|[-_])?(key|token)|access(\s*|[-_])?token|password|secret\s*key|private\s*key|credentials?)\b",
-        r"\b(environment\s*variable|env\s*var|service\s*account\s*credential|production\s*config)\b",
-        r"\b(retrieve|export|get|obtain)\s+(the\s+)?(api|access|service|secret|environment)\b"
+        r"\b(environment\s*(variables?|vars?)|env\s*vars?|secrets?\s*manager|key\s*vault|keystore)\b",
+        r"\b(store|retrieve|read|load|export|expose|leak|get|obtain)\b.*\b(access|api|secret|private)\s*(keys?|tokens?|credentials?)\b",
+        r"\b(production|prod)\s*(config|configuration|secrets?)\b",
     ]),
 
-    # Expanded Protected pattern: catches hidden rules, verification logic, decision tree, etc.
+    # Then Protected (internal prompts/config/rules)
     ("protected", "R-P-001", [
-        r"\b(system\s*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters))\b",
-        r"\b(hidden|private|secret)\s+(rules?|tokens?|instructions?|list|logic|configuration|setup)\b",
-        r"\b(decision\s*tree|verification\s*rules?|detection\s*rules?|safety\s*overrides?)\b",
+        r"\b(system[-\s]*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters?|rules?))\b",
+        r"\b(hidden|private|secret)\s+(rules?|tokens?|instructions?|list|logic|configuration|setup|schema)\b",
+        r"\b(decision\s*tree|verification\s*rules?|detection\s*rules?|prompt[-\s]*injection|safety\s*overrides?)\b",
     ]),
 
+    # Finally Out-of-Scope (general generative imperatives)
     ("out_of_scope", "R-O-002", [
-        r"\b(write|create|act\s+as|design|compose|prepare|outline)\b"
+        r"\b(write|create|act\s+as|design|compose|prepare|outline|generate|draft|plan|explain\s+how\s+to|list)\b",
     ]),
 ]
 
@@ -1946,16 +1948,16 @@ if submitted:
         st.stop()
 
     # --- Secrets detection ---
-    final_input, _ = detect_or_redact_secrets(final_input, refuse_on_detect=True)
+final_input, _ = detect_or_redact_secrets(final_input, refuse_on_detect=True)
 
-    # --- Imperative pre-filter ---
-    if IMPERATIVE_RE.search(final_input):
-        render_refusal("out_of_scope", "R-O-001", ["imperative"])
+# --- Deterministic router (run FIRST to allow Security/Protected to win) ---
+cat, rid, toks = route_refusal_category(final_input)
+if cat:
+    render_refusal(cat, rid, toks)
 
-    # --- Deterministic router ---
-    cat, rid, toks = route_refusal_category(final_input)
-    if cat:
-        render_refusal(cat, rid, toks)
+# --- Imperative pre-filter (only hits if router didn’t match) ---
+if IMPERATIVE_RE.search(final_input):
+    render_refusal("out_of_scope", "R-O-001", ["imperative"])
 
     # --- Text-to-Analyze gating ---
     if not has_explicit_text_payload(final_input):
@@ -2606,6 +2608,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
