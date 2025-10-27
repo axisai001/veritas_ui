@@ -1764,9 +1764,13 @@ def show_login():
         label_visibility="collapsed"
     )
 
-    st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
+st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
+    
+def _norm(s: str) -> str:
+    """Normalize and strip hidden spaces/newlines."""
+    return unicodedata.normalize("NFC", str(s)).strip()
 
-    if st.session_state["auth_view"] == "user":
+if st.session_state["auth_view"] == "user":
         # ---- Normal User Login ----
         with st.form("login_form_user"):
             login_id = st.text_input("Login ID (optional)", value=st.session_state.get("login_id", ""))
@@ -2652,6 +2656,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
