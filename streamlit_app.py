@@ -1945,15 +1945,15 @@ if submitted:
             """,
             unsafe_allow_html=True,
         )
-        st.stop()
+                st.stop()
 
     # ---------- Secrets detection ----------
     final_input, _ = detect_or_redact_secrets(final_input, refuse_on_detect=True)
 
-        # --- Deterministic router (run FIRST to allow Security/Protected to win) ---
-        cat, rid, toks = route_refusal_category(final_input)
-        if cat:
-            render_refusal(cat, rid, toks)
+    # --- Deterministic router (run FIRST to allow Security/Protected to win) ---
+    cat, rid, toks = route_refusal_category(final_input)
+    if cat:
+        render_refusal(cat, rid, toks)
 
         # --- Imperative pre-filter (only hits if router didn’t match) ---
         if IMPERATIVE_RE.search(final_input):
@@ -2609,6 +2609,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
