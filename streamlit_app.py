@@ -1158,11 +1158,12 @@ def has_explicit_text_payload(prompt: str) -> bool:
 
 # ===== Secret detection & redaction =====
 SECRET_PATTERNS = [
-    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"), "[REDACTED-PEM]"),
-    (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED-AWS-KEY]"),
-    (re.compile(r"sk-[A-Za-z0-9]{20,}"), "[REDACTED-OPENAI-KEY]"),
-    (re.compile(r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}"), "[REDACTED-JWT]"),
+    (re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----", re.IGNORECASE), "[REDACTED-PEM]"),
+    (re.compile(r"AKIA[0-9A-Z]{16}", re.IGNORECASE), "[REDACTED-AWS-KEY]"),
+    (re.compile(r"sk-[A-Za-z0-9]{20,}", re.IGNORECASE), "[REDACTED-OPENAI-KEY]"),
+    (re.compile(r"eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}", re.IGNORECASE), "[REDACTED-JWT]"),
 ]
+
 def detect_or_redact_secrets(text: str, refuse_on_detect: bool = True) -> tuple[str, bool]:
     detected = False
     redacted = text
@@ -2607,6 +2608,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
