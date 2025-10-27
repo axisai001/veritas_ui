@@ -994,8 +994,7 @@ SCOPE_MESSAGE = (
 # ===== Canonical Refusal Templates =====
 REFUSAL_TEMPLATES = {
     "out_of_scope": (
-        "⛔ Out of Scope: Veritas only analyzes supplied text for bias and related issues. "
-        "It cannot generate plans, roleplay content, or operational instructions."
+        "⚠️ Veritas triggered a safety rule. This request is outside the analytical scope. Analysis stops here."
     ),
     "protected": (
         "🔐 Protected Instructions\n"
@@ -1110,10 +1109,10 @@ def validate_refusal_output(output_text: str) -> str:
     Rewrites any deviation and logs the event.
     """
     canonical_map = {
-        "security": "⚠️ This text requests instructions or facilitation of illegal acts. Analysis stops here.",
-        "protected": "🔐 Protected content requested. Veritas cannot provide internal system details or templates. Analysis stops here.",
-        "out_of_scope": "⚠️ Veritas triggered a safety rule. This request is outside the bias-detection scope. Analysis stops here."
-    }
+    "security": "⚠️ This text requests instructions or facilitation of illegal acts. Analysis stops here.",
+    "protected": "🔐 Protected content requested. Veritas cannot provide internal system details or templates. Analysis stops here.",
+    "out_of_scope": "⚠️ Veritas triggered a safety rule. This request is outside the analytical scope. Analysis stops here."
+  }
 
     lowered = output_text.strip().lower()
     for cat, canonical in canonical_map.items():
@@ -2617,6 +2616,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
