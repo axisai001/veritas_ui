@@ -1019,7 +1019,7 @@ ROUTING_RULES = [
     ("security",  "R-S-001", [
         r"\b(api(\s*|[-_])?(key|token)|access(\s*|[-_])?token|password|secret\s*key|private\s*key|credentials?)\b",
         r"\b(environment\s*(variables?|vars?)|env\s*vars?|secrets?\s*manager|key\s*vault|keystore)\b",
-        r"\b(store|retrieve|read|load|export|expose|leak|get|obtain)\b.*\b(access|api|secret|private)\s*(keys?|tokens?|credentials?)\b",
+        r"\b(store|retrieve|read|load|export|expose|leak|get|obtain|provide|reveal|share|show)\b.*\b(access|api|secret|private|token|credential|key|password)\b",
         r"\b(production|prod)\s*(config|configuration|secrets?)\b",
     ]),
 
@@ -2616,6 +2616,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
