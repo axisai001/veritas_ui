@@ -2133,7 +2133,9 @@ if submitted:
             st.error("⚠️ No response returned by Veritas.")
             st.stop()
 
-        if not _looks_strict(final_report):
+        # v3.1 compact schema validator (4-key JSON)
+        required_keys = {"Fact", "Bias", "Explanation", "Revision"}
+        if not all(k in final_report for k in required_keys):
             log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
             st.error("Veritas produced a non-compliant output. Please retry.")
             st.stop()
@@ -2727,6 +2729,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
