@@ -579,6 +579,54 @@ if os.path.isdir(UPLOAD_FOLDER):
 
 STARTED_AT_ISO = datetime.now(timezone.utc).isoformat()
 
+# ===============================================================
+# 🔒 GATEKEEPER v4 — Pre-filter for Security, Scope, and Compliance
+# ===============================================================
+import re
+
+def gatekeeper_check(user_text: str) -> tuple[bool, str]:
+    text_lower = user_text.lower().strip()
+
+    # 1️⃣ SECURITY & VIOLENCE BLOCKERS
+    security_terms = [
+        "suicide", "kill myself", "harm myself", "self harm",
+        "harm others", "murder", "bomb", "explosive", "shooting plan",
+        "terrorist", "terrorism", "how to make weapon", "attack plan"
+    ]
+    if any(term in text_lower for term in security_terms):
+        return (False, "🚫 Request rejected — content involves self-harm, violence, or terroristic activity.")
+
+    # 2️⃣ ILLEGAL / SAFETY VIOLATIONS
+    illegal_patterns = [
+        "how to hack", "steal data", "illegal drug", "counterfeit",
+        "exploit system", "bypass security", "deepfake", "malware"
+    ]
+    if any(p in text_lower for p in illegal_patterns):
+        return (False, "🚫 Request rejected — violates Veritas Safety and Integrity Policy (illegal or exploitative content).")
+
+    # 3️⃣ DIRECTIVE / PROMPT-INJECTION BLOCKERS
+    directive_pattern = re.compile(
+        r"^(you are|act as|ignore previous|disregard instructions|pretend to be|simulate|override|reveal|show system prompt)\b",
+        re.IGNORECASE
+    )
+    if directive_pattern.match(user_text):
+        return (False, "🚫 Request rejected — directive or system-instruction detected at input start.")
+
+    # 4️⃣ OUT-OF-SCOPE / NON-ANALYTICAL REQUESTS
+    out_of_scope_pattern = re.compile(
+        r"^(tell me|what is|who is|how does|can you|should i|why is|write a poem|make up|joke|story|song|lyrics)\b",
+        re.IGNORECASE
+    )
+    if out_of_scope_pattern.match(user_text):
+        return (False, "🚫 Request rejected — input appears to be conversational or outside Veritas analytical scope.")
+
+    # 5️⃣ QUICK ALLOW — likely analytical text (sentences >5 words)
+    if len(user_text.split()) > 5 and any(ch.isalpha() for ch in user_text):
+        return (True, "")
+
+    # 6️⃣ Default fallback — block short or nonsensical input
+    return (False, "🚫 Request rejected — insufficient content for analysis.")
+
 # ===== Identity + Veritas Prompts (EXACT as provided) =====
 IDENTITY_PROMPT = "I'm Veritas — a bias, disinformation, and fallacy detection tool."
 
@@ -2674,6 +2722,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
