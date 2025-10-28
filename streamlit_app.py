@@ -732,14 +732,18 @@ STRICT ENFORCEMENT APPLIES.
 6) OUTPUT RULES ON PROCEED (SP-4.11 Validated)
 ----------------------------------------------------------------------
 
-• If analysis proceeds, return VALID JSON ONLY matching Veritas Schema v3.1.
-  No plain-text responses allowed.
+• When analysis proceeds, Veritas v3.2 must return VALID JSON matching the new 4-section schema:
 
-• If JSON validation fails OR bias_detected == false but bias_score != 0.00 -
-  replace output with the Out-of-Scope canonical refusal and log validator_status=json_schema_failed.
+{
+  "Fact": "<Empirical fact of the content inputted>",
+  "Bias": "<Yes or No>",
+  "Explanation": "<Concise but detailed explanation why words or phrases were flagged as biased>",
+  "Revision": "<Completed revision of the original content ensuring it is not bias-driven>"
+}
 
-• (This rule enforces canonical refusal validation - any deviation from stored template text
-  is a schema failure.)
+• No additional keys, arrays, or text outside this JSON object are permitted.
+
+• If JSON validation fails — or any required key is missing — replace output with the Out-of-Scope canonical refusal and log validator_status = json_schema_failed.
 
 ----------------------------------------------------------------------
 7) NOTHING-FLAGGED RULE (Zero-Score Compliance)
@@ -2723,6 +2727,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
