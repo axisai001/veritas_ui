@@ -2164,7 +2164,7 @@ if submitted:
 
         st.success(f"✅ Report generated — ID: {public_id}")
 
-# --- Clean Veritas Output Display (v3.2 Compact Schema) ---
+# --- Clean Veritas Output Display (v3.1 Compact Schema) ---
 try:
     parsed = json.loads(final_report) if isinstance(final_report, str) else final_report
 
@@ -2197,7 +2197,7 @@ except Exception as e:
     st.error("⚠️ There was an issue retrieving the Veritas report.")
     st.stop()
 
-# Show footer caption if everything ran without error
+# Footer caption (always runs after try/except)
 st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
 # -------------------- Feedback Tab --------------------
@@ -2752,6 +2752,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
