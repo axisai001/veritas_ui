@@ -2163,16 +2163,38 @@ if submitted:
             pass
 
         st.success(f"✅ Report generated — ID: {public_id}")
-        st.markdown(final_report)
 
-    except Exception as e:
-        try:
-            prog.progress(0)
-        except Exception:
-            pass
-        log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
-        st.error("⚠️ There was an issue retrieving the Veritas report.")
-        st.stop()
+# --- Clean Veritas Output Display (v3.1 Compact Schema) ---
+try:
+    parsed = json.loads(final_report) if isinstance(final_report, str) else final_report
+
+    if isinstance(parsed, dict):
+        fact = parsed.get("Fact", "")
+        bias = parsed.get("Bias", "")
+        explanation = parsed.get("Explanation", "")
+        revision = parsed.get("Revision", "")
+
+        with st.expander("📊 View Analysis Result", expanded=True):
+            st.markdown(f"""
+            **Fact:** {fact}
+
+            **Bias:** {bias}
+
+            **Explanation:** {explanation}
+
+            **Revision:** {revision}
+            """)
+    else:
+        st.warning("⚠️ Veritas output was not structured as expected.")
+
+except Exception as e:
+    try:
+        prog.progress(0)
+    except Exception:
+        pass
+    log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+    st.error("⚠️ There was an issue retrieving the Veritas report.")
+    st.stop()
 
 else:
     st.caption("Paste text or upload a document, then click **Engage Veritas**.")
@@ -2729,6 +2751,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
