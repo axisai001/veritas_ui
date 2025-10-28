@@ -2181,11 +2181,14 @@ try:
     explanation = parsed.get("Explanation", "")
     revision = parsed.get("Revision", "")
 
+    # Color-coded Bias line
+    bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
+
     with st.expander("📊 View Analysis Result", expanded=True):
         st.markdown(f"""
         **Fact:** {fact}
 
-        **Bias:** {bias}
+        **Bias:** {bias_display}
 
         **Explanation:** {explanation}
 
@@ -2750,6 +2753,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
