@@ -2109,6 +2109,16 @@ if not api_key:
     st.error("OPENAI_API_KEY is not configured.")
     st.stop()
 
+# --- Ensure final_input exists and is valid ---
+if "final_input" not in locals():
+    user_text = st.session_state.get("user_text", "")
+    extracted = st.session_state.get("extracted", "")
+    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+
+if not final_input:
+    st.error("Please enter some text or upload a document.")
+    st.stop()
+
 user_instruction = _build_user_instruction(final_input)
 
 try:
@@ -2753,6 +2763,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
