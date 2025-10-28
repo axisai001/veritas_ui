@@ -2099,105 +2099,103 @@ if submitted:
     st.info("✅ Veritas is processing your bias analysis request…")
 
     # ---------- Model call (fixed indentation) ----------
-    try:
-        prog.progress(40, text="Contacting model…")
-    except Exception:
-        pass  # progress bar is optional; do not gate logic
-
-    api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-    if not api_key:
-        st.error("OPENAI_API_KEY is not configured.")
-        st.stop()
-
-    user_instruction = _build_user_instruction(final_input)
-
-    try:
-        client = OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model=MODEL,
-            temperature=ANALYSIS_TEMPERATURE,
-            messages=[
-                {"role": "system", "content": IDENTITY_PROMPT},
-                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                {"role": "user", "content": user_instruction},
-            ],
-        )
-
-        try:
-            prog.progress(70, text="Processing model response…")
-        except Exception:
-            pass
-
-        final_report = (resp.choices[0].message.content or "").strip()
-        if not final_report:
-            st.error("⚠️ No response returned by Veritas.")
-            st.stop()
-
-        # v3.1 compact schema validator (4-key JSON)
-        required_keys = {"Fact", "Bias", "Explanation", "Revision"}
-        if not all(k in final_report for k in required_keys):
-            log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-            st.error("Veritas produced a non-compliant output. Please retry.")
-            st.stop()
-
-        public_id = _gen_public_report_id()
-        internal_id = _gen_internal_report_id()
-        log_analysis(public_id, internal_id, final_report)
-
-        if redteam_flag == 1:
-            _record_test_result(
-                internal_id=internal_id,
-                public_id=public_id,
-                login_id=st.session_state.get("login_id", "unknown"),
-                test_id="manual_redteam",
-                severity="info",
-                detail="Red Team test successfully logged via Veritas analysis.",
-                user_input=final_input,
-                model_output=final_report
-            )
-            st.success("✅ Red Team log recorded successfully.")
-
-        try:
-            prog.progress(100, text="Analysis complete ✓")
-        except Exception:
-            pass
-
-        st.success(f"✅ Report generated — ID: {public_id}")
-
-# --- Clean Veritas Output Display (v3.1 Compact Schema) ---
 try:
-    parsed = json.loads(final_report) if isinstance(final_report, str) else final_report
+    prog.progress(40, text="Contacting model…")
+except Exception:
+    pass  # progress bar is optional
 
-    if isinstance(parsed, dict):
-        fact = parsed.get("Fact", "")
-        bias = parsed.get("Bias", "")
-        explanation = parsed.get("Explanation", "")
-        revision = parsed.get("Revision", "")
+api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
+if not api_key:
+    st.error("OPENAI_API_KEY is not configured.")
+    st.stop()
 
-        with st.expander("📊 View Analysis Result", expanded=True):
-            st.markdown(f"""
-            **Fact:** {fact}
+user_instruction = _build_user_instruction(final_input)
 
-            **Bias:** {bias}
+try:
+    client = OpenAI(api_key=api_key)
+    resp = client.chat.completions.create(
+        model=MODEL,
+        temperature=ANALYSIS_TEMPERATURE,
+        messages=[
+            {"role": "system", "content": IDENTITY_PROMPT},
+            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_instruction},
+        ],
+    )
 
-            **Explanation:** {explanation}
-
-            **Revision:** {revision}
-            """)
-    else:
-        st.warning("⚠️ Veritas output was not structured as expected.")
-
-except Exception as e:
-    # Handle parsing or model issues
     try:
-        prog.progress(0)
+        prog.progress(70, text="Processing model response…")
     except Exception:
         pass
-    log_error_event("MODEL_RESPONSE", "/analyze", 500, repr(e))
+
+    final_report = (resp.choices[0].message.content or "").strip()
+    if not final_report:
+        st.error("⚠️ No response returned by Veritas.")
+        st.stop()
+
+    # --- v3.2 Compact Schema Validation ---
+    try:
+        parsed = json.loads(final_report)
+    except Exception:
+        st.error("⚠️ Veritas returned a malformed JSON response.")
+        st.stop()
+
+    required_keys = {"Fact", "Bias", "Explanation", "Revision"}
+    if not all(k in parsed for k in required_keys):
+        log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+        st.error("Veritas produced a non-compliant output. Please retry.")
+        st.stop()
+
+    public_id = _gen_public_report_id()
+    internal_id = _gen_internal_report_id()
+    log_analysis(public_id, internal_id, parsed)
+
+    if redteam_flag == 1:
+        _record_test_result(
+            internal_id=internal_id,
+            public_id=public_id,
+            login_id=st.session_state.get("login_id", "unknown"),
+            test_id="manual_redteam",
+            severity="info",
+            detail="Red Team test successfully logged via Veritas analysis.",
+            user_input=final_input,
+            model_output=parsed
+        )
+        st.success("✅ Red Team log recorded successfully.")
+
+    try:
+        prog.progress(100, text="Analysis complete ✓")
+    except Exception:
+        pass
+
+    st.success(f"✅ Report generated — ID: {public_id}")
+
+except Exception as e:
+    st.error(f"⚠️ Model request failed: {e}")
+    st.stop()
+
+# --- Clean Veritas Output Display (v3.2 Compact Schema) ---
+try:
+    fact = parsed.get("Fact", "")
+    bias = parsed.get("Bias", "")
+    explanation = parsed.get("Explanation", "")
+    revision = parsed.get("Revision", "")
+
+    with st.expander("📊 View Analysis Result", expanded=True):
+        st.markdown(f"""
+        **Fact:** {fact}
+
+        **Bias:** {bias}
+
+        **Explanation:** {explanation}
+
+        **Revision:** {revision}
+        """)
+except Exception as e:
     st.error("⚠️ There was an issue retrieving the Veritas report.")
     st.stop()
 
-# Footer caption (always runs after try/except)
+# Footer caption
 st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
 # -------------------- Feedback Tab --------------------
@@ -2752,6 +2750,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
