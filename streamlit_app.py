@@ -128,7 +128,7 @@ def _set_query_params(**kwargs):
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
 
 # Hard-coded allowlist of admin emails (empty set => allow any email if password matches)
-ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai"}
+ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai", "leger.erika19@gmail.com"}
 
 # Optional: also accept a comma-separated env var ADMIN_EMAILS to extend/override
 _raw = os.environ.get("ADMIN_EMAILS", "")
@@ -138,7 +138,6 @@ if _raw:
 # --- Red Team testers (explicit allowlist) ---
 # Add the private emails of all approved Red Team testers here.
 REDTEAM_EMAILS = {
-    "leger.erika19@gmail.com",
     "a.ryan.parra@outlook.com",
 }
 _raw_red = os.environ.get("REDTEAM_EMAILS", "")
@@ -2763,6 +2762,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
