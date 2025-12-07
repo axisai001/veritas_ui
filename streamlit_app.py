@@ -1522,21 +1522,59 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
     except Exception:
         return None
 
-def log_ack_event(acknowledged: bool):
+def log_ack_event(acknowledged: bool, ip_address: str | None = None):
+    """
+    Log an acknowledgment event.
+
+    - `ip_address` is stored in `remote_addr` for one-ack-per-IP logic.
+    - If `ip_address` is not provided, we fall back to session/client info
+      so older calls like `log_ack_event(True)` still work.
+    """
     try:
         ts = datetime.now(timezone.utc).isoformat()
         sid = _get_sid()
         login_id = st.session_state.get("login_id", "")
-        addr = "streamlit"; ua = "streamlit"
-        row = [ts, sid, login_id, 1 if acknowledged else 0, PRIVACY_URL, TERMS_URL, addr, ua]
+
+        # Use the passed IP if available, otherwise fall back to session/client
+        if not ip_address:
+            ip_address = st.session_state.get("client_ip") or "streamlit"
+
+        ua = "streamlit"  # or pull from headers if you wire that up later
+
+        row = [
+            ts,
+            sid,
+            login_id,
+            1 if acknowledged else 0,
+            PRIVACY_URL,
+            TERMS_URL,
+            ip_address,  # remote_addr
+            ua,
+        ]
+
+        # Append to CSV log
         with open(ACK_CSV, "a", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(row)
-        _db_exec("""INSERT INTO ack_events (timestamp_utc,session_id,login_id,acknowledged,privacy_url,terms_url,remote_addr,user_agent)
-                    VALUES (?,?,?,?,?,?,?,?)""",
-                 (ts, sid, login_id, 1 if acknowledged else 0, PRIVACY_URL, TERMS_URL, addr, ua))
+
+        # Insert into DB; note we now store ip_address as remote_addr
+        _db_exec(
+            """
+            INSERT INTO ack_events (
+                timestamp_utc,
+                session_id,
+                login_id,
+                acknowledged,
+                privacy_url,
+                terms_url,
+                remote_addr,
+                user_agent
+            )
+            VALUES (?,?,?,?,?,?,?,?)
+            """,
+            (ts, sid, login_id, 1 if acknowledged else 0, PRIVACY_URL, TERMS_URL, ip_address, ua),
+        )
     except Exception:
         pass
-
 
 # --- Log individual Red Team test results ---
 def _record_test_result(internal_id, public_id, login_id, test_id, severity, detail,
@@ -2820,6 +2858,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
