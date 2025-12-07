@@ -1777,23 +1777,24 @@ _inject_bg()
 def require_acknowledgment():
     """
     Always active.
-    Requires only one acknowledgment per IP ever.
+    Requires only one acknowledgment per ack key (IP/login/session) ever.
     """
+    # If already passed in this session, skip
     if st.session_state.get("ack_ok", False):
         return
 
-    ip_address = st.session_state.get("client_ip", "")
-
-    if _has_valid_ack(ip_address):
+    # If a prior acknowledgment exists for this key, skip
+    if _has_valid_ack():
         st.session_state["ack_ok"] = True
         return
 
+    # Otherwise, show the form
     with st.form("ack_form", clear_on_submit=False):
         st.markdown("### Privacy & Terms Acknowledgment")
         st.write(
             "Before using Veritas, please confirm you have read and agree to the "
-            f"[Privacy Policy]({PRIVACY_URL}) and "
-            f"[Terms of Use]({TERMS_URL})."
+            f"[Privacy Policy]({PRIVACY_URL or '#'}) and "
+            f"[Terms of Use]({TERMS_URL or '#'})."
         )
 
         c1 = st.checkbox("I have read the Privacy Policy")
@@ -1814,7 +1815,7 @@ def require_acknowledgment():
                 st.error("Please check both boxes.")
                 st.stop()
 
-            log_ack_event(True, ip_address)
+            log_ack_event(True)
             st.session_state["ack_ok"] = True
             st.success("Thanks! You may continue.")
             _safe_rerun()
@@ -2843,6 +2844,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
