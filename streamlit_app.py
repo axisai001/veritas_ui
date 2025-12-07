@@ -45,6 +45,60 @@ import httpx
 import random
 random.seed(42)  # deterministic outcomes across sessions
 
+# -------------------------------------------------------------------
+# Acknowledgment Gate Configuration
+# -------------------------------------------------------------------
+DB_PATH = DB_PATH  # Use your existing DB_PATH variable
+PRIVACY_URL = "https://drive.google.com/file/d/1AQfEQ4qMPlTr6tBd4tsgGSaOD0DstAQ0/view"
+TERMS_URL   = "https://drive.google.com/file/d/1ElnK1e75Qk5EsReVuz53DZUMzydIboyn/view"
+
+import sqlite3
+from datetime import datetime, timezone
+import streamlit as st
+
+# -------------------------------------------------------------------
+# DB Helpers
+# -------------------------------------------------------------------
+def _has_valid_ack(ip_address: str) -> bool:
+    """
+    Return True if this IP address has EVER acknowledged.
+    """
+    if not ip_address:
+        return False
+
+    try:
+        with sqlite3.connect(DB_PATH) as con:
+            cur = con.cursor()
+            cur.execute(
+                """
+                SELECT timestamp_utc
+                FROM ack_events
+                WHERE acknowledged = 1 AND ip_address = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (ip_address,),
+            )
+            row = cur.fetchone()
+        return row is not None
+
+    except Exception:
+        return False
+
+
+def log_ack_event(acknowledged: bool, ip_address: str):
+    ts = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.cursor()
+        cur.execute(
+            """
+            INSERT INTO ack_events (acknowledged, ip_address, timestamp_utc)
+            VALUES (?, ?, ?)
+            """,
+            (1 if acknowledged else 0, ip_address, ts),
+        )
+        con.commit()
+
 # ---------- Optional parsers for uploads ----------
 try:
     from pypdf import PdfReader
@@ -1694,28 +1748,20 @@ def _inject_bg():
 
 _inject_bg()
 
-# ====== Acknowledgment Gate (pre-UI; admins bypass) ======
-def _has_valid_ack(login_id: str, sid: str) -> bool:
-    try:
-        cutoff_dt = datetime.now(timezone.utc) - timedelta(days=ACK_TTL_DAYS)
-        con = sqlite3.connect(DB_PATH); cur = con.cursor()
-        cur.execute("""SELECT timestamp_utc FROM ack_events
-                       WHERE acknowledged=1 AND (login_id=? OR session_id=?)
-                       ORDER BY id DESC LIMIT 1""", (login_id or "", sid))
-        row = cur.fetchone(); con.close()
-        if not row: return False
-        ts = datetime.fromisoformat(row[0])
-        if ts.tzinfo is None: ts = ts.replace(tzinfo=timezone.utc)
-        return ts >= cutoff_dt
-    except Exception:
-        return False
-
+# -------------------------------------------------------------------
+# Acknowledgment Gate
+# -------------------------------------------------------------------
 def require_acknowledgment():
+    """
+    Always active.
+    Requires only one acknowledgment per IP ever.
+    """
     if st.session_state.get("ack_ok", False):
         return
-    sid = _get_sid()
-    login_id = st.session_state.get("login_id","")
-    if _has_valid_ack(login_id, sid):
+
+    ip_address = st.session_state.get("client_ip", "")
+
+    if _has_valid_ack(ip_address):
         st.session_state["ack_ok"] = True
         return
 
@@ -1723,24 +1769,32 @@ def require_acknowledgment():
         st.markdown("### Privacy & Terms Acknowledgment")
         st.write(
             "Before using Veritas, please confirm you have read and agree to the "
-            f"[Privacy Policy]({PRIVACY_URL or '#'}) and "
-            f"[Terms of Use]({TERMS_URL or '#'})."
+            f"[Privacy Policy]({PRIVACY_URL}) and "
+            f"[Terms of Use]({TERMS_URL})."
         )
+
         c1 = st.checkbox("I have read the Privacy Policy")
         c2 = st.checkbox("I agree to the Terms of Use")
-        ccol1, ccol2 = st.columns([1,1])
-        with ccol1:
+
+        col1, col2 = st.columns([1, 1])
+        with col1:
             submitted = st.form_submit_button("I acknowledge")
-        with ccol2:
+        with col2:
             cancel = st.form_submit_button("Cancel")
+
         if cancel:
-            st.warning("You must acknowledge to continue."); st.stop()
+            st.warning("You must acknowledge to continue.")
+            st.stop()
+
         if submitted:
             if not (c1 and c2):
-                st.error("Please check both boxes to continue."); st.stop()
-            log_ack_event(True)
+                st.error("Please check both boxes.")
+                st.stop()
+
+            log_ack_event(True, ip_address)
             st.session_state["ack_ok"] = True
-            st.success("Thanks! You may continue."); _safe_rerun()
+            st.success("Thanks! You may continue.")
+            _safe_rerun()
 
 # =========== Header ===========
 with st.container():
@@ -1927,6 +1981,10 @@ elif not APP_PASSWORD:
 
 # --- EARLY Privacy/Terms gate (pre-UI), admins bypass ---
 if not st.session_state.get("is_admin", False):
+    
+    # Ensure client_ip is set before this
+    ip_address = st.session_state.get("client_ip", "")
+    
     if not st.session_state.get("ack_ok", False):
         require_acknowledgment()
         st.stop()  # Prevent any UI from rendering until acknowledged
@@ -2762,6 +2820,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
