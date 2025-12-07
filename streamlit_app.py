@@ -1805,7 +1805,7 @@ def _note_failed_login(attempted_secret: str = ""):
 
 # ====== Pre-login screen (User vs Admin) ======
 def show_login():
-    st.subheader("Launch Veritas")
+    st.subheader("Launch Veritas - BETA Program")
 
     # ---- User/Admin toggle ----
     auth_choice = st.radio(
@@ -2762,6 +2762,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
