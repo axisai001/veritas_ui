@@ -48,7 +48,7 @@ random.seed(42)  # deterministic outcomes across sessions
 # -------------------------------------------------------------------
 # Acknowledgment Gate Configuration
 # -------------------------------------------------------------------
-DB_PATH = DB_PATH  # Use your existing DB_PATH variable
+DB_PATH = os.environ.get("DB_PATH", "veritas.db")
 PRIVACY_URL = "https://drive.google.com/file/d/1AQfEQ4qMPlTr6tBd4tsgGSaOD0DstAQ0/view"
 TERMS_URL   = "https://drive.google.com/file/d/1ElnK1e75Qk5EsReVuz53DZUMzydIboyn/view"
 
@@ -2820,6 +2820,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
