@@ -72,13 +72,13 @@ try:
 except Exception:
     class _FallbackSettings:
         openai_api_key = os.environ.get("OPENAI_API_KEY", "")
-        openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        openai_model = os.environ.get("OPENAI_MODEL", "gpt-4.1-mini-2025-04-14")
         auth_log_ttl_days = int(os.environ.get("AUTH_LOG_TTL_DAYS", "365"))
     settings = _FallbackSettings()
 
 # ================= App constants from secrets/env =================
 APP_TITLE = os.environ.get("APP_TITLE", "Veritas")
-MODEL = getattr(settings, "openai_model", os.environ.get("OPENAI_MODEL", "gpt-4o-mini"))
+MODEL = getattr(settings, "openai_model", os.environ.get("OPENAI_MODEL", "gpt-4.1-mini-2025-04-14"))
 try:
     TEMPERATURE = float(os.environ.get("OPENAI_TEMPERATURE", "0.2"))
 except Exception:
@@ -2763,6 +2763,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
