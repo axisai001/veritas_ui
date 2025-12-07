@@ -59,45 +59,30 @@ import streamlit as st
 # -------------------------------------------------------------------
 # DB Helpers
 # -------------------------------------------------------------------
-def _has_valid_ack(ip_address: str) -> bool:
-    """
-    Return True if this IP address has EVER acknowledged.
-    """
-    if not ip_address:
-        return False
-
+def _has_valid_ack() -> bool:
+    """Return True if this user/IP has EVER acknowledged."""
     try:
-        with sqlite3.connect(DB_PATH) as con:
-            cur = con.cursor()
-            cur.execute(
-                """
-                SELECT timestamp_utc
-                FROM ack_events
-                WHERE acknowledged = 1 AND ip_address = ?
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (ip_address,),
-            )
-            row = cur.fetchone()
-        return row is not None
+        ack_key = _get_ack_key()
+        if not ack_key:
+            return False
 
-    except Exception:
-        return False
-
-
-def log_ack_event(acknowledged: bool, ip_address: str):
-    ts = datetime.now(timezone.utc).isoformat()
-    with sqlite3.connect(DB_PATH) as con:
+        con = sqlite3.connect(DB_PATH)
         cur = con.cursor()
         cur.execute(
             """
-            INSERT INTO ack_events (acknowledged, ip_address, timestamp_utc)
-            VALUES (?, ?, ?)
+            SELECT timestamp_utc
+            FROM ack_events
+            WHERE acknowledged = 1 AND remote_addr = ?
+            ORDER BY timestamp_utc DESC
+            LIMIT 1
             """,
-            (1 if acknowledged else 0, ip_address, ts),
+            (ack_key,),
         )
-        con.commit()
+        row = cur.fetchone()
+        con.close()
+        return row is not None
+    except Exception:
+        return False
 
 # ---------- Optional parsers for uploads ----------
 try:
@@ -2858,6 +2843,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
