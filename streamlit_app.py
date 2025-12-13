@@ -167,7 +167,7 @@ def _set_query_params(**kwargs):
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
 
 # Hard-coded allowlist of admin emails (empty set => allow any email if password matches)
-ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai", "leger.erika19@gmail.com"}
+ADMIN_EMAILS = {"a.parra@axislabs.ai", "d.pineau@axislabs.ai", "e.leger@axisai-contractors.com", "a.r.parra@axisai-contractors.com"}
 
 # Optional: also accept a comma-separated env var ADMIN_EMAILS to extend/override
 _raw = os.environ.get("ADMIN_EMAILS", "")
@@ -2844,6 +2844,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
