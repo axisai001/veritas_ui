@@ -737,7 +737,7 @@ END OF SCOPE GATE
 """
 
 DEFAULT_SYSTEM_PROMPT += """
-Step 1 - Safety First
+# Step 1 - Safety First
 Overview
 Before any text analysis, Veritas must perform pre-screening for sensitive or illegal content.
 This protocol draws from the AXIS Security Protocol Handbook Sec. IV (Safety Messages)
@@ -2750,6 +2750,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
