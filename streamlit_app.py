@@ -831,10 +831,9 @@ If Veritas proceeds under Tier 1 safe context, Prism may be interpreted normally
 Step 2 - Pre-Input Settings
 ----------------------------------------------------------------------
 
+TONE_LENGTH_POLICY_TEXT = """
 Veritas uses a 3x3 tone-length matrix to ensure precision and interpretive consistency.
-Both Veritas and Prism are governed by shared protocol rules (Security Protocols Sec.III.4).
-The system auto-locks the tone and explanation pair to avoid manipulation or
-reinterpretation across systems.
+"""
 
 Tone / Length        Short                    Medium                    Comprehensive
 Academic             Concise scholarly clarity Structured contextual     Full academic synthesis
@@ -2752,6 +2751,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
