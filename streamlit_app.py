@@ -2298,6 +2298,7 @@ try:
     # --- Parse + normalize into the 4-field schema (always) ---
     parsed = parse_veritas_json_or_stop(final_report)
 
+    try:
     # --- v3.2 Compact Schema Validation ---
     parsed = parse_veritas_json_or_stop(final_report)
 
@@ -2333,30 +2334,6 @@ try:
 
 except Exception as e:
     st.error(f"⚠️ Model request failed: {e}")
-    st.stop()
-
-# --- Clean Veritas Output Display (v3.2 Compact Schema) ---
-try:
-    fact = parsed.get("Fact", "")
-    bias = parsed.get("Bias", "")
-    explanation = parsed.get("Explanation", "")
-    revision = parsed.get("Revision", "")
-
-    # Color-coded Bias line
-    bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
-
-    with st.expander("📊 View Analysis Result", expanded=True):
-        st.markdown(f"""
-        **Fact:** {fact}
-
-        **Bias:** {bias_display}
-
-        **Explanation:** {explanation}
-
-        **Revision:** {revision}
-        """)
-except Exception as e:
-    st.error("⚠️ There was an issue retrieving the Veritas report.")
     st.stop()
 
 # Footer caption
@@ -2914,6 +2891,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
