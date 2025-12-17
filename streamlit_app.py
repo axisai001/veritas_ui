@@ -781,6 +781,7 @@ Heuristic Markers:
 II. Prescribed Safety Messages (Tier 2 Trigger Only)
 ----------------------------------------------------------------------
 
+TIER2_POLICY_TEXT = """
 If Tier 2 conditions are met, analysis halts and Veritas outputs only one of the following:
 
 - Self-harm / suicide:
@@ -796,7 +797,9 @@ If Tier 2 conditions are met, analysis halts and Veritas outputs only one of the
 
 - Illegal activities:
   ⚠️ "This text requests instructions or facilitation of illegal acts. Analysis stops here."
+
 (Cited: AXIS Security Protocols Sec. IV.1-4)
+"""
 
 ----------------------------------------------------------------------
 III. Academic / Media Protection Clause
@@ -2749,6 +2752,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
