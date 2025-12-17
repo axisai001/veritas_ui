@@ -1015,68 +1015,6 @@ import re
 import json
 import re
 
-def _salvage_numbered_report_to_json(raw: str) -> dict | None:
-    """
-    Attempts to recover outputs like:
-      1. Fact:
-      2. Bias:
-      3. Explanation:
-      4. Suggested Revision:
-    into the required JSON schema.
-    Returns dict if successful, otherwise None.
-    """
-    t = (raw or "").strip()
-
-    # Fast check: only attempt salvage if it looks like the numbered report
-    if not re.search(r"(?im)^\s*1\.\s*fact\s*:", t):
-        return None
-
-    # Normalize headings a bit
-    # Capture sections between the numbered headers
-    m_fact = re.search(r"(?ims)^\s*1\.\s*fact\s*:\s*(.*?)(?=^\s*2\.\s*bias\s*:|\Z)", t)
-    m_bias = re.search(r"(?ims)^\s*2\.\s*bias\s*:\s*(.*?)(?=^\s*3\.\s*explanation\s*:|\Z)", t)
-    m_expl = re.search(r"(?ims)^\s*3\.\s*explanation\s*:\s*(.*?)(?=^\s*4\.\s*(suggested\s*)?revision\s*:|\Z)", t)
-    m_rev  = re.search(r"(?ims)^\s*4\.\s*(suggested\s*)?revision\s*:\s*(.*)\Z", t)
-
-    if not (m_fact and m_expl):
-        return None
-
-    fact = (m_fact.group(1) or "").strip()
-    bias_block = (m_bias.group(1) if m_bias else "").strip()
-    expl = (m_expl.group(1) or "").strip()
-    rev = (m_rev.group(2) if m_rev else "").strip()
-
-    # Determine Yes/No
-    # If the Bias section contains explicit Yes/No use that, else infer Yes if any content is present.
-    bias_value = None
-    if re.search(r"(?i)\bBias\s*:\s*(Yes|No)\b", t):
-        bias_value = re.search(r"(?i)\bBias\s*:\s*(Yes|No)\b", t).group(1).title()
-    else:
-        bias_value = "Yes" if bias_block else "No"
-
-    # Clean up bullets while preserving meaning
-    def clean_block(s: str) -> str:
-        s = re.sub(r"(?m)^\s*[-•]\s*", "", s).strip()
-        return s
-
-    fact = clean_block(fact)
-    expl = clean_block(expl)
-    rev = clean_block(rev)
-
-    # Enforce "No Revision" rule
-    if bias_value == "No":
-        rev = "No Revision"
-        if not expl:
-            expl = "No bias detected."
-
-    return {
-        "Fact": fact or "",
-        "Bias": bias_value,
-        "Explanation": expl or "",
-        "Revision": rev or ("No Revision" if bias_value == "No" else ""),
-    }
-
-
 def parse_veritas_json_or_stop(raw: str):
     raw = (raw or "").strip()
 
@@ -1090,35 +1028,55 @@ def parse_veritas_json_or_stop(raw: str):
         raw = re.sub(r"^```(json)?\s*", "", raw, flags=re.IGNORECASE).strip()
         raw = re.sub(r"\s*```$", "", raw).strip()
 
-    # 3) Extract JSON object if wrapped
-    if not raw.startswith("{"):
-        start = raw.find("{")
-        end = raw.rfind("}")
-        if start != -1 and end != -1 and end > start:
-            raw = raw[start:end + 1].strip()
-
-    # 4) Parse JSON
+    # 3) Try JSON parse first
     try:
         data = json.loads(raw)
     except Exception:
-        # 4a) Salvage common non-JSON report format into JSON (immediate stabilization)
-        salvaged = _salvage_numbered_report_to_json((raw or "").strip())
-        if salvaged is not None:
-            data = salvaged
-        else:
+        # Attempt salvage of numbered / formatted report
+        salvaged = _salvage_numbered_report_to_json(raw)
+        if salvaged is None:
             st.error("⚠️ Veritas returned a malformed JSON response.")
             st.code(raw)
             st.stop()
+        data = salvaged
 
-    # 5) Validate required keys
+    # 4) Validate required schema keys
     required = {"Fact", "Bias", "Explanation", "Revision"}
-    if not isinstance(data, dict) or not required.issubset(set(data.keys())):
+    if not isinstance(data, dict) or not required.issubset(data.keys()):
         st.error("⚠️ Veritas returned JSON but it did not match the required schema.")
         st.code(json.dumps(data, indent=2, ensure_ascii=False))
         st.stop()
 
-    # 6) Enforce No-Revision rule deterministically
-    if str(data.get("Bias", "")).strip() == "No":
+    # ---------- CLEANUP / NORMALIZATION ----------
+
+    def _strip_field_label(value: str, field_name: str) -> str:
+        value = (value or "").strip()
+
+        # Remove markdown bold (**Field:**)
+        value = re.sub(r"^\*\*+", "", value)
+        value = re.sub(r"\*\*+$", "", value).strip()
+
+        # Remove leading "Field:" labels
+        value = re.sub(
+            rf"(?i)^\s*{re.escape(field_name)}\s*:\s*",
+            "",
+            value
+        ).strip()
+
+        return value
+
+    # Clean each field
+    data["Fact"] = _strip_field_label(str(data.get("Fact", "")), "Fact")
+    data["Bias"] = _strip_field_label(str(data.get("Bias", "")), "Bias")
+    data["Explanation"] = _strip_field_label(str(data.get("Explanation", "")), "Explanation")
+    data["Revision"] = _strip_field_label(str(data.get("Revision", "")), "Revision")
+
+    # Normalize Bias strictly to Yes / No
+    bias_norm = data["Bias"].lower()
+    data["Bias"] = "Yes" if bias_norm.startswith("y") else "No"
+
+    # Enforce No-Revision rule deterministically
+    if data["Bias"] == "No":
         data["Revision"] = "No Revision"
 
     return data
@@ -2894,6 +2852,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
