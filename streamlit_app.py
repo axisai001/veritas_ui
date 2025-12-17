@@ -1092,21 +1092,33 @@ def parse_veritas_json_or_stop(raw: str):
         st.code(json.dumps(data, indent=2, ensure_ascii=False))
         st.stop()
 
-    # ---------- CLEANUP / NORMALIZATION ----------
+        # ---------- CLEANUP / NORMALIZATION ----------
 
     def _strip_field_label(value: str, field_name: str) -> str:
         value = (value or "").strip()
 
-        # Remove markdown bold (**Field:**)
-        value = re.sub(r"^\*\*+", "", value)
-        value = re.sub(r"\*\*+$", "", value).strip()
+        # Remove markdown bold label prefix: **Field:**
+        value = re.sub(
+            rf"(?i)^\s*\*\*\s*{re.escape(field_name)}\s*\*\*\s*:\s*",
+            "",
+            value
+        ).strip()
 
-        # Remove leading "Field:" labels
+        # Remove plain label prefix: Field:
         value = re.sub(
             rf"(?i)^\s*{re.escape(field_name)}\s*:\s*",
             "",
             value
         ).strip()
+
+        # Special-case: model sometimes uses "Suggested Revision:" for Revision
+        if field_name.lower() == "revision":
+            value = re.sub(r"(?i)^\s*\*\*\s*suggested\s+revision\s*\*\*\s*:\s*", "", value).strip()
+            value = re.sub(r"(?i)^\s*suggested\s+revision\s*:\s*", "", value).strip()
+
+        # Strip leftover bold markers at boundaries
+        value = re.sub(r"^\*\*+", "", value).strip()
+        value = re.sub(r"\*\*+$", "", value).strip()
 
         return value
 
@@ -1116,9 +1128,9 @@ def parse_veritas_json_or_stop(raw: str):
     data["Explanation"] = _strip_field_label(str(data.get("Explanation", "")), "Explanation")
     data["Revision"] = _strip_field_label(str(data.get("Revision", "")), "Revision")
 
-    # Normalize Bias strictly to Yes / No
-    bias_norm = data["Bias"].lower()
-    data["Bias"] = "Yes" if bias_norm.startswith("y") else "No"
+    # Normalize Bias strictly to Yes / No (even if extra text remains)
+    m = re.search(r"(?i)\b(yes|no)\b", str(data.get("Bias", "")))
+    data["Bias"] = m.group(1).title() if m else "No"
 
     # Enforce No-Revision rule deterministically
     if data["Bias"] == "No":
@@ -2902,6 +2914,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
