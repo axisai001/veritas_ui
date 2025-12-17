@@ -2298,43 +2298,38 @@ try:
     # --- Parse + normalize into the 4-field schema (always) ---
     parsed = parse_veritas_json_or_stop(final_report)
 
-    try:
     # --- v3.2 Compact Schema Validation ---
-    parsed = parse_veritas_json_or_stop(final_report)
+parsed = parse_veritas_json_or_stop(final_report)
 
-    required_keys = {"Fact", "Bias", "Explanation", "Revision"}
-    if not all(k in parsed for k in required_keys):
-        log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-        st.error("Veritas produced a non-compliant output. Please retry.")
-        st.stop()
-
-    public_id = _gen_public_report_id()
-    internal_id = _gen_internal_report_id()
-    log_analysis(public_id, internal_id, parsed)
-
-    if redteam_flag == 1:
-        _record_test_result(
-            internal_id=internal_id,
-            public_id=public_id,
-            login_id=st.session_state.get("login_id", "unknown"),
-            test_id="manual_redteam",
-            severity="info",
-            detail="Red Team test successfully logged via Veritas analysis.",
-            user_input=final_input,
-            model_output=parsed
-        )
-        st.success("✅ Red Team log recorded successfully.")
-
-    try:
-        prog.progress(100, text="Analysis complete ✓")
-    except Exception:
-        pass
-
-    st.success(f"✅ Report generated — ID: {public_id}")
-
-except Exception as e:
-    st.error(f"⚠️ Model request failed: {e}")
+required_keys = {"Fact", "Bias", "Explanation", "Revision"}
+if not all(k in parsed for k in required_keys):
+    log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
+    st.error("Veritas produced a non-compliant output. Please retry.")
     st.stop()
+
+public_id = _gen_public_report_id()
+internal_id = _gen_internal_report_id()
+log_analysis(public_id, internal_id, parsed)
+
+if redteam_flag == 1:
+    _record_test_result(
+        internal_id=internal_id,
+        public_id=public_id,
+        login_id=st.session_state.get("login_id", "unknown"),
+        test_id="manual_redteam",
+        severity="info",
+        detail="Red Team test successfully logged via Veritas analysis.",
+        user_input=final_input,
+        model_output=parsed
+    )
+    st.success("✅ Red Team log recorded successfully.")
+
+try:
+    prog.progress(100, text="Analysis complete ✓")
+except Exception:
+    pass
+
+st.success(f"✅ Report generated — ID: {public_id}")
 
 # Footer caption
 st.caption("Paste text or upload a document, then click **Engage Veritas**.")
@@ -2891,6 +2886,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
