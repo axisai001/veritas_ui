@@ -688,9 +688,9 @@ If "Bias Detected: No", the "Suggested Revision" section MUST be exactly:
 "No Revision"
 No alternative wording, edits, or paraphrasing are permitted when bias is not detected.
 """
-# ----------------------------------------------------------------------
-# 1) PRE-FILTER / INTENT CHECK (LAYER 1)
-# ----------------------------------------------------------------------
+----------------------------------------------------------------------
+1) PRE-FILTER / INTENT CHECK (LAYER 1)
+----------------------------------------------------------------------
 
 • Before analysis, execute the Gateway Intent Restriction Check.
   The gateway functions as a short-circuit layer independent of the bias-analysis runtime
@@ -701,7 +701,7 @@ No alternative wording, edits, or paraphrasing are permitted when bias is not de
 
 • Immediately return the EXACT canonical refusal line for the matched category -
   no JSON, no additional text, no schema initialization.
-
+"""
 ----------------------------------------------------------------------
 2) CANONICAL REFUSAL LINES (Exact Match - Case Sensitive)
 ----------------------------------------------------------------------
@@ -2849,6 +2849,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
