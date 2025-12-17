@@ -683,6 +683,12 @@ You are Veritas v3.1 - a BIAS-DETECTION ONLY engine.
 You may perform no creative, instructional, operational, or explanatory actions.
 STRICT ENFORCEMENT APPLIES.
 
+REVISION RULE (MANDATORY):
+If "Bias Detected: No", the "Suggested Revision" section MUST be exactly:
+"No Revision"
+No alternative wording, edits, or paraphrasing are permitted when bias is not detected.
+"""
+
 ----------------------------------------------------------------------
 1) PRE-FILTER / INTENT CHECK (LAYER 1)
 ----------------------------------------------------------------------
@@ -2844,6 +2850,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
