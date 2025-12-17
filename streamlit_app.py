@@ -1015,6 +1015,51 @@ import re
 import json
 import re
 
+def _salvage_numbered_report_to_json(raw: str) -> dict | None:
+    """
+    Recover non-JSON Veritas outputs like:
+      1. Fact:
+      2. Bias:
+      3. Explanation:
+      4. Suggested Revision:
+    into the required JSON schema.
+    """
+    t = (raw or "").strip()
+
+    # Only attempt salvage if it matches the numbered format
+    if not re.search(r"(?im)^\s*1\.\s*fact\s*:", t):
+        return None
+
+    m_fact = re.search(r"(?ims)^\s*1\.\s*fact\s*:\s*(.*?)(?=^\s*2\.\s*bias\s*:|\Z)", t)
+    m_bias = re.search(r"(?ims)^\s*2\.\s*bias\s*:\s*(.*?)(?=^\s*3\.\s*explanation\s*:|\Z)", t)
+    m_expl = re.search(r"(?ims)^\s*3\.\s*explanation\s*:\s*(.*?)(?=^\s*4\.\s*(suggested\s*)?revision\s*:|\Z)", t)
+    m_rev  = re.search(r"(?ims)^\s*4\.\s*(suggested\s*)?revision\s*:\s*(.*)\Z", t)
+
+    if not m_fact or not m_expl:
+        return None
+
+    def clean(s: str) -> str:
+        return re.sub(r"(?m)^\s*[-•]\s*", "", (s or "")).strip()
+
+    fact = clean(m_fact.group(1))
+    expl = clean(m_expl.group(1))
+    rev  = clean(m_rev.group(2)) if m_rev else ""
+
+    # Determine bias: if section 2 has content => Yes, else No
+    bias_val = "Yes" if (m_bias and clean(m_bias.group(1))) else "No"
+
+    # Enforce No-Revision rule
+    if bias_val == "No":
+        rev = "No Revision"
+        if not expl:
+            expl = "No bias detected."
+
+    return {
+        "Fact": fact,
+        "Bias": bias_val,
+        "Explanation": expl,
+        "Revision": rev,
+    }
 def parse_veritas_json_or_stop(raw: str):
     raw = (raw or "").strip()
 
@@ -2852,6 +2897,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
