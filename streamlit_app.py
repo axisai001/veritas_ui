@@ -2283,6 +2283,10 @@ try:
         ],
     )
 
+except Exception as e:
+    st.error(f"⚠️ Model request failed: {e}")
+    st.stop()
+
 # Progress update (non-fatal)
 try:
     prog.progress(70, text="Processing model response…")
@@ -2883,6 +2887,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
