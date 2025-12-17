@@ -1048,9 +1048,7 @@ def route_refusal_category(prompt: str) -> tuple[str | None, str | None, list[st
                 return category, rid, [pat]
     return None, None, []
 
-DEFAULT_SYSTEM_PROMPT += """
-• All logs are immutable and audited for determinism and refusal consistency.
-"""
+# • All logs are immutable and audited for determinism and refusal consistency.
 
 ----------------------------------------------------------------------
 END OF SCOPE GATE
@@ -2752,6 +2750,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
