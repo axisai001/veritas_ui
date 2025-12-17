@@ -2209,11 +2209,7 @@ try:
         st.stop()
 
     # --- v3.2 Compact Schema Validation ---
-    try:
-        parsed = json.loads(final_report)
-    except Exception:
-        st.error("⚠️ Veritas returned a malformed JSON response.")
-        st.stop()
+    parsed = parse_veritas_json_or_stop(final_report)
 
     required_keys = {"Fact", "Bias", "Explanation", "Revision"}
     if not all(k in parsed for k in required_keys):
@@ -2828,6 +2824,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
