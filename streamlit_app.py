@@ -1156,7 +1156,7 @@ def has_explicit_text_payload(prompt: str) -> bool:
     """
     Detects analyzable content. Passes if either:
     1. A "Text to Analyze:" block exists, OR
-    2. The text appears to be natural-language prose (≥ 10 words, minimal imperatives).
+    # 2. The text appears to be natural-language prose (≥ 10 words, minimal imperatives).
     """
     # Case 1: explicit label still works
     if TTA_RE.search(prompt):
@@ -2750,6 +2750,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
