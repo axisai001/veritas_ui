@@ -1009,6 +1009,49 @@ def _detect_prompt_injection(text: str) -> bool:
             return True
     return False
 
+import json
+import re
+
+def parse_veritas_json_or_stop(raw: str):
+    raw = (raw or "").strip()
+
+    # 1) Refusals / safety stops are NOT JSON
+    if raw.startswith("⚠️") or raw.startswith("🔐") or "analysis stops here" in raw.lower():
+        st.warning(raw)
+        st.stop()
+
+    # 2) Strip markdown code fences if present
+    if raw.startswith("```"):
+        raw = re.sub(r"^```(json)?\s*", "", raw, flags=re.IGNORECASE).strip()
+        raw = re.sub(r"\s*```$", "", raw).strip()
+
+    # 3) Extract JSON object if wrapped in extra text
+    if not raw.startswith("{"):
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            raw = raw[start:end + 1].strip()
+
+    # 4) Parse JSON
+    try:
+        data = json.loads(raw)
+    except Exception:
+        st.error("⚠️ Veritas returned a malformed JSON response.")
+        st.code(raw)
+        st.stop()
+
+    # 5) Validate required schema keys
+    required = {"Fact", "Bias", "Explanation", "Revision"}
+    if not isinstance(data, dict) or not required.issubset(set(data.keys())):
+        st.error("⚠️ Veritas returned JSON but it did not match the required schema.")
+        st.code(json.dumps(data, indent=2, ensure_ascii=False))
+        st.stop()
+
+    # 6) Enforce No-Revision rule (BETA hardening)
+    if str(data.get("Bias", "")).strip() == "No":
+        data["Revision"] = "No Revision"
+
+    return data
 
 # ----------------- Scope Gate: canonical message & intent detection -----------------
 SCOPE_MESSAGE = (
@@ -2785,6 +2828,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
