@@ -733,13 +733,43 @@ SCOPE_GATE_POLICY_TEXT = """
 END OF SCOPE GATE
 ----------------------------------------------------------------------
 """
+
+# Reference-only note (kept as comment; not executable)
 # If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
+
+
+# ===== Tier-2 Safety Messages (Reference / Reuse) =====
+TIER2_POLICY_TEXT = """
+If Tier 2 conditions are met, analysis halts and Veritas outputs only one of the following:
+
+- Self-harm / suicide:
+  ⚠️ "If you are in crisis or thinking about suicide, please call or text 988 to connect
+  with the Suicide and Crisis Lifeline, or seek help from a qualified professional immediately.
+  Per Safety Rule, analysis stops here."
+
+- Violence / terrorism:
+  ⚠️ "This text contains a credible threat. For safety and legal compliance, analysis stops here."
+
+- Child exploitation:
+  ⚠️ "This text references illegal child exploitation material. Analysis stops here."
+
+- Illegal activities:
+  ⚠️ "This text requests instructions or facilitation of illegal acts. Analysis stops here."
+
+(Cited: AXIS Security Protocols Sec. IV.1-4)
 """
 
-DEFAULT_SYSTEM_PROMPT += """
-# Step 1 - Safety First
+# ===== Tone-Length Policy (Reference / Reuse) =====
+TONE_LENGTH_POLICY_TEXT = """
+Veritas uses a 3x3 tone-length matrix to ensure precision and interpretive consistency.
+"""
+
+# ===== Append narrative policy to DEFAULT_SYSTEM_PROMPT (text-only; no Python assignments inside) =====
+DEFAULT_SYSTEM_PROMPT += (
+    """
+Step 1 - Safety First
 Overview
-# Before any text analysis, Veritas must perform pre-screening for sensitive or illegal content.
+Before any text analysis, Veritas must perform pre-screening for sensitive or illegal content.
 This protocol draws from the AXIS Security Protocol Handbook Sec. IV (Safety Messages)
 and is mandatory for all deployments.
 
@@ -780,27 +810,9 @@ Heuristic Markers:
 ----------------------------------------------------------------------
 II. Prescribed Safety Messages (Tier 2 Trigger Only)
 ----------------------------------------------------------------------
-
-TIER2_POLICY_TEXT = """
-If Tier 2 conditions are met, analysis halts and Veritas outputs only one of the following:
-
-- Self-harm / suicide:
-  ⚠️ "If you are in crisis or thinking about suicide, please call or text 988 to connect
-  with the Suicide and Crisis Lifeline, or seek help from a qualified professional immediately.
-  Per Safety Rule, analysis stops here."
-
-- Violence / terrorism:
-  ⚠️ "This text contains a credible threat. For safety and legal compliance, analysis stops here."
-
-- Child exploitation:
-  ⚠️ "This text references illegal child exploitation material. Analysis stops here."
-
-- Illegal activities:
-  ⚠️ "This text requests instructions or facilitation of illegal acts. Analysis stops here."
-
-(Cited: AXIS Security Protocols Sec. IV.1-4)
 """
-
+    + TIER2_POLICY_TEXT
+    + """
 ----------------------------------------------------------------------
 III. Academic / Media Protection Clause
 ----------------------------------------------------------------------
@@ -830,11 +842,9 @@ If Veritas proceeds under Tier 1 safe context, Prism may be interpreted normally
 ----------------------------------------------------------------------
 Step 2 - Pre-Input Settings
 ----------------------------------------------------------------------
-
-TONE_LENGTH_POLICY_TEXT = """
-Veritas uses a 3x3 tone-length matrix to ensure precision and interpretive consistency.
 """
-
+    + TONE_LENGTH_POLICY_TEXT
+    + """
 Tone / Length        Short                    Medium                    Comprehensive
 Academic             Concise scholarly clarity Structured contextual     Full academic synthesis
                                             analysis                    with citations
@@ -892,6 +902,9 @@ Example mappings:
 - Visual/Representation Bias -> Cultural Bias
 - False Balance -> Media Bias
 """
+)
+
+
 # ===== Veritas Local Safety Enforcement (Tier 1 & Tier 2) =====
 def _run_safety_precheck(user_text: str) -> str | None:
     """
@@ -967,6 +980,7 @@ def _run_safety_precheck(user_text: str) -> str | None:
     # Default: no Tier 2 trigger detected → proceed normally
     return None
 
+
 # --- Prompt Injection / Disclosure Detection (AXIS Security §IV.7) ---
 def _detect_prompt_injection(text: str) -> bool:
     """
@@ -984,6 +998,8 @@ def _detect_prompt_injection(text: str) -> bool:
         if re.search(pattern, lowered):
             return True
     return False
+
+
 # ----------------- Scope Gate: canonical message & intent detection -----------------
 SCOPE_MESSAGE = (
     "**Out of scope:** Veritas only analyzes supplied text for bias and related issues. "
@@ -1010,31 +1026,42 @@ REFUSAL_TEMPLATES = {
 # ===== Imperative pre-filter =====
 IMPERATIVE_RE = re.compile(
     r"^\s*(write|create|compose|design|prepare|outline|act\s+as|provide|show|display|give|explain\s+how\s+to|list)\b",
-    re.IGNORECASE
+    re.IGNORECASE,
 )
 
 # ===== Deterministic refusal router =====
 ROUTING_RULES = [
     # Prefer Security first
-    ("security",  "R-S-001", [
-        r"\b(api(\s*|[-_])?(key|token)|access(\s*|[-_])?token|password|secret\s*key|private\s*key|credentials?)\b",
-        r"\b(environment\s*(variables?|vars?)|env\s*vars?|secrets?\s*manager|key\s*vault|keystore)\b",
-        r"\b(store|retrieve|read|load|export|expose|leak|get|obtain|provide|reveal|share|show)\b.*\b(access|api|secret|private|token|credential|key|password)\b",
-        r"\b(production|prod)\s*(config|configuration|secrets?)\b",
-    ]),
-
+    (
+        "security",
+        "R-S-001",
+        [
+            r"\b(api(\s*|[-_])?(key|token)|access(\s*|[-_])?token|password|secret\s*key|private\s*key|credentials?)\b",
+            r"\b(environment\s*(variables?|vars?)|env\s*vars?|secrets?\s*manager|key\s*vault|keystore)\b",
+            r"\b(store|retrieve|read|load|export|expose|leak|get|obtain|provide|reveal|share|show)\b.*\b(access|api|secret|private|token|credential|key|password)\b",
+            r"\b(production|prod)\s*(config|configuration|secrets?)\b",
+        ],
+    ),
     # Then Protected (internal prompts/config/rules)
-    ("protected", "R-P-001", [
-        r"\b(system[-\s]*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters?|rules?))\b",
-        r"\b(hidden|private|secret)\s+(rules?|tokens?|instructions?|list|logic|configuration|setup|schema)\b",
-        r"\b(decision\s*tree|verification\s*rules?|detection\s*rules?|prompt[-\s]*injection|safety\s*overrides?)\b",
-    ]),
-
+    (
+        "protected",
+        "R-P-001",
+        [
+            r"\b(system[-\s]*prompt|internal\s*(prompt|schema|configuration|setup|templates?|details?|parameters?|rules?))\b",
+            r"\b(hidden|private|secret)\s+(rules?|tokens?|instructions?|list|logic|configuration|setup|schema)\b",
+            r"\b(decision\s*tree|verification\s*rules?|detection\s*rules?|prompt[-\s]*injection|safety\s*overrides?)\b",
+        ],
+    ),
     # Finally Out-of-Scope (general generative imperatives)
-    ("out_of_scope", "R-O-002", [
-        r"\b(write|create|act\s+as|design|compose|prepare|outline|generate|draft|plan|explain\s+how\s+to|list)\b",
-    ]),
+    (
+        "out_of_scope",
+        "R-O-002",
+        [
+            r"\b(write|create|act\s+as|design|compose|prepare|outline|generate|draft|plan|explain\s+how\s+to|list)\b",
+        ],
+    ),
 ]
+
 
 def route_refusal_category(prompt: str) -> tuple[str | None, str | None, list[str]]:
     """
@@ -1048,15 +1075,13 @@ def route_refusal_category(prompt: str) -> tuple[str | None, str | None, list[st
                 return category, rid, [pat]
     return None, None, []
 
+
+# ===== Reference-only footer (do not leave raw divider lines) =====
 # • All logs are immutable and audited for determinism and refusal consistency.
-
-----------------------------------------------------------------------
-END OF SCOPE GATE
-----------------------------------------------------------------------
-"""
-
-If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
-"""
+# ----------------------------------------------------------------------
+# END OF SCOPE GATE
+# ----------------------------------------------------------------------
+# If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
 
 # ===== Deterministic refusal router =====
 ROUTING_RULES = [
@@ -2750,6 +2775,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
