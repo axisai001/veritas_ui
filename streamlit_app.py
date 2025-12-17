@@ -2286,12 +2286,6 @@ try:
     # --- Parse + normalize into the 4-field schema (always) ---
     parsed = parse_veritas_json_or_stop(final_report)
 
-    # --- Render the report from parsed (NOT from final_report) ---
-    st.markdown(f"**Fact:** {parsed['Fact']}")
-    st.markdown(f"**Bias:** {parsed['Bias']}")
-    st.markdown(f"**Explanation:** {parsed['Explanation']}")
-    st.markdown(f"**Revision:** {parsed['Revision']}")
-
     # --- v3.2 Compact Schema Validation ---
     parsed = parse_veritas_json_or_stop(final_report)
 
@@ -2908,6 +2902,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
