@@ -2281,6 +2281,8 @@ try:
         st.error("⚠️ No response returned by Veritas.")
         st.stop()
 
+    parsed = parse_veritas_json_or_stop(final_report)
+
     # --- Parse + normalize into the 4-field schema (always) ---
     parsed = parse_veritas_json_or_stop(final_report)
 
@@ -2906,6 +2908,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
