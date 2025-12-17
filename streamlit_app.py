@@ -1045,10 +1045,8 @@ def _salvage_numbered_report_to_json(raw: str) -> dict | None:
     expl = clean(m_expl.group(1))
     rev  = clean(m_rev.group(2)) if m_rev else ""
 
-    # Determine bias: if section 2 has content => Yes, else No
     bias_val = "Yes" if (m_bias and clean(m_bias.group(1))) else "No"
 
-    # Enforce No-Revision rule
     if bias_val == "No":
         rev = "No Revision"
         if not expl:
@@ -1060,6 +1058,8 @@ def _salvage_numbered_report_to_json(raw: str) -> dict | None:
         "Explanation": expl,
         "Revision": rev,
     }
+
+
 def parse_veritas_json_or_stop(raw: str):
     raw = (raw or "").strip()
 
@@ -2897,6 +2897,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
