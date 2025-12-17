@@ -733,7 +733,7 @@ SCOPE_GATE_POLICY_TEXT = """
 END OF SCOPE GATE
 ----------------------------------------------------------------------
 """
-If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
+# If any rule cannot be executed exactly as written, return the Out-of-Scope canonical refusal line and terminate analysis.
 """
 
 DEFAULT_SYSTEM_PROMPT += """
@@ -2750,6 +2750,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
