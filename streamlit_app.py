@@ -2283,15 +2283,17 @@ try:
         ],
     )
 
-    try:
-        prog.progress(70, text="Processing model response…")
-    except Exception:
-        pass
+# Progress update (non-fatal)
+try:
+    prog.progress(70, text="Processing model response…")
+except Exception:
+    pass
 
-    final_report = (resp.choices[0].message.content or "").strip()
-    if not final_report:
-        st.error("⚠️ No response returned by Veritas.")
-        st.stop()
+# Get model output
+final_report = (resp.choices[0].message.content or "").strip()
+if not final_report:
+    st.error("⚠️ No response returned by Veritas.")
+    st.stop()
 
 # --- v3.2 Compact Schema Validation ---
 parsed = parse_veritas_json_or_stop(final_report)
@@ -2881,6 +2883,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
