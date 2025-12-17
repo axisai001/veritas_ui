@@ -1089,14 +1089,14 @@ def render_refusal(category: str, routing_rule_id: str, triggers: list[str]):
     except Exception:
         pass
 
-    html_block = f"""
-    <div style='background-color:#0b1e2a;border:2px solid #FF4C4C;
-                padding:1rem;border-radius:10px;color:#e6f1f5;'>
-        <strong>{msg}</strong><br><br>
-        <small><b>Refusal ID:</b> {routing_rule_id}&nbsp;&nbsp;|&nbsp;&nbsp;
-               <b>Category:</b> {category}</small>
-    </div>
-    """
+    html_block = (
+        "<div style=\"background-color:#0b1e2a;border:2px solid #FF4C4C;"
+        "padding:1rem;border-radius:10px;color:#e6f1f5;\">"
+        f"<strong>{msg}</strong><br><br>"
+        f"<small><b>Refusal ID:</b> {routing_rule_id}&nbsp;&nbsp;|&nbsp;&nbsp;"
+        f"<b>Category:</b> {category}</small>"
+        "</div>"
+    )
 
     st.markdown(html_block, unsafe_allow_html=True)
     st.stop()
@@ -2750,6 +2750,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
