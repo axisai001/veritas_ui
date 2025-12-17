@@ -730,6 +730,16 @@ SCOPE_GATE_POLICY_TEXT = """
   Stop immediately; no analysis and no user-visible metadata logging.
 
 ----------------------------------------------------------------------
+Step 4 - Nothing Flagged Rule (JSON Mode)
+----------------------------------------------------------------------
+
+If no bias is detected:
+- Output must still be VALID JSON using the required schema keys.
+- Set "Bias" to "No".
+- Set "Revision" to exactly "No Revision".
+- Do not output any text outside the JSON object.
+
+----------------------------------------------------------------------
 END OF SCOPE GATE
 ----------------------------------------------------------------------
 """
@@ -2775,6 +2785,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
