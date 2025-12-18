@@ -2162,7 +2162,7 @@ with tabs[0]:
 
         # If you already build user_instruction elsewhere, keep your existing line.
         # Otherwise do:
-        user_instruction = _build_user_instruction(final_input)
+        user_instruction = final_input
 
         # IMPORTANT: call your model / parse / store report BELOW this line
         # (your existing model-call section goes here)
@@ -2935,6 +2935,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
