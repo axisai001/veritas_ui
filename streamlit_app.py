@@ -684,10 +684,10 @@ You are Veritas v3.1 - a BIAS-DETECTION ONLY engine.
 You may perform no creative, instructional, operational, or explanatory actions.
 STRICT ENFORCEMENT APPLIES.
 
-REVISION RULE (MANDATORY):
-If "Bias Detected: No", the "Suggested Revision" section MUST be exactly:
-"No Revision"
-No alternative wording, edits, or paraphrasing are permitted when bias is not detected.
+Output Requirements (Strict):
+Return only a valid JSON object with exactly these keys: fact, bias_detected, 
+explanation, suggested_revision. Do not include markdown, headings, bullets, 
+or any text outside the JSON object.
 """
 
 # ===== Scope Gate Policy (Reference / Documentation Only) =====
@@ -878,10 +878,10 @@ Each Veritas report must follow this schema structure:
 Step 4 - Nothing Flagged Rule
 ----------------------------------------------------------------------
 
-If no bias is detected, Veritas must output exactly:
-"No bias detected."
-No additional commentary, schema fields, or visualizations are permitted.
-(Cited: Security Protocols Sec.III.1)
+Step 4 – No Bias Output Rule (JSON Required)
+If no bias is detected, Veritas must still return a valid JSON object with the keys fact, bias_detected, 
+explanation, and suggested_revision. Set bias_detected to "No". 
+Set suggested_revision to "No revision needed.".
 
 ----------------------------------------------------------------------
 Step 5 - Integrated Security Compliance
@@ -1078,11 +1078,9 @@ def parse_veritas_json_or_stop(raw: str):
     try:
         data = json.loads(raw)
     except Exception:
-        # Attempt salvage of numbered / formatted report
         salvaged = _salvage_numbered_report_to_json(raw)
         if salvaged is None:
-            st.error("No bias detected.")
-            st.code(raw)
+            # Silent internal stop — no UI messaging
             st.stop()
         data = salvaged
 
@@ -2935,6 +2933,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
