@@ -2401,16 +2401,31 @@ if not final_report:
     st.error("⚠️ No response returned by Veritas.")
     st.stop()
 
-# --- Canonical Schema Validation ---
+# --- Render Veritas Analysis Result ---
 parsed = parse_veritas_json_or_stop(final_report)
 
-st.code(parsed)
-st.stop()
+fact = (parsed.get("fact") or "").strip()
+bias = (parsed.get("bias") or "No").strip()
+explanation = (parsed.get("explanation") or "").strip()
+revision = (parsed.get("revision") or "").strip()
 
-required_keys = {"fact", "bias", "explanation", "revision"}
-if not all(k in parsed for k in required_keys):
-    log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-    st.stop()  # silent per your production preference
+# Fact
+if fact:
+    st.markdown(f"**Fact:** {fact}")
+
+# Bias with indicator
+if bias == "Yes":
+    st.markdown("**Bias:** 🔴 Yes")
+else:
+    st.markdown("**Bias:** 🟢 No")
+
+# Explanation (always required by contract)
+if explanation:
+    st.markdown(f"**Explanation:** {explanation}")
+
+# Revision (ONLY when bias is detected)
+if bias == "Yes" and revision:
+    st.markdown(f"**Revision:** {revision}")
 
 public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
@@ -3007,6 +3022,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
