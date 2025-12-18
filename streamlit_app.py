@@ -2158,7 +2158,7 @@ with tabs[0]:
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
         if not final_input:
-            st.error("Please enter some text or upload a document.")
+            st.error
             st.stop()
 
         # If you already build user_instruction elsewhere, keep your existing line.
@@ -2936,6 +2936,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
