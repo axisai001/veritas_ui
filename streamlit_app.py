@@ -2404,6 +2404,9 @@ if not final_report:
 # --- Canonical Schema Validation ---
 parsed = parse_veritas_json_or_stop(final_report)
 
+st.code(parsed)
+st.stop()
+
 required_keys = {"fact", "bias", "explanation", "revision"}
 if not all(k in parsed for k in required_keys):
     log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
@@ -3004,6 +3007,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
