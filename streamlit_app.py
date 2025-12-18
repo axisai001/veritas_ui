@@ -2147,6 +2147,26 @@ with tabs[0]:
         st.session_state["doc_uploader_key"] += 1
         _safe_rerun()
 
+# -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
+if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+    parsed = st.session_state["last_report"]
+    public_id = st.session_state.get("last_report_id", "")
+
+    fact = parsed.get("Fact", "")
+    bias = parsed.get("Bias", "")
+    explanation = parsed.get("Explanation", "")
+    revision = parsed.get("Revision", "")
+
+    bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
+
+    st.success(f"✅ Report generated — ID: {public_id}")
+
+    with st.expander("📊 View Analysis Result", expanded=True):
+        st.markdown(f"**Fact:** {fact}")
+        st.markdown(f"**Bias:** {bias_display}")
+        st.markdown(f"**Explanation:** {explanation}")
+        st.markdown(f"**Revision:** {revision}")
+
 # --- Retrieve user text and uploaded text safely before submit handling ---
 user_text = st.session_state.get("user_input_box", "").strip()
 extracted = st.session_state.get("extracted_text", "")
@@ -2312,6 +2332,10 @@ public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
 log_analysis(public_id, internal_id, parsed)
 
+st.session_state["last_report"] = parsed
+st.session_state["last_report_id"] = public_id
+st.session_state["report_ready"] = True
+
 if redteam_flag == 1:
     _record_test_result(
         internal_id=internal_id,
@@ -2329,8 +2353,6 @@ try:
     prog.progress(100, text="Analysis complete ✓")
 except Exception:
     pass
-
-st.success(f"✅ Report generated — ID: {public_id}")
 
 # --- Clean Veritas Output Display (v3.2 Compact Schema) ---
 fact = parsed.get("Fact", "")
@@ -2901,6 +2923,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
