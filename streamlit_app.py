@@ -47,38 +47,52 @@ import random
 random.seed(42)  # deterministic outcomes across sessions
 
 def _normalize_report_keys(data: dict) -> dict:
-    # bias field
-    bias_val = data.get("bias")
-    if bias_val is None:
-        bias_val = data.get("bias_detected")
+    def pick(*keys, default=None):
+        for k in keys:
+            if k in data and data.get(k) is not None:
+                return data.get(k)
+        return default
 
+    # ---- Bias (accept multiple key names + formats) ----
+    bias_val = pick("bias", "bias_detected", "Bias", "biasDetected", default=None)
+
+    # Normalize bias to "Yes"/"No"
     if isinstance(bias_val, bool):
         bias_val = "Yes" if bias_val else "No"
     elif isinstance(bias_val, str):
-        bias_val = "Yes" if bias_val.strip().lower() in ["yes", "true", "1"] else "No"
+        s = bias_val.strip().lower()
+        if s in ["yes", "true", "1"]:
+            bias_val = "Yes"
+        elif s in ["no", "false", "0"]:
+            bias_val = "No"
+        else:
+            # If it contains "yes"/"no" within a label (e.g., "🟢 No")
+            bias_val = "Yes" if "yes" in s else ("No" if "no" in s else "No")
     else:
         bias_val = "No"
 
-    # revision field
-    revision_val = data.get("revision")
-    if revision_val is None:
-        revision_val = data.get("suggested_revision")
+    # ---- Fact / Explanation ----
+    fact_val = pick("fact", "Fact", default="")
+    expl_val = pick("explanation", "Explanation", default="")
 
-    # normalize core text fields
-    fact_val = str(data.get("fact", "")).strip()
-    expl_val = str(data.get("explanation", "")).strip()
-    rev_val  = "" if revision_val is None else str(revision_val).strip()
+    fact_val = str(fact_val).strip()
+    expl_val = str(expl_val).strip()
 
-    # backfill defaults so UI is never empty
+    # ---- Revision (accept multiple key names) ----
+    revision_val = pick("revision", "suggested_revision", "Revision", "Suggested Revision", default="")
+    rev_val = str(revision_val).strip()
+
+    # ---- Backfill defaults so UI is never empty ----
     if not fact_val:
-        fact_val = "Fact could not be generated for this input."
+        fact_val = "A factual summary could not be generated for this input."
+
     if not expl_val:
-        # If bias is "No", give a neutral explanation; otherwise generic.
         expl_val = (
             "No bias was detected under the current criteria based on the wording and framing of the text."
             if bias_val == "No"
             else "An explanation could not be generated for this input."
         )
+
     if not rev_val:
         rev_val = "No revision needed."
 
@@ -2981,6 +2995,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
