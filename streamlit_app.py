@@ -2149,6 +2149,23 @@ with tabs[0]:
         st.session_state["last_report_id"] = ""
         st.session_state["report_ready"] = False
         _safe_rerun()
+     # -------------------- Engage Veritas: run ONLY on submit --------------------
+    if 'submitted' in locals() and submitted:
+        user_text = st.session_state.get("user_input_box", "").strip()
+        extracted = st.session_state.get("extracted_text", "").strip()
+
+        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+
+        if not final_input:
+            st.error("Please enter some text or upload a document.")
+            st.stop()
+
+        # If you already build user_instruction elsewhere, keep your existing line.
+        # Otherwise do:
+        user_instruction = _build_user_instruction(final_input)
+
+        # IMPORTANT: call your model / parse / store report BELOW this line
+        # (your existing model-call section goes here)
 
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -2206,10 +2223,6 @@ if submitted:
 
     # Build the final input
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-    if not final_input:
-        st.error("Please enter some text or upload a document.")
-        st.stop()
 
     # Progress bar
     prog = st.progress(0)
@@ -2922,6 +2935,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
