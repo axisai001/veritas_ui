@@ -1133,7 +1133,7 @@ def _salvage_numbered_report_to_json(raw: str) -> dict | None:
 def parse_veritas_json_or_stop(raw: str):
     raw = (raw or "").strip()
 
-    # 1) Refusals / safety stops are NOT JSON
+    # 1) Refusals / safety stops
     if raw.startswith("⚠️") or raw.startswith("🔐") or "analysis stops here" in raw.lower():
         st.warning(raw)
         st.stop()
@@ -1143,7 +1143,7 @@ def parse_veritas_json_or_stop(raw: str):
         raw = re.sub(r"^```(json)?\s*", "", raw, flags=re.IGNORECASE).strip()
         raw = re.sub(r"\s*```$", "", raw).strip()
 
-    # 3) Try JSON parse first
+    # 3) Parse JSON
     try:
         data = json.loads(raw)
     except Exception:
@@ -1152,19 +1152,15 @@ def parse_veritas_json_or_stop(raw: str):
             st.stop()
         data = salvaged
 
-    # ✅ Normalize keys BEFORE validation or rendering
+    # 4) Normalize
     data = _normalize_report_keys(data)
 
-    # Canonical schema check (post-normalization)
-    required = ["fact", "bias", "explanation", "revision"]
-    if not all(k in data and str(data[k]).strip() for k in required):
-        st.stop()
-
-    # 4) Validate required schema keys (post-normalization)
+    # 5) Validate
     required = {"fact", "bias", "explanation", "revision"}
     if not isinstance(data, dict) or not required.issubset(data.keys()):
-        st.stop()  # silent fail per production requirements
+        st.stop()
 
+    # ✅ THIS IS THE CRITICAL LINE
     return data
 
         # ---------- CLEANUP / NORMALIZATION ----------
@@ -2405,14 +2401,13 @@ if not final_report:
     st.error("⚠️ No response returned by Veritas.")
     st.stop()
 
-# --- v3.2 Compact Schema Validation ---
+# --- Canonical Schema Validation ---
 parsed = parse_veritas_json_or_stop(final_report)
 
-required_keys = {"Fact", "Bias", "Explanation", "Revision"}
+required_keys = {"fact", "bias", "explanation", "revision"}
 if not all(k in parsed for k in required_keys):
     log_error_event("SCHEMA_MISMATCH", "/analyze", 422, "Non-compliant schema output")
-    st.error("Veritas produced a non-compliant output. Please retry.")
-    st.stop()
+    st.stop()  # silent per your production preference
 
 public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
@@ -3009,6 +3004,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
