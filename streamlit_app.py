@@ -47,12 +47,7 @@ import random
 random.seed(42)  # deterministic outcomes across sessions
 
 def _normalize_report_keys(data: dict) -> dict:
-    """
-    Normalize model output keys so the UI renderer always receives:
-    fact, bias, explanation, revision.
-    """
-
-    # Normalize bias field
+    # bias field
     bias_val = data.get("bias")
     if bias_val is None:
         bias_val = data.get("bias_detected")
@@ -64,19 +59,34 @@ def _normalize_report_keys(data: dict) -> dict:
     else:
         bias_val = "No"
 
-    # Normalize revision field
+    # revision field
     revision_val = data.get("revision")
     if revision_val is None:
         revision_val = data.get("suggested_revision")
 
-    if not revision_val or str(revision_val).strip() == "":
-        revision_val = "No revision needed."
+    # normalize core text fields
+    fact_val = str(data.get("fact", "")).strip()
+    expl_val = str(data.get("explanation", "")).strip()
+    rev_val  = "" if revision_val is None else str(revision_val).strip()
+
+    # backfill defaults so UI is never empty
+    if not fact_val:
+        fact_val = "Fact could not be generated for this input."
+    if not expl_val:
+        # If bias is "No", give a neutral explanation; otherwise generic.
+        expl_val = (
+            "No bias was detected under the current criteria based on the wording and framing of the text."
+            if bias_val == "No"
+            else "An explanation could not be generated for this input."
+        )
+    if not rev_val:
+        rev_val = "No revision needed."
 
     return {
-        "fact": str(data.get("fact", "")).strip(),
+        "fact": fact_val,
         "bias": bias_val,
-        "explanation": str(data.get("explanation", "")).strip(),
-        "revision": str(revision_val).strip(),
+        "explanation": expl_val,
+        "revision": rev_val,
     }
 
 # -------------------------------------------------------------------
@@ -2971,6 +2981,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
