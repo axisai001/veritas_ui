@@ -2159,7 +2159,7 @@ with tabs[0]:
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
         if not final_input:
-            st.error
+            st.error ("Please enter some text or upload a document.")
             st.stop()
 
         # If you already build user_instruction elsewhere, keep your existing line.
@@ -2300,7 +2300,7 @@ if "final_input" not in locals():
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
 if not final_input:
-    st.error
+    st.error ("Please enter some text or upload a document.")
     st.stop()
 
 user_instruction = _build_user_instruction(final_input)
@@ -2937,6 +2937,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
