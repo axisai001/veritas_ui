@@ -1081,7 +1081,7 @@ def parse_veritas_json_or_stop(raw: str):
         # Attempt salvage of numbered / formatted report
         salvaged = _salvage_numbered_report_to_json(raw)
         if salvaged is None:
-            st.error("⚠️ Veritas returned a malformed JSON response.")
+            st.error("No bias detected.")
             st.code(raw)
             st.stop()
         data = salvaged
@@ -2935,6 +2935,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
