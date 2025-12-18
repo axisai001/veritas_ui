@@ -46,6 +46,39 @@ import httpx
 import random
 random.seed(42)  # deterministic outcomes across sessions
 
+def _normalize_report_keys(data: dict) -> dict:
+    """
+    Normalize model output keys so the UI renderer always receives:
+    fact, bias, explanation, revision.
+    """
+
+    # Normalize bias field
+    bias_val = data.get("bias")
+    if bias_val is None:
+        bias_val = data.get("bias_detected")
+
+    if isinstance(bias_val, bool):
+        bias_val = "Yes" if bias_val else "No"
+    elif isinstance(bias_val, str):
+        bias_val = "Yes" if bias_val.strip().lower() in ["yes", "true", "1"] else "No"
+    else:
+        bias_val = "No"
+
+    # Normalize revision field
+    revision_val = data.get("revision")
+    if revision_val is None:
+        revision_val = data.get("suggested_revision")
+
+    if not revision_val or str(revision_val).strip() == "":
+        revision_val = "No revision needed."
+
+    return {
+        "fact": str(data.get("fact", "")).strip(),
+        "bias": bias_val,
+        "explanation": str(data.get("explanation", "")).strip(),
+        "revision": str(revision_val).strip(),
+    }
+
 # -------------------------------------------------------------------
 # Acknowledgment Gate Configuration
 # -------------------------------------------------------------------
@@ -1080,9 +1113,11 @@ def parse_veritas_json_or_stop(raw: str):
     except Exception:
         salvaged = _salvage_numbered_report_to_json(raw)
         if salvaged is None:
-            # Silent internal stop — no UI messaging
             st.stop()
         data = salvaged
+
+    # ✅ Normalize keys BEFORE validation or rendering
+    data = _normalize_report_keys(data)
 
     # 4) Validate required schema keys
     required = {"Fact", "Bias", "Explanation", "Revision"}
@@ -2933,6 +2968,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
