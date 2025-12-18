@@ -2130,14 +2130,14 @@ with tabs[0]:
             f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
             accept_multiple_files=False,
-            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"  # NEW: dynamic key so we can reset on New Analysis
+            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
         )
 
         bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
             submitted = st.form_submit_button("Engage Veritas")
-            with bcol2:
-                new_analysis = st.form_submit_button("Reset Canvas")
+        with bcol2:
+            new_analysis = st.form_submit_button("Reset Canvas")
 
     # NEW: safer reset handler for New Analysis
     if 'new_analysis' in locals() and new_analysis:
@@ -2145,31 +2145,30 @@ with tabs[0]:
         st.session_state["last_reply"] = ""
         st.session_state["history"] = []
         st.session_state["doc_uploader_key"] += 1
+        st.session_state["last_report"] = None
+        st.session_state["last_report_id"] = ""
+        st.session_state["report_ready"] = False
         _safe_rerun()
 
-# -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
-if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-    parsed = st.session_state["last_report"]
-    public_id = st.session_state.get("last_report_id", "")
+    # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
+    if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+        parsed = st.session_state["last_report"]
+        public_id = st.session_state.get("last_report_id", "")
 
-    fact = parsed.get("Fact", "")
-    bias = parsed.get("Bias", "")
-    explanation = parsed.get("Explanation", "")
-    revision = parsed.get("Revision", "")
+        fact = parsed.get("Fact", "")
+        bias = parsed.get("Bias", "")
+        explanation = parsed.get("Explanation", "")
+        revision = parsed.get("Revision", "")
 
-    bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
+        bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
 
-    st.success(f"✅ Report generated — ID: {public_id}")
+        st.success(f"✅ Report generated — ID: {public_id}")
 
-    with st.expander("📊 View Analysis Result", expanded=True):
-        st.markdown(f"**Fact:** {fact}")
-        st.markdown(f"**Bias:** {bias_display}")
-        st.markdown(f"**Explanation:** {explanation}")
-        st.markdown(f"**Revision:** {revision}")
-
-# --- Retrieve user text and uploaded text safely before submit handling ---
-user_text = st.session_state.get("user_input_box", "").strip()
-extracted = st.session_state.get("extracted_text", "")
+        with st.expander("📊 View Analysis Result", expanded=True):
+            st.markdown(f"**Fact:** {fact}")
+            st.markdown(f"**Bias:** {bias_display}")
+            st.markdown(f"**Explanation:** {explanation}")
+            st.markdown(f"**Revision:** {revision}")
 
 # ---------- Build user instruction for model ----------
 def _build_user_instruction(text: str) -> str:
@@ -2923,6 +2922,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
