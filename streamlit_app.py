@@ -2149,6 +2149,7 @@ with tabs[0]:
         st.session_state["last_report_id"] = ""
         st.session_state["report_ready"] = False
         _safe_rerun()
+        
      # -------------------- Engage Veritas: run ONLY on submit --------------------
     if 'submitted' in locals() and submitted:
         user_text = st.session_state.get("user_input_box", "").strip()
@@ -2935,6 +2936,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
