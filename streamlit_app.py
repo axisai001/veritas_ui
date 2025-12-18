@@ -1119,12 +1119,15 @@ def parse_veritas_json_or_stop(raw: str):
     # ✅ Normalize keys BEFORE validation or rendering
     data = _normalize_report_keys(data)
 
-    # 4) Validate required schema keys
-    required = {"Fact", "Bias", "Explanation", "Revision"}
-    if not isinstance(data, dict) or not required.issubset(data.keys()):
-        st.error("⚠️ Veritas returned JSON but it did not match the required schema.")
-        st.code(json.dumps(data, indent=2, ensure_ascii=False))
+    # Canonical schema check (post-normalization)
+    required = ["fact", "bias", "explanation", "revision"]
+    if not all(k in data and str(data[k]).strip() for k in required):
         st.stop()
+
+    # 4) Validate required schema keys (post-normalization)
+    required = {"fact", "bias", "explanation", "revision"}
+    if not isinstance(data, dict) or not required.issubset(data.keys()):
+        st.stop()  # silent fail per production requirements
 
         # ---------- CLEANUP / NORMALIZATION ----------
 
@@ -2968,6 +2971,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
