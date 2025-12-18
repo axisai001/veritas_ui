@@ -93,8 +93,12 @@ def _normalize_report_keys(data: dict) -> dict:
             else "An explanation could not be generated for this input."
         )
 
-    if not rev_val:
-        rev_val = "No revision needed."
+    # Enforce revision rules:
+    # - Only provide revision when bias is detected
+    if bias_val == "No":
+        rev_val = ""
+    elif bias_val == "Yes" and not rev_val:
+        rev_val = "Revision could not be generated for this input."
 
     return {
         "fact": fact_val,
@@ -741,10 +745,19 @@ You are Veritas v3.1 - a BIAS-DETECTION ONLY engine.
 You may perform no creative, instructional, operational, or explanatory actions.
 STRICT ENFORCEMENT APPLIES.
 
-Output Requirements (Strict):
-Return only a valid JSON object with exactly these keys: fact, bias_detected, 
-explanation, suggested_revision. Do not include markdown, headings, bullets, 
-or any text outside the JSON object.
+Return ONLY valid JSON with exactly these keys:
+fact, bias_detected, explanation, suggested_revision.
+
+Rules:
+- fact: one sentence stating a factual summary of the input text.
+- bias_detected: "Yes" or "No" only.
+- explanation:
+  - If bias_detected is "Yes": explain why it was flagged as bias.
+  - If bias_detected is "No": explain why the text does not reflect bias under current criteria.
+- suggested_revision:
+  - If bias_detected is "Yes": provide a revised version that preserves intent while reducing bias.
+  - If bias_detected is "No": return an empty string "".
+Do not include any other keys or any text outside the JSON object.
 """
 
 # ===== Scope Gate Policy (Reference / Documentation Only) =====
@@ -1117,7 +1130,6 @@ def _salvage_numbered_report_to_json(raw: str) -> dict | None:
         "Revision": rev,
     }
 
-
 def parse_veritas_json_or_stop(raw: str):
     raw = (raw or "").strip()
 
@@ -1152,6 +1164,8 @@ def parse_veritas_json_or_stop(raw: str):
     required = {"fact", "bias", "explanation", "revision"}
     if not isinstance(data, dict) or not required.issubset(data.keys()):
         st.stop()  # silent fail per production requirements
+
+    return data
 
         # ---------- CLEANUP / NORMALIZATION ----------
 
@@ -2995,6 +3009,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
