@@ -2477,19 +2477,21 @@ if bias == "Yes" and revision:
 doc.build(story)
 pdf_buffer.seek(0)
 
+# ✅ DEFINE filename BEFORE using it
+pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
+
 # ✅ Download Report button (PDF)
-if pdf_buffer is not None:
-    st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
+st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
 
-    st.download_button(
-        label="Download Report (PDF)",
-        data=pdf_buffer,
-        file_name=pdf_filename,
-        mime="application/pdf",
-        use_container_width=True,
-    )
+st.download_button(
+    label="Download Report (PDF)",
+    data=pdf_buffer,
+    file_name=pdf_filename,
+    mime="application/pdf",
+    use_container_width=True,
+)
 
-    st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Render report content ---
 has_report_content = bool(fact or explanation or (bias == "Yes" and revision))
@@ -3102,6 +3104,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
