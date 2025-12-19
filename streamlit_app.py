@@ -2480,34 +2480,41 @@ pdf_buffer.seek(0)
 # ✅ DEFINE filename BEFORE using it
 pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
 
-# ✅ Download Report button (PDF)
+# ✅ Download Report button (PDF) — render only if PDF actually has bytes
 pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
 
-st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
+pdf_bytes = pdf_buffer.getvalue() if pdf_buffer is not None else b""
+if pdf_bytes:
+    st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
 
-st.download_button(
-    label="Download Report (PDF)",
-    data=pdf_buffer,
-    file_name=pdf_filename,
-    mime="application/pdf",
-    use_container_width=True,
-)
+    st.download_button(
+        label="Download Report (PDF)",
+        data=pdf_bytes,
+        file_name=pdf_filename,
+        mime="application/pdf",
+        use_container_width=True,
+    )
 
-st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Render report content ---
-has_report_content = bool(fact or explanation or (bias == "Yes" and revision))
+has_report_content = bool(
+    (fact and fact.strip())
+    or (explanation and explanation.strip())
+    or (bias == "Yes" and revision and revision.strip())
+)
 
 if has_report_content:
     st.markdown('<div class="veritas-report-box">', unsafe_allow_html=True)
 
-    if fact:
-        st.markdown(f"**Fact:** {fact}")
-
+    # Always show Bias line so the container is never empty
     if bias == "Yes":
         st.markdown("**Bias:** 🔴 Yes")
     else:
         st.markdown("**Bias:** 🟢 No")
+
+    if fact:
+        st.markdown(f"**Fact:** {fact}")
 
     if explanation:
         st.markdown(f"**Explanation:** {explanation}")
@@ -3106,6 +3113,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
