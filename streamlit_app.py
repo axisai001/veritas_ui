@@ -1830,13 +1830,20 @@ button[kind="primary"], button[kind="secondary"],
   font-weight: 500 !important;
 }}
 
-/* === Veritas Analysis ID === */
-.veritas-id {
-  font-size: 1.3rem;
-  font-weight: 700;
-  margin-bottom: 0.75rem;
-  color: #FFB26B;
-}
+st.markdown(
+    """
+    <style>
+    /* === Veritas Analysis ID === */
+    .veritas-id {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #FFB26B;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 .stForm button[type="submit"],
 .stForm [data-testid="baseButton-primary"],
@@ -3051,6 +3058,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
