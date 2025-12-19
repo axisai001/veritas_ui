@@ -2478,37 +2478,40 @@ doc.build(story)
 pdf_buffer.seek(0)
 
 # ✅ Download Report button (PDF)
-pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
-st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
+if pdf_buffer is not None:
+    st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
 
-st.download_button(
-    label="Download Report (PDF)",
-    data=pdf_buffer,
-    file_name=pdf_filename,
-    mime="application/pdf",
-    use_container_width=True,
-)
+    st.download_button(
+        label="Download Report (PDF)",
+        data=pdf_buffer,
+        file_name=pdf_filename,
+        mime="application/pdf",
+        use_container_width=True,
+    )
 
-st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Render report content ---
-st.markdown('<div class="veritas-report-box">', unsafe_allow_html=True)
+has_report_content = bool(fact or explanation or (bias == "Yes" and revision))
 
-if fact:
-    st.markdown(f"**Fact:** {fact}")
+if has_report_content:
+    st.markdown('<div class="veritas-report-box">', unsafe_allow_html=True)
 
-if bias == "Yes":
-    st.markdown("**Bias:** 🔴 Yes")
-else:
-    st.markdown("**Bias:** 🟢 No")
+    if fact:
+        st.markdown(f"**Fact:** {fact}")
 
-if explanation:
-    st.markdown(f"**Explanation:** {explanation}")
+    if bias == "Yes":
+        st.markdown("**Bias:** 🔴 Yes")
+    else:
+        st.markdown("**Bias:** 🟢 No")
 
-if bias == "Yes" and revision:
-    st.markdown(f"**Revision:** {revision}")
+    if explanation:
+        st.markdown(f"**Explanation:** {explanation}")
 
-st.markdown('</div>', unsafe_allow_html=True)
+    if bias == "Yes" and revision:
+        st.markdown(f"**Revision:** {revision}")
+
+    st.markdown('</div>', unsafe_allow_html=True)
 
 public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
@@ -3099,6 +3102,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
