@@ -1880,6 +1880,24 @@ button[kind="secondary"],
   color: #FFB26B;
 }}
 
+/* === Veritas Download Button Container === */
+.veritas-download-box {{
+  border: 1.5px solid rgba(255, 140, 50, 0.65);
+  border-radius: 12px;
+  padding: 0.85rem;
+  margin: 0.75rem 0 1.25rem 0;
+  background: rgba(0, 0, 0, 0.22);
+}}
+
+/* === Veritas Report Output Container === */
+.veritas-report-box {{
+  border: 1.5px solid rgba(255, 140, 50, 0.65);
+  border-radius: 12px;
+  padding: 1.25rem 1.4rem;
+  margin-top: 1rem;
+  background: rgba(0, 0, 0, 0.18);
+}}
+
 /* === Hide Streamlit toolbar / badges / deploy === */
 .stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
 .stApp [data-testid="stToolbar"] * {{ display: none !important; }}
@@ -2461,6 +2479,8 @@ pdf_buffer.seek(0)
 
 # ✅ Download Report button (PDF)
 pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
+st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
+
 st.download_button(
     label="Download Report (PDF)",
     data=pdf_buffer,
@@ -2469,7 +2489,11 @@ st.download_button(
     use_container_width=True,
 )
 
+st.markdown('</div>', unsafe_allow_html=True)
+
 # --- Render report content ---
+st.markdown('<div class="veritas-report-box">', unsafe_allow_html=True)
+
 if fact:
     st.markdown(f"**Fact:** {fact}")
 
@@ -2483,6 +2507,8 @@ if explanation:
 
 if bias == "Yes" and revision:
     st.markdown(f"**Revision:** {revision}")
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
@@ -3073,6 +3099,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
