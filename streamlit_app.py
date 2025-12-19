@@ -46,6 +46,13 @@ import httpx
 import random
 random.seed(42)  # deterministic outcomes across sessions
 
+import uuid
+from datetime import datetime, timezone
+
+def _new_veritas_id() -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
+    return f"VER-{ts}-{uuid.uuid4().hex[:8].upper()}"
+
 def _normalize_report_keys(data: dict) -> dict:
     def pick(*keys, default=None):
         for k in keys:
@@ -3066,6 +3073,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
