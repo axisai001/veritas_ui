@@ -1873,67 +1873,18 @@ button[kind="secondary"],
   margin-bottom: 0.75rem;
   color: #FFB26B;
 }}
-</style>
-""", unsafe_allow_html=True)
 
-/* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
+/* === Hide Streamlit toolbar / badges / deploy === */
 .stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
 .stApp [data-testid="stToolbar"] * {{ display: none !important; }}
-
-/* Legacy/aux hooks Streamlit sometimes uses */
 #MainMenu {{ visibility: hidden !important; }}
 footer {{ visibility: hidden !important; }}
-a.viewerBadge_link__1S137 {{ display: none !important; }}
 .stDeployButton, [data-testid="stDeployButton"] {{ display: none !important; }}
-
-/* Hide any “View source on GitHub” style header buttons if present */
 header [data-testid="baseButton-headerNoPadding"],
-header a[href*="github.com"] {{
-  display: none !important;
-}}
+header a[href*="github.com"] {{ display: none !important; }}
+
 </style>
 """, unsafe_allow_html=True)
-
-# ====== Background image injection ======
-def _find_local_bg_file() -> Optional[Path]:
-    for ext in ("svg","png","jpg","jpeg","webp"):
-        p = Path(STATIC_DIR) / f"bg.{ext}"
-        if p.exists():
-            return p
-    for p in Path(STATIC_DIR).glob("bg.*"):
-        if p.suffix.lower().lstrip(".") in ("svg","png","jpg","jpeg","webp"):
-            return p
-    return None
-
-def _inject_bg():
-    try:
-        p = _find_local_bg_file()
-        if p and p.exists():
-            ext = p.suffix.lower().lstrip(".")
-            mime = {"svg":"image/svg+xml","png":"image/png","jpg":"image/jpeg","jpeg":"image/jpeg","webp":"image/webp"}.get(ext, "application/octet-stream")
-            b64 = base64.b64encode(p.read_bytes()).decode("ascii")
-            st.markdown(f"""
-            <style>
-            .stApp {{
-                background: url("data:{mime};base64,{b64}") no-repeat center center fixed;
-                background-size: cover;
-            }}
-            </style>
-            """, unsafe_allow_html=True)
-        elif BG_URL:
-            safe_url = BG_URL.replace('"','%22')
-            st.markdown(f"""
-            <style>
-            .stApp {{
-                background: url("{safe_url}") no-repeat center center fixed;
-                background-size: cover;
-            }}
-            </style>
-            """, unsafe_allow_html=True)
-    except Exception:
-        pass
-
-_inject_bg()
 
 # -------------------------------------------------------------------
 # Acknowledgment Gate
@@ -3063,6 +3014,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
