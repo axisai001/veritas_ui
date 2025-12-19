@@ -1813,14 +1813,25 @@ ACCENT = "#E97C25"
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-html, body, [class*="css"] {{ font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }}
-.block-container {{ padding-top: 2.75rem !important; padding-bottom: 64px !important; }}
 
-/* Buttons */
-div.stButton > button, .stDownloadButton button, .stForm [type="submit"],
+html, body, [class*="css"] {{
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}}
+
+.block-container {{
+  padding-top: 2.75rem !important;
+  padding-bottom: 64px !important;
+}}
+
+/* === Buttons (global) === */
+div.stButton > button,
+.stDownloadButton button,
+.stForm [type="submit"],
 [data-testid="stFileUploader"] section div div span button,
-button[kind="primary"], button[kind="secondary"],
-[data-testid="baseButton-secondary"], [data-testid="baseButton-primary"] {{
+button[kind="primary"],
+button[kind="secondary"],
+[data-testid="baseButton-secondary"],
+[data-testid="baseButton-primary"] {{
   background-color: {PRIMARY} !important;
   color: #111418 !important;
   border: 1px solid {PRIMARY} !important;
@@ -1831,6 +1842,30 @@ button[kind="primary"], button[kind="secondary"],
   font-weight: 500 !important;
 }}
 
+/* === Veritas Action Buttons === */
+.stForm button[type="submit"] {{
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow: visible !important;
+  min-width: 180px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}}
+
+.stForm button[type="submit"]:first-child {{
+  background: linear-gradient(90deg, #ff8c32, #e97c25) !important;
+  color: #111418 !important;
+}}
+
+.stForm button[type="submit"]:nth-child(2) {{
+  background: rgba(255,255,255,0.08) !important;
+  border: 1px solid rgba(255,255,255,0.25) !important;
+  color: #fff !important;
+}}
+
 /* === Veritas Analysis ID === */
 .veritas-id {{
   font-size: 1.3rem;
@@ -1838,37 +1873,8 @@ button[kind="primary"], button[kind="secondary"],
   margin-bottom: 0.75rem;
   color: #FFB26B;
 }}
-
-.stForm button[type="submit"],
-.stForm [data-testid="baseButton-primary"],
-.stForm [data-testid="baseButton-secondary"] {{
-  white-space: nowrap !important;
-  word-break: normal !important;
-  overflow: visible !important;
-  width: auto !important;
-  min-width: 180px !important;
-  height: auto !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}}
 </style>
 """, unsafe_allow_html=True)
-
-/* === Veritas Action Buttons === */
-.stForm button[type="submit"] {{
-  text-transform: uppercase !important;
-  letter-spacing: 0.5px !important;
-}}
-.stForm button[type="submit"]:first-child {{
-  background: linear-gradient(90deg, #ff8c32, #e97c25) !important;
-  color: #111418 !important;
-}}
-.stForm button[type="submit"]:nth-child(2) {{
-  background: rgba(255,255,255,0.08) !important;
-  border: 1px solid rgba(255,255,255,0.25) !important;
-  color: #fff !important;
-}}
 
 /* --- Hide Streamlit top-right toolbar (⋮), GitHub/viewer badges, and deploy buttons --- */
 .stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
@@ -3057,6 +3063,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
