@@ -2455,12 +2455,6 @@ revision = parsed.get("Revision", "")
 
 bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
 
-with st.expander("📊 View Analysis Result", expanded=True):
-    st.markdown(f"**Fact:** {fact}")
-    st.markdown(f"**Bias:** {bias_display}")
-    st.markdown(f"**Explanation:** {explanation}")
-    st.markdown(f"**Revision:** {revision}")
-
 # Footer caption
 st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
@@ -3016,6 +3010,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
