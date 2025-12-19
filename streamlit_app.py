@@ -1880,7 +1880,7 @@ button[kind="secondary"],
   color: #FFB26B;
 }}
 
-/* === Border/background around the actual Streamlit Download Button block === */
+/* === Border/background around the Streamlit Download Button === */
 div[data-testid="stDownloadButton"] {{
   border: 1.5px solid rgba(255, 140, 50, 0.65) !important;
   border-radius: 12px !important;
@@ -1889,23 +1889,33 @@ div[data-testid="stDownloadButton"] {{
   background: rgba(0, 0, 0, 0.22) !important;
 }}
 
-/* === Veritas Report Output Container (use this only when rendering report as one HTML block) === */
-.veritas-report-box {{
-  border: 1.5px solid rgba(255, 140, 50, 0.65);
-  border-radius: 12px;
-  padding: 1.25rem 1.4rem;
-  margin-top: 1rem;
-  background: rgba(0, 0, 0, 0.18);
+/* === Border/background around Veritas analysis output === */
+div[data-testid="stMarkdownContainer"] {{
+  border: 1.5px solid rgba(255, 140, 50, 0.65) !important;
+  border-radius: 12px !important;
+  padding: 1.25rem 1.4rem !important;
+  margin-top: 1rem !important;
+  background: rgba(0, 0, 0, 0.18) !important;
 }}
 
 /* === Hide Streamlit toolbar / badges / deploy === */
-.stApp [data-testid="stToolbar"] {{ visibility: hidden !important; height: 0 !important; }}
-.stApp [data-testid="stToolbar"] * {{ display: none !important; }}
+.stApp [data-testid="stToolbar"] {{
+  visibility: hidden !important;
+  height: 0 !important;
+}}
+.stApp [data-testid="stToolbar"] * {{
+  display: none !important;
+}}
 #MainMenu {{ visibility: hidden !important; }}
 footer {{ visibility: hidden !important; }}
-.stDeployButton, [data-testid="stDeployButton"] {{ display: none !important; }}
+.stDeployButton,
+[data-testid="stDeployButton"] {{
+  display: none !important;
+}}
 header [data-testid="baseButton-headerNoPadding"],
-header a[href*="github.com"] {{ display: none !important; }}
+header a[href*="github.com"] {{
+  display: none !important;
+}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -3113,6 +3123,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
