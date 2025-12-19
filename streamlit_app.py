@@ -2430,6 +2430,12 @@ bias = (parsed.get("bias") or "No").strip()
 explanation = (parsed.get("explanation") or "").strip()
 revision = (parsed.get("revision") or "").strip()
 
+# ✅ Veritas Analysis ID (display at top of output)
+analysis_id = st.session_state.get("veritas_analysis_id", "").strip()
+if analysis_id:
+    st.markdown(f"**Veritas Analysis ID:** `{analysis_id}`")
+    st.markdown("---")
+
 # Fact
 if fact:
     st.markdown(f"**Fact:** {fact}")
@@ -3037,6 +3043,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
