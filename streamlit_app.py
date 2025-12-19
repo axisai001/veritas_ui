@@ -1809,6 +1809,7 @@ _prune_csv_by_ttl(ACK_CSV, ACK_TTL_DAYS)
 # ====== Global CSS ======
 PRIMARY = "#FF8C32"
 ACCENT = "#E97C25"
+
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
@@ -1830,20 +1831,13 @@ button[kind="primary"], button[kind="secondary"],
   font-weight: 500 !important;
 }}
 
-st.markdown(
-    """
-    <style>
-    /* === Veritas Analysis ID === */
-    .veritas-id {
-      font-size: 1.3rem;
-      font-weight: 700;
-      margin-bottom: 0.75rem;
-      color: #FFB26B;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+/* === Veritas Analysis ID === */
+.veritas-id {{
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+  color: #FFB26B;
+}}
 
 .stForm button[type="submit"],
 .stForm [data-testid="baseButton-primary"],
@@ -1858,6 +1852,8 @@ st.markdown(
   align-items: center !important;
   justify-content: center !important;
 }}
+</style>
+""", unsafe_allow_html=True)
 
 /* === Veritas Action Buttons === */
 .stForm button[type="submit"] {{
@@ -2445,10 +2441,13 @@ bias = (parsed.get("bias") or "No").strip()
 explanation = (parsed.get("explanation") or "").strip()
 revision = (parsed.get("revision") or "").strip()
 
-# ✅ Veritas Analysis ID (display at top of output)
+# ✅ Veritas Analysis ID (display at top of report)
 analysis_id = st.session_state.get("veritas_analysis_id", "").strip()
 if analysis_id:
-    st.markdown(f"**Veritas Analysis ID:** `{analysis_id}`")
+    st.markdown(
+        f'<div class="veritas-id">Veritas Analysis ID: {analysis_id}</div>',
+        unsafe_allow_html=True
+    )
     st.markdown("---")
 
 # Fact
@@ -3058,6 +3057,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
