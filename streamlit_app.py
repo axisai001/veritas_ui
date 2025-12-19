@@ -2407,6 +2407,31 @@ if analysis_id:
     )
     st.markdown("---")
 
+# --- Build downloadable report text ---
+bias_label = "Yes" if bias == "Yes" else "No"
+
+report_lines = []
+if analysis_id:
+    report_lines.append(f"Veritas Analysis ID: {analysis_id}")
+report_lines.append(f"Fact: {fact}")
+report_lines.append(f"Bias: {bias_label}")
+report_lines.append(f"Explanation: {explanation}")
+if bias == "Yes" and revision:
+    report_lines.append(f"Revision: {revision}")
+
+report_text = "\n\n".join(report_lines).strip()
+
+# ✅ Download Report button (appears under ID)
+filename = f"veritas_report_{analysis_id or 'analysis'}.txt".replace(":", "-")
+st.download_button(
+    label="Download Report",
+    data=report_text,
+    file_name=filename,
+    mime="text/plain",
+    use_container_width=True,
+)
+
+# --- Render report content ---
 # Fact
 if fact:
     st.markdown(f"**Fact:** {fact}")
@@ -3014,6 +3039,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
