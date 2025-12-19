@@ -2481,6 +2481,8 @@ pdf_buffer.seek(0)
 pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
 
 # ✅ Download Report button (PDF)
+pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
+
 st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
 
 st.download_button(
@@ -3104,6 +3106,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
