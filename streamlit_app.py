@@ -2264,42 +2264,6 @@ if 'submitted' in locals() and submitted:
 
     # IMPORTANT: call your model / parse / store report BELOW this line
     # (your existing model-call section goes here)
-# -------------------- Engage Veritas: run ONLY on submit --------------------
-if 'submitted' in locals() and submitted:
-    user_text = st.session_state.get("user_input_box", "").strip()
-    extracted = st.session_state.get("extracted_text", "").strip()
-
-    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-    if not final_input:
-        st.stop()
-
-    # ✅ Generate a new Veritas Analysis ID for this run
-    st.session_state["veritas_analysis_id"] = _new_veritas_id()
-
-    # If you already build user_instruction elsewhere, keep your existing line.
-    user_instruction = final_input
-
-    # IMPORTANT: call your model / parse / store report BELOW this line
-    # (your existing model-call section goes here)
-    # -------------------- Engage Veritas: run ONLY on submit --------------------
-    if 'submitted' in locals() and submitted:
-        user_text = st.session_state.get("user_input_box", "").strip()
-        extracted = st.session_state.get("extracted_text", "").strip()
-
-        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-        if not final_input:
-            st.stop()
-
-        # ✅ Generate a new Veritas Analysis ID for this run
-        st.session_state["veritas_analysis_id"] = _new_veritas_id()
-
-        # If you already build user_instruction elsewhere, keep your existing line.
-        user_instruction = final_input
-
-        # IMPORTANT: call your model / parse / store report BELOW this line
-        # (your existing model-call section goes here)
 
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -3073,6 +3037,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
