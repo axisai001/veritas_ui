@@ -1880,16 +1880,16 @@ button[kind="secondary"],
   color: #FFB26B;
 }}
 
-/* === Veritas Download Button Container === */
-.veritas-download-box {{
-  border: 1.5px solid rgba(255, 140, 50, 0.65);
-  border-radius: 12px;
-  padding: 0.85rem;
-  margin: 0.75rem 0 1.25rem 0;
-  background: rgba(0, 0, 0, 0.22);
+/* === Border/background around the actual Streamlit Download Button block === */
+div[data-testid="stDownloadButton"] {{
+  border: 1.5px solid rgba(255, 140, 50, 0.65) !important;
+  border-radius: 12px !important;
+  padding: 0.85rem !important;
+  margin: 0.75rem 0 1.25rem 0 !important;
+  background: rgba(0, 0, 0, 0.22) !important;
 }}
 
-/* === Veritas Report Output Container === */
+/* === Veritas Report Output Container (use this only when rendering report as one HTML block) === */
 .veritas-report-box {{
   border: 1.5px solid rgba(255, 140, 50, 0.65);
   border-radius: 12px;
@@ -3113,6 +3113,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
