@@ -46,22 +46,6 @@ import httpx
 import random
 random.seed(42)  # deterministic outcomes across sessions
 
-st.markdown(
-    """
-    <style>
-    .veritas-result-box {
-        background-color: rgba(12, 24, 36, 0.85);
-        border: 1px solid #2A7FFF;
-        border-radius: 10px;
-        padding: 1.25rem;
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 def _normalize_report_keys(data: dict) -> dict:
     def pick(*keys, default=None):
         for k in keys:
@@ -3026,6 +3010,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
