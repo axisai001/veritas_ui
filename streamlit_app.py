@@ -27,6 +27,7 @@ import time
 import json
 import base64
 import uuid
+
 import hashlib
 import secrets
 import sqlite3
@@ -35,6 +36,11 @@ from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from collections import deque
 from pathlib import Path
+
+import io
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import LETTER
 
 import pandas as pd
 import streamlit as st
@@ -2407,46 +2413,74 @@ if analysis_id:
     )
     st.markdown("---")
 
-# --- Build downloadable report text ---
-bias_label = "Yes" if bias == "Yes" else "No"
+# --- Build downloadable PDF report ---
+pdf_buffer = io.BytesIO()
+doc = SimpleDocTemplate(
+    pdf_buffer,
+    pagesize=LETTER,
+    rightMargin=36,
+    leftMargin=36,
+    topMargin=36,
+    bottomMargin=36,
+)
 
-report_lines = []
+styles = getSampleStyleSheet()
+story = []
+
+# Title
+story.append(Paragraph("<b>Veritas Bias Analysis Report</b>", styles["Title"]))
+story.append(Spacer(1, 12))
+
+# Analysis ID
 if analysis_id:
-    report_lines.append(f"Veritas Analysis ID: {analysis_id}")
-report_lines.append(f"Fact: {fact}")
-report_lines.append(f"Bias: {bias_label}")
-report_lines.append(f"Explanation: {explanation}")
+    story.append(Paragraph(f"<b>Veritas Analysis ID:</b> {analysis_id}", styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+# Fact
+if fact:
+    story.append(Paragraph(f"<b>Fact:</b> {fact}", styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+# Bias
+bias_label = "Yes" if bias == "Yes" else "No"
+story.append(Paragraph(f"<b>Bias Detected:</b> {bias_label}", styles["Normal"]))
+story.append(Spacer(1, 10))
+
+# Explanation
+if explanation:
+    story.append(Paragraph(f"<b>Explanation:</b> {explanation}", styles["Normal"]))
+    story.append(Spacer(1, 10))
+
+# Revision (ONLY when bias is detected)
 if bias == "Yes" and revision:
-    report_lines.append(f"Revision: {revision}")
+    story.append(Paragraph(f"<b>Suggested Revision:</b> {revision}", styles["Normal"]))
+    story.append(Spacer(1, 10))
 
-report_text = "\n\n".join(report_lines).strip()
+doc.build(story)
+pdf_buffer.seek(0)
 
-# ✅ Download Report button (appears under ID)
-filename = f"veritas_report_{analysis_id or 'analysis'}.txt".replace(":", "-")
+# ✅ Download Report button (PDF)
+pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
 st.download_button(
-    label="Download Report",
-    data=report_text,
-    file_name=filename,
-    mime="text/plain",
+    label="Download Report (PDF)",
+    data=pdf_buffer,
+    file_name=pdf_filename,
+    mime="application/pdf",
     use_container_width=True,
 )
 
 # --- Render report content ---
-# Fact
 if fact:
     st.markdown(f"**Fact:** {fact}")
 
-# Bias with indicator
 if bias == "Yes":
     st.markdown("**Bias:** 🔴 Yes")
 else:
     st.markdown("**Bias:** 🟢 No")
 
-# Explanation (always required by contract)
 if explanation:
     st.markdown(f"**Explanation:** {explanation}")
 
-# Revision (ONLY when bias is detected)
 if bias == "Yes" and revision:
     st.markdown(f"**Revision:** {revision}")
 
@@ -3039,6 +3073,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
