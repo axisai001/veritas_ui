@@ -2160,15 +2160,24 @@ with tabs[0]:
         </div>
         """, unsafe_allow_html=True)
 
+    # Ensure uploader key exists
+    if "doc_uploader_key" not in st.session_state:
+        st.session_state["doc_uploader_key"] = 0
+
+    # Clear text box handler
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
+
+    # Defaults (avoid NameError if something fails early)
+    submitted = False
+    new_analysis = False
 
     with st.form("analysis_form"):
         st.markdown("""
             <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
             <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Bias Detection Tool 
+                Bias Detection Tool
             </p>
         """, unsafe_allow_html=True)
 
@@ -2191,13 +2200,13 @@ with tabs[0]:
         if doc is not None:
             extracted_text = _extract_text_from_upload(doc)
             st.session_state["extracted_text"] = extracted_text
-            st.session_state["uploaded_filename"] = doc.name
+            st.session_state["uploaded_filename"] = getattr(doc, "name", "")
 
             if extracted_text:
-                st.success(f"✅ File loaded: {doc.name} ({len(extracted_text):,} characters extracted)")
+                st.success(f"✅ File loaded: {st.session_state['uploaded_filename']} ({len(extracted_text):,} characters extracted)")
             else:
                 st.warning(
-                    f"⚠️ File selected: {doc.name}, but no text could be extracted. "
+                    f"⚠️ File selected: {st.session_state['uploaded_filename']}, but no text could be extracted. "
                     "If this is a scanned PDF, OCR is required."
                 )
         else:
@@ -2210,8 +2219,8 @@ with tabs[0]:
         with bcol2:
             new_analysis = st.form_submit_button("Reset Canvas")
 
-    # NEW: safer reset handler for New Analysis (must be OUTSIDE the form)
-    if 'new_analysis' in locals() and new_analysis:
+    # Reset handler (must be OUTSIDE the form)
+    if new_analysis:
         st.session_state["_clear_text_box"] = True
         st.session_state["last_reply"] = ""
         st.session_state["history"] = []
@@ -3094,6 +3103,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
