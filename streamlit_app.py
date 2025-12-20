@@ -2370,7 +2370,7 @@ if submitted:
         if not final_report:
             raise RuntimeError("Model call returned empty output. Check your model call block.")
 
-        # 3) PARSE (STRICT JSON + TIMEOUT + DEBUG)
+        # 3) PARSE (STRICT JSON + DOUBLE-DECODE + DEBUG)
         import json
         import time
         import concurrent.futures
@@ -2378,17 +2378,29 @@ if submitted:
         prog.progress(70, text="Parsing response…")
         status.info("Parsing response…")
 
-        # Keep raw output for inspection
         st.session_state["__veritas_last_raw_report__"] = final_report
 
-        def _strict_parse(raw: str):
-            return json.loads(raw)
+        def _parse_json_robust(raw: str):
+            obj = json.loads(raw)
+
+            # If the model returned JSON as a quoted string (double-encoded), decode again
+            if isinstance(obj, str):
+                s = obj.strip()
+                if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
+                    obj2 = json.loads(s)
+                    obj = obj2
+
+            # Guarantee dict/list for downstream rendering
+            if not isinstance(obj, (dict, list)):
+                obj = {"raw": obj}
+
+            return obj
 
         t0 = time.time()
         try:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(_strict_parse, final_report)
-                parsed = future.result(timeout=5)  # prevents freezing
+                future = ex.submit(_parse_json_robust, final_report)
+                parsed = future.result(timeout=5)
         except concurrent.futures.TimeoutError:
             status.error("Parsing timed out. Raw model output shown below.")
             with st.expander("Debug: Raw model output (preview)", expanded=True):
@@ -3260,6 +3272,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
