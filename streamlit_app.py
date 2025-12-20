@@ -2323,92 +2323,45 @@ if submitted:
             status.warning("Please enter text or upload a document.")
             st.stop()
 
-        # 2) MODEL CALL
+        # 2) MODEL CALL (FORCE CHAT COMPLETIONS JSON)
+        import json
+        import time
+
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
         final_report = ""
 
         try:
-            if hasattr(client, "responses") and hasattr(client.responses, "create"):
-                resp = client.responses.create(
-                    model=MODEL_NAME,
-                    input=[
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": final_input},
-                    ],
-                    temperature=0.2,
-                    response_format={"type": "json_object"},
-                )
-                # Robustly extract text from Responses API
-                final_report = (getattr(resp, "output_text", None) or "").strip()
-
-                # If output_text is empty, fall back to a JSON serialization of the full response
-                if not final_report:
-                    try:
-                        # Newer SDKs
-                        final_report = json.dumps(resp.model_dump(), ensure_ascii=False)
-                    except Exception:
-                        # Older SDKs / objects
-                        final_report = json.dumps(resp, default=str, ensure_ascii=False)
-
-            elif (
-                hasattr(client, "chat")
-                and hasattr(client.chat, "completions")
-                and hasattr(client.chat.completions, "create")
-            ):
-                resp = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": final_input},
-                    ],
-                    temperature=0.2,
-                )
-                final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "")
-
-            else:
-                raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+            # Use Chat Completions as the canonical path (most predictable JSON string)
+            resp = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": final_input},
+                ],
+                temperature=0.2,
+                response_format={"type": "json_object"},
+            )
+            final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
 
         except Exception as model_exc:
             status.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
             raise
 
-        final_report = final_report.strip()
         if not final_report:
-            raise RuntimeError("Model call returned empty output. Check your model call block.")
+            raise RuntimeError("Model call returned empty output.")
 
-        # 3) PARSE (STRICT JSON + DOUBLE-DECODE + DEBUG)
-        import json
-        import time
-        import concurrent.futures
+        # Save raw output for inspection every time
+        st.session_state["__veritas_last_raw_report__"] = final_report
 
+        # 3) PARSE (STRICT)
         prog.progress(70, text="Parsing response…")
         status.info("Parsing response…")
 
-        st.session_state["__veritas_last_raw_report__"] = final_report
-
-        def _parse_json_robust(raw: str):
-            obj = json.loads(raw)
-            if isinstance(obj, str):
-                s = obj.strip()
-                if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
-                    obj = json.loads(s)
-            if not isinstance(obj, (dict, list)):
-                obj = {"raw": obj}
-            return obj
-
         t0 = time.time()
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(_parse_json_robust, final_report)
-                parsed = future.result(timeout=5)
-        except concurrent.futures.TimeoutError:
-            status.error("Parsing timed out. Raw model output shown below.")
-            with st.expander("Debug: Raw model output (preview)", expanded=True):
-                st.write("Length:", len(final_report))
-                st.code(final_report[:8000])
-            raise RuntimeError("Parsing timed out.")
+            parsed = json.loads(final_report)
         except Exception as parse_exc:
             status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
             with st.expander("Debug: Raw model output (preview)", expanded=True):
@@ -2418,7 +2371,39 @@ if submitted:
         finally:
             st.write("DEBUG parse seconds:", round(time.time() - t0, 3))
 
+        # HARD VALIDATION BEFORE NORMALIZATION (prevents raw_value: null)
+        if parsed is None:
+            status.error("Parsed JSON is null. The model did not return a JSON object.")
+            with st.expander("Debug: Raw model output (preview)", expanded=True):
+                st.write("Length:", len(final_report))
+                st.code(final_report[:8000])
+            raise RuntimeError("Model returned JSON null.")
+
+        if not isinstance(parsed, dict):
+            status.error(f"Parsed JSON is not an object (got {type(parsed).__name__}).")
+            with st.expander("Debug: Raw model output (preview)", expanded=True):
+                st.write("Length:", len(final_report))
+                st.code(final_report[:8000])
+            raise RuntimeError("Model did not return a JSON object.")
+
+        # Optional: enforce required keys BEFORE normalization
+        required_keys = {"Fact", "Bias", "Explanation", "Revision"}
+        if not required_keys.intersection(set(parsed.keys())):
+            status.error("Parsed JSON object is missing expected report keys.")
+            with st.expander("Debug: Parsed JSON", expanded=True):
+                st.json(parsed)
+            with st.expander("Debug: Raw model output (preview)", expanded=False):
+                st.code(final_report[:8000])
+            raise RuntimeError("Parsed JSON missing report keys.")
+
         parsed = _normalize_report_keys(parsed)
+
+        # If your normalizer can return None, guard it
+        if parsed is None or not isinstance(parsed, dict):
+            status.error("Normalization produced an invalid result (None or non-object).")
+            with st.expander("Debug: Raw model output (preview)", expanded=True):
+                st.code(final_report[:8000])
+            raise RuntimeError("Normalization failed.")
 
         # 4) RENDER (Safe JSON)
         prog.progress(85, text="Rendering report…")
@@ -3281,6 +3266,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
