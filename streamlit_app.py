@@ -2237,89 +2237,124 @@ with tabs[0]:
     new_analysis = False
 
     # -------------------- Form (UI only) --------------------
-    with st.form("analysis_form"):
-        st.markdown("""
-            <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
-            <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Bias Detection Tool
-            </p>
-        """, unsafe_allow_html=True)
+with st.form("analysis_form"):
+    st.markdown("""
+        <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
+        <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
+            Bias Detection Tool
+        </p>
+    """, unsafe_allow_html=True)
 
-        st.text_area(
-            "Paste or type text to analyze",
-            height=200,
-            key="user_input_box",
-            help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
-        )
+    st.text_area(
+        "Paste or type text to analyze",
+        height=200,
+        key="user_input_box",
+        help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
+    )
 
-        doc = st.file_uploader(
-            f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
-            type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False,
-            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
-        )
+    doc = st.file_uploader(
+        f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+        type=list(DOC_ALLOWED_EXTENSIONS),
+        accept_multiple_files=False,
+        key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
+    )
 
-        # Lightweight extraction (OK here), just store to session_state
-        # If this still feels slow, we can move extraction outside the form too.
+    bcol1, bcol2, _spacer = st.columns([2, 2, 6])
+    with bcol1:
+        submitted = st.form_submit_button("Engage Veritas")
+    with bcol2:
+        new_analysis = st.form_submit_button("Reset Canvas")
+
+    # -------------------- Reset handler (outside form) --------------------
+if new_analysis:
+    st.session_state["_clear_text_box"] = True
+    st.session_state["last_reply"] = ""
+    st.session_state["history"] = []
+    st.session_state["doc_uploader_key"] += 1
+    st.session_state["last_report"] = None
+    st.session_state["last_report_id"] = ""
+    st.session_state["report_ready"] = False
+    st.session_state["extracted_text"] = ""
+    st.session_state["uploaded_filename"] = ""
+    _safe_rerun()
+
+# ==================================================
+# SECTION A: Engage Veritas (expensive work only here)
+# ==================================================
+if submitted:
+    prog = st.progress(5, text="Starting analysis…")
+    status = st.empty()
+
+    try:
+        user_text = (st.session_state.get("user_input_box") or "").strip()
+
+        # Extract doc ONLY on submit (prevents UI lag)
+        extracted_text = ""
         if doc is not None:
-            extracted_text = _extract_text_from_upload(doc)
+            prog.progress(15, text="Reading uploaded file…")
+            extracted_text = _extract_text_from_upload(doc) or ""
             st.session_state["extracted_text"] = extracted_text
             st.session_state["uploaded_filename"] = getattr(doc, "name", "")
 
             if extracted_text:
-                st.success(f"✅ File loaded: {st.session_state['uploaded_filename']} ({len(extracted_text):,} characters extracted)")
+                status.success(
+                    f"✅ File loaded: {st.session_state['uploaded_filename']} ({len(extracted_text):,} characters extracted)"
+                )
             else:
-                st.warning(
+                status.warning(
                     f"⚠️ File selected: {st.session_state['uploaded_filename']}, but no text could be extracted."
                 )
         else:
             st.session_state["extracted_text"] = ""
             st.session_state["uploaded_filename"] = ""
 
-        bcol1, bcol2, _spacer = st.columns([2, 2, 6])
-        with bcol1:
-            submitted = st.form_submit_button("Engage Veritas")
-        with bcol2:
-            new_analysis = st.form_submit_button("Reset Canvas")
-
-    # -------------------- Reset handler (outside form) --------------------
-    if new_analysis:
-        st.session_state["_clear_text_box"] = True
-        st.session_state["last_reply"] = ""
-        st.session_state["history"] = []
-        st.session_state["doc_uploader_key"] += 1
-        st.session_state["last_report"] = None
-        st.session_state["last_report_id"] = ""
-        st.session_state["report_ready"] = False
-        _safe_rerun()
-
-    # -------------------- Engage Veritas (expensive work ONLY here) --------------------
-    if submitted:
-        user_text = (st.session_state.get("user_input_box") or "").strip()
-        extracted = (st.session_state.get("extracted_text") or "").strip()
-
-        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
+        final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
         if not final_input:
             st.warning("Please enter text or upload a document.")
             st.stop()
 
-        # Performance cap
+        # Keep requests fast
         MAX_CHARS = 12000
         if len(final_input) > MAX_CHARS:
             final_input = final_input[:MAX_CHARS]
-            st.info(f"ℹ️ Input truncated to first {MAX_CHARS:,} characters for faster analysis.")
+            st.info(f"ℹ️ Input truncated to first {MAX_CHARS:,} characters for performance.")
 
-        # ✅ Put analysis-id generation here
+        # New analysis ID each submit
+        prog.progress(25, text="Preparing analysis…")
         st.session_state["veritas_analysis_id"] = _new_veritas_id()
 
-        # ✅ HERE is where your model call goes (ONLY here)
-        # final_report = <YOUR EXISTING VERITAS CALL>(final_input)
+        # ----------------------------
+        # 1) MODEL CALL GOES HERE
+        # ----------------------------
+        prog.progress(45, text="Submitting to Veritas…")
+        status.info("Veritas is processing your request…")
 
-        # ✅ HERE is where parsing + rendering goes
+        # final_report = <YOUR EXISTING MODEL CALL>(final_input)
+
+        # ----------------------------
+        # 2) PARSE GOES HERE
+        # ----------------------------
+        prog.progress(70, text="Parsing response…")
+        status.info("Parsing model output…")
+
         # parsed = parse_veritas_json_or_stop(final_report)
-        # <YOUR EXISTING RENDER BLOCK>(parsed)
 
+        # ----------------------------
+        # 3) RENDER GOES HERE
+        # ----------------------------
+        prog.progress(85, text="Rendering report…")
+        status.info("Rendering report…")
+
+        # <YOUR EXISTING REPORT RENDER BLOCK USING parsed>
+
+        prog.progress(100, text="Analysis complete ✓")
+        status.success("Analysis complete ✓")
+
+    except Exception as e:
+        prog.progress(100, text="Analysis stopped due to an error.")
+        status.error("The analysis did not complete. Please try again. If it continues, submit a Bug Feedback Form.")
+        st.exception(e)
+        st.stop()
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         parsed = st.session_state["last_report"]
@@ -3156,6 +3191,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
