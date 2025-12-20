@@ -2321,40 +2321,47 @@ if submitted:
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
-        # ---- MODEL CALL START ----
-        final_report = None
+        # Always define first so it exists even if something errors
+        final_report = ""
 
-        # Prefer Responses API (enforce JSON output)
-        if hasattr(client, "responses") and hasattr(client.responses, "create"):
-            resp = client.responses.create(
-                model=MODEL_NAME,
-                input=[
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": final_input},
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"},
-            )
-            final_report = (getattr(resp, "output_text", None) or "").strip()
+        try:
+            if hasattr(client, "responses") and hasattr(client.responses, "create"):
+                resp = client.responses.create(
+                    model=MODEL_NAME,
+                    input=[
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        {"role": "user", "content": final_input},
+                    ],
+                    temperature=0.2,
+                    response_format={"type": "json_object"},
+                )
+                final_report = (getattr(resp, "output_text", None) or "")
 
-        # Fallback: Chat Completions (kept for compatibility)
-        elif (
-            hasattr(client, "chat")
-            and hasattr(client.chat, "completions")
-            and hasattr(client.chat.completions, "create")
-        ):
-            resp = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": final_input},
-                ],
-                temperature=0.2,
-            )
-            final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+            elif (
+                hasattr(client, "chat")
+                and hasattr(client.chat, "completions")
+                and hasattr(client.chat.completions, "create")
+            ):
+                resp = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        {"role": "user", "content": final_input},
+                    ],
+                    temperature=0.2,
+                )
+                final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "")
 
-        else:
-            raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+            else:
+                raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+
+        except Exception as model_exc:
+            status.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
+            raise
+
+        final_report = final_report.strip()
+        if not final_report:
+            raise RuntimeError("Model call returned empty output. Check your model call block.")
         # ---- MODEL CALL END ----
 
         final_report = (final_report or "").strip()
@@ -3270,6 +3277,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
