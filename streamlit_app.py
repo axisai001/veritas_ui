@@ -2286,69 +2286,48 @@ if submitted:
     status = st.empty()
 
     try:
+        # 1) Build final_input
         user_text = (st.session_state.get("user_input_box") or "").strip()
 
-        # Extract doc ONLY on submit
         extracted_text = ""
         if doc is not None:
             prog.progress(15, text="Reading uploaded file…")
             extracted_text = _extract_text_from_upload(doc) or ""
-            st.session_state["extracted_text"] = extracted_text
-            st.session_state["uploaded_filename"] = getattr(doc, "name", "")
-
-            if extracted_text:
-                status.success(
-                    f"✅ File loaded: {st.session_state['uploaded_filename']} "
-                    f"({len(extracted_text):,} characters extracted)"
-                )
-            else:
-                status.warning(
-                    f"⚠️ File selected: {st.session_state['uploaded_filename']}, "
-                    "but no text could be extracted."
-                )
-        else:
-            st.session_state["extracted_text"] = ""
-            st.session_state["uploaded_filename"] = ""
 
         final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
         if not final_input:
             status.warning("Please enter text or upload a document.")
             raise ValueError("Empty input")
 
-        # Limit size for performance
-        MAX_CHARS = 12000
-        if len(final_input) > MAX_CHARS:
-            final_input = final_input[:MAX_CHARS]
-            status.info(f"ℹ️ Input truncated to {MAX_CHARS:,} characters for performance.")
-
-        # Generate analysis ID
         prog.progress(25, text="Preparing analysis…")
         st.session_state["veritas_analysis_id"] = _new_veritas_id()
 
-        # ----------------------------
-        # 1) MODEL CALL
-        # ----------------------------
+        # ==================================================
+        # 2) MODEL CALL GOES HERE (THIS IS THE PLACEMENT)
+        # ==================================================
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
-        # ✅ Replace ONLY the next line with your real model call function
-        final_report = (run_veritas_analysis(final_input) or "").strip()
+        # ---- MODEL CALL START ----
+        # Paste your existing OpenAI/Veritas call here and ensure it sets final_report to a STRING.
+        # Example:
+        # resp = client.chat.completions.create(...)
+        # final_report = resp.choices[0].message.content or ""
+        final_report = ""  # <-- replace with real output text
+        # ---- MODEL CALL END ----
 
+        final_report = (final_report or "").strip()
         if not final_report:
-            raise RuntimeError("Model call returned empty output. Confirm the model call returns a string.")
+            raise RuntimeError("Model call returned empty output. Check your model call block.")
 
-        # ----------------------------
-        # 2) PARSE
-        # ----------------------------
+        # 3) PARSE
         prog.progress(70, text="Parsing response…")
         parsed = parse_veritas_json_or_stop(final_report)
         parsed = _normalize_report_keys(parsed)
 
-        # ----------------------------
-        # 3) RENDER
-        # ----------------------------
+        # 4) RENDER
         prog.progress(85, text="Rendering report…")
-        render_veritas_report(parsed, final_input)
+        # <your report rendering block here>
 
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
@@ -2358,7 +2337,6 @@ if submitted:
         st.exception(e)
 
     finally:
-        # ✅ ALWAYS clear loading UI
         prog.empty()
         status.empty()
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
@@ -3191,6 +3169,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
