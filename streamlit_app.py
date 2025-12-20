@@ -2279,7 +2279,7 @@ if new_analysis:
     _safe_rerun()
 
 # ==================================================
-# SECTION A: Engage Veritas (expensive work only here)
+# SECTION A: Engage Veritas (runs ONLY on submit)
 # ==================================================
 if submitted:
     prog = st.progress(5, text="Starting analysis…")
@@ -2288,7 +2288,7 @@ if submitted:
     try:
         user_text = (st.session_state.get("user_input_box") or "").strip()
 
-        # Extract doc ONLY on submit (prevents UI lag)
+        # Extract doc ONLY on submit
         extracted_text = ""
         if doc is not None:
             prog.progress(15, text="Reading uploaded file…")
@@ -2298,11 +2298,13 @@ if submitted:
 
             if extracted_text:
                 status.success(
-                    f"✅ File loaded: {st.session_state['uploaded_filename']} ({len(extracted_text):,} characters extracted)"
+                    f"✅ File loaded: {st.session_state['uploaded_filename']} "
+                    f"({len(extracted_text):,} characters extracted)"
                 )
             else:
                 status.warning(
-                    f"⚠️ File selected: {st.session_state['uploaded_filename']}, but no text could be extracted."
+                    f"⚠️ File selected: {st.session_state['uploaded_filename']}, "
+                    "but no text could be extracted."
                 )
         else:
             st.session_state["extracted_text"] = ""
@@ -2310,51 +2312,51 @@ if submitted:
 
         final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
         if not final_input:
-            st.warning("Please enter text or upload a document.")
-            st.stop()
+            status.warning("Please enter text or upload a document.")
+            raise ValueError("Empty input")
 
-        # Keep requests fast
+        # Limit size for performance
         MAX_CHARS = 12000
         if len(final_input) > MAX_CHARS:
             final_input = final_input[:MAX_CHARS]
-            st.info(f"ℹ️ Input truncated to first {MAX_CHARS:,} characters for performance.")
+            status.info(f"ℹ️ Input truncated to {MAX_CHARS:,} characters for performance.")
 
-        # New analysis ID each submit
+        # Generate analysis ID
         prog.progress(25, text="Preparing analysis…")
         st.session_state["veritas_analysis_id"] = _new_veritas_id()
 
         # ----------------------------
-        # 1) MODEL CALL GOES HERE
+        # 1) MODEL CALL
         # ----------------------------
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
-        # final_report = <YOUR EXISTING MODEL CALL>(final_input)
+        # final_report = call_veritas_model(final_input)
 
         # ----------------------------
-        # 2) PARSE GOES HERE
+        # 2) PARSE
         # ----------------------------
         prog.progress(70, text="Parsing response…")
-        status.info("Parsing model output…")
-
-        # parsed = parse_veritas_json_or_stop(final_report)
+        parsed = parse_veritas_json_or_stop(final_report)
+        parsed = _normalize_report_keys(parsed)
 
         # ----------------------------
-        # 3) RENDER GOES HERE
+        # 3) RENDER
         # ----------------------------
         prog.progress(85, text="Rendering report…")
-        status.info("Rendering report…")
-
-        # <YOUR EXISTING REPORT RENDER BLOCK USING parsed>
+        render_veritas_report(parsed, final_input)
 
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
 
     except Exception as e:
-        prog.progress(100, text="Analysis stopped due to an error.")
-        status.error("The analysis did not complete. Please try again. If it continues, submit a Bug Feedback Form.")
+        status.error("The analysis did not complete. Please try again.")
         st.exception(e)
-        st.stop()
+
+    finally:
+        # ✅ ALWAYS clear loading UI
+        prog.empty()
+        status.empty()
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         parsed = st.session_state["last_report"]
@@ -2499,12 +2501,6 @@ try:
 except Exception as e:
     st.error(f"⚠️ Model request failed: {e}")
     st.stop()
-
-# Progress update (non-fatal)
-try:
-    prog.progress(70, text="Processing model response…")
-except Exception:
-    pass
 
 # Get model output
 final_report = (resp.choices[0].message.content or "").strip()
@@ -3191,6 +3187,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
