@@ -2214,6 +2214,8 @@ tabs = st.tabs(tab_names)
 
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
+
+    # --- (Optional) red team banner ---
     if st.session_state.get("is_redteam", False):
         st.markdown("""
         <div style="background-color:#B71C1C;color:white;padding:0.75rem;border-radius:8px;margin-bottom:1rem;">
@@ -2230,10 +2232,11 @@ with tabs[0]:
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
 
-    # Defaults (avoid NameError if something fails early)
+    # Defaults
     submitted = False
     new_analysis = False
 
+    # -------------------- Form (UI only) --------------------
     with st.form("analysis_form"):
         st.markdown("""
             <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
@@ -2256,8 +2259,8 @@ with tabs[0]:
             key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
         )
 
-        # --- Extract uploaded document text (keep inside the form so 'doc' is in scope) ---
-        extracted_text = ""
+        # Lightweight extraction (OK here), just store to session_state
+        # If this still feels slow, we can move extraction outside the form too.
         if doc is not None:
             extracted_text = _extract_text_from_upload(doc)
             st.session_state["extracted_text"] = extracted_text
@@ -2267,8 +2270,7 @@ with tabs[0]:
                 st.success(f"✅ File loaded: {st.session_state['uploaded_filename']} ({len(extracted_text):,} characters extracted)")
             else:
                 st.warning(
-                    f"⚠️ File selected: {st.session_state['uploaded_filename']}, but no text could be extracted. "
-                    "If this is a scanned PDF, OCR is required."
+                    f"⚠️ File selected: {st.session_state['uploaded_filename']}, but no text could be extracted."
                 )
         else:
             st.session_state["extracted_text"] = ""
@@ -2280,7 +2282,7 @@ with tabs[0]:
         with bcol2:
             new_analysis = st.form_submit_button("Reset Canvas")
 
-    # Reset handler (must be OUTSIDE the form)
+    # -------------------- Reset handler (outside form) --------------------
     if new_analysis:
         st.session_state["_clear_text_box"] = True
         st.session_state["last_reply"] = ""
@@ -2290,43 +2292,33 @@ with tabs[0]:
         st.session_state["last_report_id"] = ""
         st.session_state["report_ready"] = False
         _safe_rerun()
-        
-     # -------------------- Engage Veritas: run ONLY on submit --------------------
-if 'submitted' in locals() and submitted:
-    user_text = st.session_state.get("user_input_box", "").strip()
-    extracted = st.session_state.get("extracted_text", "").strip()
 
-    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+    # -------------------- Engage Veritas (expensive work ONLY here) --------------------
+    if submitted:
+        user_text = (st.session_state.get("user_input_box") or "").strip()
+        extracted = (st.session_state.get("extracted_text") or "").strip()
 
-    if not final_input:
-        st.stop()
+        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
-    # ✅ Generate a new Veritas Analysis ID for this run
-    st.session_state["veritas_analysis_id"] = _new_veritas_id()
+        if not final_input:
+            st.warning("Please enter text or upload a document.")
+            st.stop()
 
-    # If you already build user_instruction elsewhere, keep your existing line.
-    user_instruction = final_input
+        # Performance cap
+        MAX_CHARS = 12000
+        if len(final_input) > MAX_CHARS:
+            final_input = final_input[:MAX_CHARS]
+            st.info(f"ℹ️ Input truncated to first {MAX_CHARS:,} characters for faster analysis.")
 
-    # IMPORTANT: call your model / parse / store report BELOW this line
-    # (your existing model-call section goes here)
-# -------------------- Engage Veritas: run ONLY on submit --------------------
-if 'submitted' in locals() and submitted:
-    user_text = st.session_state.get("user_input_box", "").strip()
-    extracted = st.session_state.get("extracted_text", "").strip()
+        # ✅ Put analysis-id generation here
+        st.session_state["veritas_analysis_id"] = _new_veritas_id()
 
-    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+        # ✅ HERE is where your model call goes (ONLY here)
+        # final_report = <YOUR EXISTING VERITAS CALL>(final_input)
 
-    if not final_input:
-        st.stop()
-
-    # ✅ Generate a new Veritas Analysis ID for this run
-    st.session_state["veritas_analysis_id"] = _new_veritas_id()
-
-    # If you already build user_instruction elsewhere, keep your existing line.
-    user_instruction = final_input
-
-    # IMPORTANT: call your model / parse / store report BELOW this line
-    # (your existing model-call section goes here)
+        # ✅ HERE is where parsing + rendering goes
+        # parsed = parse_veritas_json_or_stop(final_report)
+        # <YOUR EXISTING RENDER BLOCK>(parsed)
 
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -3164,6 +3156,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
