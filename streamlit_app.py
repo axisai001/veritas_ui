@@ -2298,90 +2298,93 @@ if new_analysis:
     _safe_rerun()
 
 # ==================================================
-# SECTION A: Engage Veritas (runs ONLY on submit)
+# 2) MODEL CALL (CORRECT PLACEMENT)
 # ==================================================
-if submitted:
-    prog = st.progress(5, text="Starting analysis…")
-    status = st.empty()
+prog.progress(45, text="Submitting to Veritas…")
+status.info("Veritas is processing your request…")
 
-    try:
-        # 1) Build final_input
-        user_text = (st.session_state.get("user_input_box") or "").strip()
+# ---- MODEL CALL START ----
+final_report = None
 
-        extracted_text = ""
-        if doc is not None:
-            prog.progress(15, text="Reading uploaded file…")
-            extracted_text = (_extract_text_from_upload(doc) or "").strip()
+try:
+    # Prefer Responses API when available (and enforce JSON output)
+    if hasattr(client, "responses") and hasattr(client.responses, "create"):
+        resp = client.responses.create(
+            model=MODEL_NAME,
+            input=[
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": final_input},
+            ],
+            temperature=0.2,
+            # Critical: forces a JSON object so parsing won't hang on salvage
+            response_format={"type": "json_object"},
+        )
+        final_report = (getattr(resp, "output_text", None) or "").strip()
 
-        final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
-        if not final_input:
-            status.warning("Please enter text or upload a document.")
-            raise ValueError("Empty input")
+    # Fallback: Chat Completions (cannot enforce JSON as strictly; kept for compatibility)
+    elif (
+        hasattr(client, "chat")
+        and hasattr(client.chat, "completions")
+        and hasattr(client.chat.completions, "create")
+    ):
+        resp = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": final_input},
+            ],
+            temperature=0.2,
+        )
+        final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
 
-        prog.progress(25, text="Preparing analysis…")
-        st.session_state["veritas_analysis_id"] = _new_veritas_id()
+    else:
+        raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
 
-        # ==================================================
-        # 2) MODEL CALL (CORRECT PLACEMENT)
-        # ==================================================
-        prog.progress(45, text="Submitting to Veritas…")
-        status.info("Veritas is processing your request…")
+except Exception as model_exc:
+    st.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
+    raise
+# ---- MODEL CALL END ----
 
-        # ---- MODEL CALL START ----
-        # Assumes you already have:
-        # - client (OpenAI client)
-        # - MODEL_NAME (string)
-        # - DEFAULT_SYSTEM_PROMPT (string)
-        # - temperature fixed server-side or here (use 0.2)
-        final_report = None
+final_report = (final_report or "").strip()
+if not final_report:
+    raise RuntimeError("Model call returned empty output. Check your model call block.")
 
-        try:
-            # Prefer Responses API when available
-            if hasattr(client, "responses") and hasattr(client.responses, "create"):
-                resp = client.responses.create(
-                    model=MODEL_NAME,
-                    input=[
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": final_input},
-                    ],
-                    # If you set temperature elsewhere server-side, you can remove this line.
-                    temperature=0.2,
-                )
-                final_report = (getattr(resp, "output_text", None) or "").strip()
+# ==================================================
+# 3) PARSE (WITH TIMEOUT + DEBUG; PREVENTS FREEZING)
+# ==================================================
+import concurrent.futures
+import time
 
-            # Fallback: Chat Completions
-            elif hasattr(client, "chat") and hasattr(client.chat, "completions") and hasattr(client.chat.completions, "create"):
-                resp = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": final_input},
-                    ],
-                    temperature=0.2,
-                )
-                final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+prog.progress(70, text="Parsing response…")
+status.info("Parsing response…")
 
-            else:
-                raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+# Keep last raw report for inspection
+st.session_state["__veritas_last_raw_report__"] = final_report
 
-        except Exception as model_exc:
-            # Do NOT swallow model errors; surface them so you can fix the true root cause.
-            st.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
-            raise
-        # ---- MODEL CALL END ----
+def _do_parse(_raw: str):
+    return parse_veritas_json_or_stop(_raw)
 
-        final_report = (final_report or "").strip()
-        if not final_report:
-            # Helpful diagnostics (safe to keep during development; remove later if desired)
-            st.write("DEBUG final_input length:", len(final_input))
-            st.write("DEBUG final_input preview:", final_input[:500])
-            st.write("DEBUG final_report repr:", repr(final_report))
-            raise RuntimeError("Model call returned empty output. Check your model call block.")
+t0 = time.time()
+try:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(_do_parse, final_report)
+        parsed = future.result(timeout=8)  # seconds; adjust 5–15 if needed
+except concurrent.futures.TimeoutError:
+    status.error("Parsing timed out. Response may not match the expected schema.")
+    with st.expander("Debug: Raw model output (preview)", expanded=True):
+        st.write("Length:", len(final_report))
+        st.code(final_report[:8000])
+    raise RuntimeError("Parsing timed out (possible salvage loop or unexpected format).")
+except Exception as parse_exc:
+    status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
+    with st.expander("Debug: Raw model output (preview)", expanded=True):
+        st.write("Length:", len(final_report))
+        st.code(final_report[:8000])
+    raise
+finally:
+    st.write("DEBUG parse seconds:", round(time.time() - t0, 3))
 
-        # 3) PARSE
-        prog.progress(70, text="Parsing response…")
-        parsed = parse_veritas_json_or_stop(final_report)
-        parsed = _normalize_report_keys(parsed)
+parsed = _normalize_report_keys(parsed)
 
         # 4) RENDER
         prog.progress(85, text="Rendering report…")
