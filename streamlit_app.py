@@ -2431,6 +2431,10 @@ def _looks_strict(text: str) -> bool:
 
 # --- Handle Veritas Analysis only when submitted ---
 if submitted:
+    # Progress UI (MUST be first lines inside this block)
+    prog = st.progress(0, text="Starting analysis…")
+    status = st.empty()
+
     # --- Detect if this is a Red Team test ---
     user_login = st.session_state.get("login_id", "").lower()
     redteam_flag = 1 if (
@@ -2446,9 +2450,6 @@ if submitted:
 
     # Build the final input
     final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-    # Progress bar
-    prog = st.progress(0)
 
     # ---------- Pre-safety check (Tier 2 immediate stops) ----------
     safety_msg = _run_safety_precheck(final_input)
@@ -3226,6 +3227,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
