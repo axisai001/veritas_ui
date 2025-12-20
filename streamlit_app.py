@@ -2388,11 +2388,6 @@ if submitted:
     finally:
         prog.empty()
         status.empty()
-# ---- MODEL CALL END ----
-
-final_report = (final_report or "").strip()
-if not final_report:
-    raise RuntimeError("Model call returned empty output. Check your model call block.")
 
 # ==================================================
 # 3) PARSE (WITH TIMEOUT + DEBUG; PREVENTS FREEZING)
@@ -3272,6 +3267,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
