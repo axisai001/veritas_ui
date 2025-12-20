@@ -75,6 +75,10 @@ except Exception:
     docx = None
 import io
 
+from openai import OpenAI
+
+client = OpenAI()
+
 def _extract_text_from_upload(uploaded_file) -> str:
     """
     Extract text from an uploaded file (PDF, DOCX, TXT, MD, CSV).
@@ -3208,6 +3212,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
