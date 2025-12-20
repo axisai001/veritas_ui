@@ -2362,11 +2362,6 @@ if submitted:
         final_report = final_report.strip()
         if not final_report:
             raise RuntimeError("Model call returned empty output. Check your model call block.")
-        # ---- MODEL CALL END ----
-
-        final_report = (final_report or "").strip()
-        if not final_report:
-            raise RuntimeError("Model call returned empty output. Check your model call block.")
 
         # --------------------------------------------------
         # 3) PARSE (leave your existing parse call here)
@@ -3277,6 +3272,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
