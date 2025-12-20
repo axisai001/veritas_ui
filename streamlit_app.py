@@ -2355,7 +2355,7 @@ if submitted:
         # Save raw output for inspection every time
         st.session_state["__veritas_last_raw_report__"] = final_report
 
-        # 3) PARSE (STRICT)
+                # 3) PARSE (STRICT)
         prog.progress(70, text="Parsing response…")
         status.info("Parsing response…")
 
@@ -2385,6 +2385,20 @@ if submitted:
                 st.write("Length:", len(final_report))
                 st.code(final_report[:8000])
             raise RuntimeError("Model did not return a JSON object.")
+
+        # --- KEY MAPPING: accept lowercase / alternate field names from the model ---
+        if "Fact" not in parsed and "fact" in parsed:
+            parsed["Fact"] = parsed.get("fact", "")
+        if "Bias" not in parsed and "bias" in parsed:
+            parsed["Bias"] = parsed.get("bias", "")
+        if "Bias" not in parsed and "bias_detected" in parsed:
+            parsed["Bias"] = parsed.get("bias_detected", "")
+        if "Explanation" not in parsed and "explanation" in parsed:
+            parsed["Explanation"] = parsed.get("explanation", "")
+        if "Revision" not in parsed and "revision" in parsed:
+            parsed["Revision"] = parsed.get("revision", "")
+        if "Revision" not in parsed and "suggested_revision" in parsed:
+            parsed["Revision"] = parsed.get("suggested_revision", "")
 
         # Optional: enforce required keys BEFORE normalization
         required_keys = {"Fact", "Bias", "Explanation", "Revision"}
@@ -3266,6 +3280,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
