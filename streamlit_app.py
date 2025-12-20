@@ -2185,6 +2185,24 @@ with tabs[0]:
             key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
         )
 
+# --- Extract uploaded document text ---
+extracted_text = ""
+
+if doc is not None:
+    extracted_text = _extract_text_from_upload(doc)
+    st.session_state["extracted_text"] = extracted_text
+    st.session_state["uploaded_filename"] = doc.name
+
+    if extracted_text:
+        st.success(f"✅ File loaded: {doc.name} ({len(extracted_text):,} characters extracted)")
+    else:
+        st.warning(
+            f"⚠️ File selected: {doc.name}, but no text could be extracted. "
+            "If this is a scanned PDF, OCR is required."
+        )
+else:
+    st.session_state["extracted_text"] = ""
+
         bcol1, bcol2, _spacer = st.columns([2,2,6])
         with bcol1:
             submitted = st.form_submit_button("Engage Veritas")
@@ -3075,6 +3093,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
