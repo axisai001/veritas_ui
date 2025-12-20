@@ -2331,7 +2331,12 @@ if submitted:
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
-        # final_report = call_veritas_model(final_input)
+        final_report = ""  # <-- TEMP so app doesn't crash
+        # TODO: replace this with your existing model call:
+        # final_report = <YOUR_EXISTING_MODEL_CALL>(final_input)
+
+        if not final_report:
+            raise RuntimeError("Model call returned empty final_report (check your model call section).")
 
         # ----------------------------
         # 2) PARSE
@@ -3187,6 +3192,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
