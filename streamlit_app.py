@@ -3,7 +3,7 @@
 # Feedback, Support, Help, (Admin only if authenticated as admin)
 # Compact 4-section bias report (Fact, Bias, Explanation, Revision),
 # CSV+SQLite logging, SendGrid email.
-# Post-login Privacy/Terms acknowledgment (persisted), Admin maintenance tools,
+# Post-login Privacy/Terms acknowledgment (persiFsted), Admin maintenance tools,
 # and robust background image support (local static file OR external URL).
 #
 # Update (overrides-first email config):
@@ -2421,25 +2421,36 @@ if submitted:
         # 4) RENDER
         prog.progress(85, text="Rendering report…")
 
-        # Persist for other UI blocks that expect these fields
-        st.session_state["last_report"] = parsed
-        st.session_state["last_report_id"] = st.session_state.get("veritas_analysis_id", "") or st.session_state.get("last_report_id", "")
-        st.session_state["report_ready"] = True
-
-        # Minimal render (proves everything is working)
         st.subheader("Veritas Report (Parsed JSON)")
-        st.json(parsed)
+
+        # ---- SAFE JSON RENDER (prevents 'src property must be a valid json object') ----
+        import json
+
+        obj = parsed
+
+        # If parsed is accidentally a string, try to decode it into a dict/list
+        if isinstance(obj, str):
+            s = obj.strip()
+            try:
+                obj = json.loads(s)
+            except Exception:
+                # Not JSON; wrap so st.json gets a dict
+                obj = {"raw_string": s}
+
+        # If still not a dict/list (e.g., number/bool/None), wrap it
+        if not isinstance(obj, (dict, list)):
+            obj = {"raw_value": obj}
+
+        # Now it is guaranteed safe for st.json
+        st.json(obj)
+
+        # Persist for other UI that expects these
+        st.session_state["last_report"] = obj
+        st.session_state["report_ready"] = True
+        # ---- END SAFE JSON RENDER ----
 
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
-
-    except Exception as e:
-        status.error("The analysis did not complete. Please try again.")
-        st.exception(e)
-
-    finally:
-        prog.empty()
-        status.empty()
 
 # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
 if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -3272,6 +3283,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
