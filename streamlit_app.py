@@ -2292,7 +2292,7 @@ if submitted:
         extracted_text = ""
         if doc is not None:
             prog.progress(15, text="Reading uploaded file…")
-            extracted_text = _extract_text_from_upload(doc) or ""
+            extracted_text = (_extract_text_from_upload(doc) or "").strip()
 
         final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
         if not final_input:
@@ -2303,21 +2303,60 @@ if submitted:
         st.session_state["veritas_analysis_id"] = _new_veritas_id()
 
         # ==================================================
-        # 2) MODEL CALL GOES HERE (THIS IS THE PLACEMENT)
+        # 2) MODEL CALL (CORRECT PLACEMENT)
         # ==================================================
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
         # ---- MODEL CALL START ----
-        # Paste your existing OpenAI/Veritas call here and ensure it sets final_report to a STRING.
-        # Example:
-        # resp = client.chat.completions.create(...)
-        # final_report = resp.choices[0].message.content or ""
-        final_report = ""  # <-- replace with real output text
+        # Assumes you already have:
+        # - client (OpenAI client)
+        # - MODEL_NAME (string)
+        # - DEFAULT_SYSTEM_PROMPT (string)
+        # - temperature fixed server-side or here (use 0.2)
+        final_report = None
+
+        try:
+            # Prefer Responses API when available
+            if hasattr(client, "responses") and hasattr(client.responses, "create"):
+                resp = client.responses.create(
+                    model=MODEL_NAME,
+                    input=[
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        {"role": "user", "content": final_input},
+                    ],
+                    # If you set temperature elsewhere server-side, you can remove this line.
+                    temperature=0.2,
+                )
+                final_report = (getattr(resp, "output_text", None) or "").strip()
+
+            # Fallback: Chat Completions
+            elif hasattr(client, "chat") and hasattr(client.chat, "completions") and hasattr(client.chat.completions, "create"):
+                resp = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=[
+                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                        {"role": "user", "content": final_input},
+                    ],
+                    temperature=0.2,
+                )
+                final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+
+            else:
+                raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+
+        except Exception as model_exc:
+            # Do NOT swallow model errors; surface them so you can fix the true root cause.
+            st.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
+            raise
         # ---- MODEL CALL END ----
 
         final_report = (final_report or "").strip()
         if not final_report:
+            # Helpful diagnostics (safe to keep during development; remove later if desired)
+            st.write("DEBUG final_input length:", len(final_input))
+            st.write("DEBUG final_input preview:", final_input[:500])
+            st.write("DEBUG final_report repr:", repr(final_report))
             raise RuntimeError("Model call returned empty output. Check your model call block.")
 
         # 3) PARSE
@@ -3169,6 +3208,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
