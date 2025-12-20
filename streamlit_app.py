@@ -2299,6 +2299,7 @@ if new_analysis:
     st.session_state["report_ready"] = False
     st.session_state["extracted_text"] = ""
     st.session_state["uploaded_filename"] = ""
+    st.session_state["veritas_analysis_id"] = _new_veritas_id()  # <-- add this (optional)
     _safe_rerun()
 
 ## -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
@@ -2322,6 +2323,10 @@ if submitted:
         if not final_input:
             status.warning("Please enter text or upload a document.")
             st.stop()
+
+        # Ensure an analysis ID exists for this run
+        if not st.session_state.get("veritas_analysis_id"):
+            st.session_state["veritas_analysis_id"] = _new_veritas_id()
 
         # 2) MODEL CALL (FORCE CHAT COMPLETIONS JSON)
         import json
@@ -2369,7 +2374,6 @@ if submitted:
                 st.code(final_report[:8000])
             raise
         finally:
-            st.write("DEBUG parse seconds:", round(time.time() - t0, 3))
 
         # HARD VALIDATION BEFORE NORMALIZATION (prevents raw_value: null)
         if parsed is None:
@@ -2454,6 +2458,25 @@ if submitted:
         if not bias_is_no and revision:
             st.markdown(f"**Revision:** {revision}")
 
+                # ... your formatted output ...
+        st.markdown(f"**Fact:** {fact if fact else '—'}")
+        st.markdown(f"**Bias:** {bias_display}")
+        st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
+        if not bias_is_no and revision:
+            st.markdown(f"**Revision:** {revision}")
+
+        # Show PDF download (only when a report exists)
+        if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+            # Replace build_pdf_bytes(...) with YOUR existing PDF generator function
+            pdf_bytes = build_pdf_bytes(st.session_state["last_report"], public_id=public_id)
+            st.download_button(
+                "Download Report (PDF)",
+                data=pdf_bytes,
+                file_name=f"{public_id}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
 
@@ -2477,8 +2500,6 @@ if st.session_state.get("report_ready") and st.session_state.get("last_report"):
 
     bias_is_no = str(bias).strip().lower() == "no"
     bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
-
-    st.success(f"✅ Report generated — ID: {public_id}")
 
 # ---------- Build user instruction for model ----------
 def _build_user_instruction(text: str) -> str:
@@ -3297,6 +3318,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
