@@ -2386,20 +2386,16 @@ finally:
 
 parsed = _normalize_report_keys(parsed)
 
-        # 4) RENDER
-        prog.progress(85, text="Rendering report…")
-        # <your report rendering block here>
+# ==================================================
+# 4) RENDER
+# ==================================================
+prog.progress(85, text="Rendering report…")
 
-        prog.progress(100, text="Analysis complete ✓")
-        status.success("Analysis complete ✓")
+# <your report rendering block here>
 
-    except Exception as e:
-        status.error("The analysis did not complete. Please try again.")
-        st.exception(e)
+prog.progress(100, text="Analysis complete ✓")
+status.success("Analysis complete ✓")
 
-    finally:
-        prog.empty()
-        status.empty()
     # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         parsed = st.session_state["last_report"]
@@ -3230,6 +3226,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
