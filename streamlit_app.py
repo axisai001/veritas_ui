@@ -2396,19 +2396,19 @@ prog.progress(85, text="Rendering report…")
 prog.progress(100, text="Analysis complete ✓")
 status.success("Analysis complete ✓")
 
-    # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
-    if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-        parsed = st.session_state["last_report"]
-        public_id = st.session_state.get("last_report_id", "")
+# -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
+if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+    parsed = st.session_state["last_report"]
+    public_id = st.session_state.get("last_report_id", "")
 
-        fact = parsed.get("Fact", "")
-        bias = parsed.get("Bias", "")
-        explanation = parsed.get("Explanation", "")
-        revision = parsed.get("Revision", "")
+    fact = parsed.get("Fact", "")
+    bias = parsed.get("Bias", "")
+    explanation = parsed.get("Explanation", "")
+    revision = parsed.get("Revision", "")
 
-        bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
+    bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
 
-        st.success(f"✅ Report generated — ID: {public_id}")
+    st.success(f"✅ Report generated — ID: {public_id}")
 
 # ---------- Build user instruction for model ----------
 def _build_user_instruction(text: str) -> str:
@@ -3226,6 +3226,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
