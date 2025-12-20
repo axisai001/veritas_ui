@@ -2410,14 +2410,17 @@ if submitted:
                 st.code(final_report[:8000])
             raise RuntimeError("Parsed JSON missing report keys.")
 
-        parsed = _normalize_report_keys(parsed)
+        _norm = None
+        try:
+            _norm = _normalize_report_keys(parsed)
+        except Exception as norm_exc:
+            status.warning(f"Normalization threw an exception; using unnormalized parsed JSON. ({type(norm_exc).__name__}: {norm_exc})")
 
-        # If your normalizer can return None, guard it
-        if parsed is None or not isinstance(parsed, dict):
-            status.error("Normalization produced an invalid result (None or non-object).")
-            with st.expander("Debug: Raw model output (preview)", expanded=True):
-                st.code(final_report[:8000])
-            raise RuntimeError("Normalization failed.")
+        if isinstance(_norm, dict):
+            parsed = _norm
+        else:
+            # Normalizer returned None or invalid output; proceed with current parsed dict
+            status.warning("Normalization returned an invalid result; using unnormalized parsed JSON.")
 
         # 4) RENDER (Safe JSON)
         prog.progress(85, text="Rendering report…")
@@ -3280,6 +3283,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
