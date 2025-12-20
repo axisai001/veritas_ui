@@ -2399,21 +2399,16 @@ if not final_report:
 # --- Render Veritas Analysis Result ---
 parsed = parse_veritas_json_or_stop(final_report)
 
+# Use canonical (lowercase) keys from your parser/normalizer
 fact = (parsed.get("fact") or "").strip()
 bias = (parsed.get("bias") or "No").strip()
 explanation = (parsed.get("explanation") or "").strip()
 revision = (parsed.get("revision") or "").strip()
 
-# ✅ Veritas Analysis ID (display at top of report)
+# Analysis ID (same font/size as the rest of the report output)
 analysis_id = st.session_state.get("veritas_analysis_id", "").strip()
-if analysis_id:
-    st.markdown(
-        f'<div class="veritas-id">Veritas Analysis ID: {analysis_id}</div>',
-        unsafe_allow_html=True
-    )
-    st.markdown("---")
 
-# --- Build downloadable PDF report ---
+# --- Build downloadable PDF report (build first; show button later) ---
 pdf_buffer = io.BytesIO()
 doc = SimpleDocTemplate(
     pdf_buffer,
@@ -2427,85 +2422,79 @@ doc = SimpleDocTemplate(
 styles = getSampleStyleSheet()
 story = []
 
-# Title
 story.append(Paragraph("<b>Veritas Bias Analysis Report</b>", styles["Title"]))
 story.append(Spacer(1, 12))
 
-# Analysis ID
 if analysis_id:
     story.append(Paragraph(f"<b>Veritas Analysis ID:</b> {analysis_id}", styles["Normal"]))
     story.append(Spacer(1, 10))
 
-# Fact
 if fact:
     story.append(Paragraph(f"<b>Fact:</b> {fact}", styles["Normal"]))
     story.append(Spacer(1, 10))
 
-# Bias
 bias_label = "Yes" if bias == "Yes" else "No"
 story.append(Paragraph(f"<b>Bias Detected:</b> {bias_label}", styles["Normal"]))
 story.append(Spacer(1, 10))
 
-# Explanation
 if explanation:
     story.append(Paragraph(f"<b>Explanation:</b> {explanation}", styles["Normal"]))
     story.append(Spacer(1, 10))
 
-# Revision (ONLY when bias is detected)
 if bias == "Yes" and revision:
     story.append(Paragraph(f"<b>Suggested Revision:</b> {revision}", styles["Normal"]))
     story.append(Spacer(1, 10))
 
 doc.build(story)
-pdf_buffer.seek(0)
-
-# ✅ DEFINE filename BEFORE using it
+pdf_bytes = pdf_buffer.getvalue()
 pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
 
-# ✅ Download Report button (PDF) — render only if PDF actually has bytes
-pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
-
-pdf_bytes = pdf_buffer.getvalue() if pdf_buffer is not None else b""
-if pdf_bytes:
-    st.markdown('<div class="veritas-download-box">', unsafe_allow_html=True)
-
-    st.download_button(
-        label="Download Report (PDF)",
-        data=pdf_bytes,
-        file_name=pdf_filename,
-        mime="application/pdf",
-        use_container_width=True,
-    )
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# --- Render report content ---
+# --- Render report content (ID directly above Fact; Fact first) ---
 has_report_content = bool(
     (fact and fact.strip())
     or (explanation and explanation.strip())
+    or (bias in ["Yes", "No"])
     or (bias == "Yes" and revision and revision.strip())
 )
 
 if has_report_content:
+    # ID directly above Fact in normal report styling
+    if analysis_id:
+        st.markdown(f"**Veritas Analysis ID:** {analysis_id}")
+
     st.markdown('<div class="veritas-report-box">', unsafe_allow_html=True)
 
-    # Always show Bias line so the container is never empty
+    # Fact
+    if fact:
+        st.markdown(f"**Fact:** {fact}")
+
+    # Bias
     if bias == "Yes":
         st.markdown("**Bias:** 🔴 Yes")
     else:
         st.markdown("**Bias:** 🟢 No")
 
-    if fact:
-        st.markdown(f"**Fact:** {fact}")
-
+    # Explanation
     if explanation:
         st.markdown(f"**Explanation:** {explanation}")
 
+    # Revision (ONLY if bias detected)
     if bias == "Yes" and revision:
         st.markdown(f"**Revision:** {revision}")
 
     st.markdown('</div>', unsafe_allow_html=True)
 
+    # --- Download button UNDER the report output ---
+    if pdf_bytes:
+        st.download_button(
+            label="Download Report (PDF)",
+            data=pdf_bytes,
+            file_name=pdf_filename,
+            mime="application/pdf",
+            use_container_width=True,
+        )
+
+# --- Logging / state (unchanged) ---
 public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
 log_analysis(public_id, internal_id, parsed)
@@ -2532,15 +2521,6 @@ try:
 except Exception:
     pass
 
-# --- Clean Veritas Output Display (v3.2 Compact Schema) ---
-fact = parsed.get("Fact", "")
-bias = parsed.get("Bias", "")
-explanation = parsed.get("Explanation", "")
-revision = parsed.get("Revision", "")
-
-bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
-
-# Footer caption
 st.caption("Paste text or upload a document, then click **Engage Veritas**.")
     
 # -------------------- Feedback Tab --------------------
@@ -3095,6 +3075,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
