@@ -52,6 +52,16 @@ import httpx
 import random
 random.seed(42)  # deterministic outcomes across sessions
 
+import os
+from openai import OpenAI
+
+client = OpenAI()
+
+MODEL_NAME = os.getenv("OPENAI_MODEL", "").strip()
+if not MODEL_NAME:
+    # Fallback default; replace with the exact model you intend to use
+    MODEL_NAME = "gpt-4.1-mini"
+
 import uuid
 from datetime import datetime, timezone
 
@@ -74,10 +84,6 @@ try:
 except Exception:
     docx = None
 import io
-
-from openai import OpenAI
-
-client = OpenAI()
 
 def _extract_text_from_upload(uploaded_file) -> str:
     """
@@ -3212,6 +3218,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
