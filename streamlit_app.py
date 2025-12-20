@@ -2284,7 +2284,7 @@ with st.form("analysis_form"):
     with bcol2:
         new_analysis = st.form_submit_button("Reset Canvas")
 
-    # -------------------- Reset handler (outside form) --------------------
+# -------------------- Reset handler (outside form) --------------------
 if new_analysis:
     st.session_state["_clear_text_box"] = True
     st.session_state["last_reply"] = ""
@@ -2297,52 +2297,95 @@ if new_analysis:
     st.session_state["uploaded_filename"] = ""
     _safe_rerun()
 
-# ==================================================
-# 2) MODEL CALL (CORRECT PLACEMENT)
-# ==================================================
-prog.progress(45, text="Submitting to Veritas…")
-status.info("Veritas is processing your request…")
+# -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
+if submitted:
+    # Progress UI MUST be created first inside the submit block
+    prog = st.progress(0, text="Starting analysis…")
+    status = st.empty()
 
-# ---- MODEL CALL START ----
-final_report = None
+    try:
+        # --------------------------------------------------
+        # 1) BUILD final_input (typed + extracted)
+        # --------------------------------------------------
+        user_text = (st.session_state.get("user_input_box") or "").strip()
+        extracted = (st.session_state.get("extracted_text") or "").strip()
 
-try:
-    # Prefer Responses API when available (and enforce JSON output)
-    if hasattr(client, "responses") and hasattr(client.responses, "create"):
-        resp = client.responses.create(
-            model=MODEL_NAME,
-            input=[
-                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                {"role": "user", "content": final_input},
-            ],
-            temperature=0.2,
-            # Critical: forces a JSON object so parsing won't hang on salvage
-            response_format={"type": "json_object"},
-        )
-        final_report = (getattr(resp, "output_text", None) or "").strip()
+        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+        if not final_input:
+            status.warning("Please enter text or upload a document.")
+            raise ValueError("Empty input")
 
-    # Fallback: Chat Completions (cannot enforce JSON as strictly; kept for compatibility)
-    elif (
-        hasattr(client, "chat")
-        and hasattr(client.chat, "completions")
-        and hasattr(client.chat.completions, "create")
-    ):
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                {"role": "user", "content": final_input},
-            ],
-            temperature=0.2,
-        )
-        final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+        # --------------------------------------------------
+        # 2) MODEL CALL (CORRECT PLACEMENT)
+        # --------------------------------------------------
+        prog.progress(45, text="Submitting to Veritas…")
+        status.info("Veritas is processing your request…")
 
-    else:
-        raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+        # ---- MODEL CALL START ----
+        final_report = None
 
-except Exception as model_exc:
-    st.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
-    raise
+        # Prefer Responses API (enforce JSON output)
+        if hasattr(client, "responses") and hasattr(client.responses, "create"):
+            resp = client.responses.create(
+                model=MODEL_NAME,
+                input=[
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": final_input},
+                ],
+                temperature=0.2,
+                response_format={"type": "json_object"},
+            )
+            final_report = (getattr(resp, "output_text", None) or "").strip()
+
+        # Fallback: Chat Completions (kept for compatibility)
+        elif (
+            hasattr(client, "chat")
+            and hasattr(client.chat, "completions")
+            and hasattr(client.chat.completions, "create")
+        ):
+            resp = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": final_input},
+                ],
+                temperature=0.2,
+            )
+            final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+
+        else:
+            raise RuntimeError("OpenAI client is not initialized correctly (no supported create() method found).")
+        # ---- MODEL CALL END ----
+
+        final_report = (final_report or "").strip()
+        if not final_report:
+            raise RuntimeError("Model call returned empty output. Check your model call block.")
+
+        # --------------------------------------------------
+        # 3) PARSE (leave your existing parse call here)
+        # --------------------------------------------------
+        prog.progress(70, text="Parsing response…")
+        status.info("Parsing response…")
+
+        parsed = parse_veritas_json_or_stop(final_report)
+        parsed = _normalize_report_keys(parsed)
+
+        # --------------------------------------------------
+        # 4) RENDER (your existing render block goes here)
+        # --------------------------------------------------
+        prog.progress(85, text="Rendering report…")
+        # <your report rendering block here>
+
+        prog.progress(100, text="Analysis complete ✓")
+        status.success("Analysis complete ✓")
+
+    except Exception as e:
+        status.error("The analysis did not complete. Please try again.")
+        st.exception(e)
+
+    finally:
+        prog.empty()
+        status.empty()
 # ---- MODEL CALL END ----
 
 final_report = (final_report or "").strip()
@@ -3227,6 +3270,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
