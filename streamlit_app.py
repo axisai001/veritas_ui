@@ -2457,6 +2457,14 @@ if submitted:
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
 
+    except Exception as e:
+        status.error("The analysis did not complete. Please try again.")
+        st.exception(e)
+
+    finally:
+        prog.empty()
+        status.empty()
+
 # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
 if st.session_state.get("report_ready") and st.session_state.get("last_report"):
     parsed = st.session_state["last_report"]
@@ -2467,7 +2475,8 @@ if st.session_state.get("report_ready") and st.session_state.get("last_report"):
     explanation = parsed.get("Explanation", "")
     revision = parsed.get("Revision", "")
 
-    bias_display = "🟢 No" if str(bias).strip().lower() == "no" else "🔴 Yes"
+    bias_is_no = str(bias).strip().lower() == "no"
+    bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
 
     st.success(f"✅ Report generated — ID: {public_id}")
 
@@ -3288,6 +3297,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
