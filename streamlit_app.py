@@ -2408,7 +2408,15 @@ if submitted:
 
         # 4) RENDER
         prog.progress(85, text="Rendering report…")
-        # <your report rendering block here>
+
+        # Persist for other UI blocks that expect these fields
+        st.session_state["last_report"] = parsed
+        st.session_state["last_report_id"] = st.session_state.get("veritas_analysis_id", "") or st.session_state.get("last_report_id", "")
+        st.session_state["report_ready"] = True
+
+        # Minimal render (proves everything is working)
+        st.subheader("Veritas Report (Parsed JSON)")
+        st.json(parsed)
 
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
@@ -3252,6 +3260,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
