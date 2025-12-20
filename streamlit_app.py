@@ -2301,20 +2301,29 @@ if new_analysis:
     st.session_state["uploaded_filename"] = ""
     _safe_rerun()
 
-# -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
+## -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
 if submitted:
     prog = st.progress(0, text="Starting analysis…")
     status = st.empty()
 
     try:
-        # 1) BUILD final_input
+        # 1) BUILD final_input (typed + uploaded doc)
         user_text = (st.session_state.get("user_input_box") or "").strip()
+
+        # Default to whatever is already in session_state
         extracted = (st.session_state.get("extracted_text") or "").strip()
+
+        # If a document is uploaded on this run, extract text now
+        if doc is not None:
+            prog.progress(15, text="Reading uploaded file…")
+            extracted = (_extract_text_from_upload(doc) or "").strip()
+            st.session_state["extracted_text"] = extracted  # persist for later use
+
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
         if not final_input:
             status.warning("Please enter text or upload a document.")
-            raise ValueError("Empty input")
+            st.stop()  # graceful stop (no scary traceback)
 
         # 2) MODEL CALL
         prog.progress(45, text="Submitting to Veritas…")
@@ -3214,6 +3223,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
