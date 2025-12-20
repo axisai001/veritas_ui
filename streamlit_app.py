@@ -1230,10 +1230,19 @@ def parse_veritas_json_or_stop(raw: str):
     # 3) Parse JSON
     try:
         data = json.loads(raw)
-    except Exception:
+    except Exception as e:
         salvaged = _salvage_numbered_report_to_json(raw)
+
         if salvaged is None:
-            st.stop()
+            # DO NOT st.stop() here — it looks like a hang.
+            # Instead: surface the failure and show raw output for diagnosis.
+            preview = (raw or "")[:4000]
+            raise ValueError(
+                "Parser could not load JSON and salvage failed. "
+                f"json.loads error: {type(e).__name__}: {e}\n\n"
+                f"RAW PREVIEW (first 4000 chars):\n{preview}"
+            )
+
         data = salvaged
 
     # 4) Normalize
@@ -3218,6 +3227,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
