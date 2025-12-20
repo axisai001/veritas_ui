@@ -2301,16 +2301,6 @@ if new_analysis:
     st.session_state["uploaded_filename"] = ""
     _safe_rerun()
 
-Below is your **updated, copy/paste-ready section** with the PARSE step replaced so it **cannot freeze** inside `parse_veritas_json_or_stop()`. This version:
-
-* Uses **strict `json.loads()`** (since you already enforce `response_format={"type":"json_object"}`)
-* Adds a **5-second timeout** so it will never hang at parsing
-* Shows a **Debug expander** with raw output if parsing fails/times out
-* Keeps your `_normalize_report_keys(parsed)` call
-
-Copy/paste this whole block over your current one.
-
-```python
 ## -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
 if submitted:
     prog = st.progress(0, text="Starting analysis…")
@@ -3262,6 +3252,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
