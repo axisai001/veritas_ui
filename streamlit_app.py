@@ -2340,7 +2340,17 @@ if submitted:
                     temperature=0.2,
                     response_format={"type": "json_object"},
                 )
-                final_report = (getattr(resp, "output_text", None) or "")
+                # Robustly extract text from Responses API
+                final_report = (getattr(resp, "output_text", None) or "").strip()
+
+                # If output_text is empty, fall back to a JSON serialization of the full response
+                if not final_report:
+                    try:
+                        # Newer SDKs
+                        final_report = json.dumps(resp.model_dump(), ensure_ascii=False)
+                    except Exception:
+                        # Older SDKs / objects
+                        final_report = json.dumps(resp, default=str, ensure_ascii=False)
 
             elif (
                 hasattr(client, "chat")
@@ -3271,6 +3281,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
