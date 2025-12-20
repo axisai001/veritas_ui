@@ -65,6 +65,10 @@ if not MODEL_NAME:
 import uuid
 from datetime import datetime, timezone
 
+# ---- Global safety defaults (prevents NameError if a stray block runs) ----
+prog = None
+status = None
+
 def _new_veritas_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
     return f"VER-{ts}-{uuid.uuid4().hex[:8].upper()}"
@@ -2299,29 +2303,23 @@ if new_analysis:
 
 # -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
 if submitted:
-    # Progress UI MUST be created first inside the submit block
     prog = st.progress(0, text="Starting analysis…")
     status = st.empty()
 
     try:
-        # --------------------------------------------------
-        # 1) BUILD final_input (typed + extracted)
-        # --------------------------------------------------
+        # 1) BUILD final_input
         user_text = (st.session_state.get("user_input_box") or "").strip()
         extracted = (st.session_state.get("extracted_text") or "").strip()
-
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+
         if not final_input:
             status.warning("Please enter text or upload a document.")
             raise ValueError("Empty input")
 
-        # --------------------------------------------------
-        # 2) MODEL CALL (CORRECT PLACEMENT)
-        # --------------------------------------------------
+        # 2) MODEL CALL
         prog.progress(45, text="Submitting to Veritas…")
         status.info("Veritas is processing your request…")
 
-        # Always define first so it exists even if something errors
         final_report = ""
 
         try:
@@ -2363,18 +2361,14 @@ if submitted:
         if not final_report:
             raise RuntimeError("Model call returned empty output. Check your model call block.")
 
-        # --------------------------------------------------
-        # 3) PARSE (leave your existing parse call here)
-        # --------------------------------------------------
+        # 3) PARSE
         prog.progress(70, text="Parsing response…")
         status.info("Parsing response…")
 
         parsed = parse_veritas_json_or_stop(final_report)
         parsed = _normalize_report_keys(parsed)
 
-        # --------------------------------------------------
-        # 4) RENDER (your existing render block goes here)
-        # --------------------------------------------------
+        # 4) RENDER
         prog.progress(85, text="Rendering report…")
         # <your report rendering block here>
 
@@ -2388,53 +2382,6 @@ if submitted:
     finally:
         prog.empty()
         status.empty()
-
-# ==================================================
-# 3) PARSE (WITH TIMEOUT + DEBUG; PREVENTS FREEZING)
-# ==================================================
-import concurrent.futures
-import time
-
-prog.progress(70, text="Parsing response…")
-status.info("Parsing response…")
-
-# Keep last raw report for inspection
-st.session_state["__veritas_last_raw_report__"] = final_report
-
-def _do_parse(_raw: str):
-    return parse_veritas_json_or_stop(_raw)
-
-t0 = time.time()
-try:
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(_do_parse, final_report)
-        parsed = future.result(timeout=8)  # seconds; adjust 5–15 if needed
-except concurrent.futures.TimeoutError:
-    status.error("Parsing timed out. Response may not match the expected schema.")
-    with st.expander("Debug: Raw model output (preview)", expanded=True):
-        st.write("Length:", len(final_report))
-        st.code(final_report[:8000])
-    raise RuntimeError("Parsing timed out (possible salvage loop or unexpected format).")
-except Exception as parse_exc:
-    status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
-    with st.expander("Debug: Raw model output (preview)", expanded=True):
-        st.write("Length:", len(final_report))
-        st.code(final_report[:8000])
-    raise
-finally:
-    st.write("DEBUG parse seconds:", round(time.time() - t0, 3))
-
-parsed = _normalize_report_keys(parsed)
-
-# ==================================================
-# 4) RENDER
-# ==================================================
-prog.progress(85, text="Rendering report…")
-
-# <your report rendering block here>
-
-prog.progress(100, text="Analysis complete ✓")
-status.success("Analysis complete ✓")
 
 # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
 if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -3267,6 +3214,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
