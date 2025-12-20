@@ -65,6 +65,67 @@ def _normalize_report_keys(data: dict) -> dict:
             if k in data and data.get(k) is not None:
                 return data.get(k)
         return default
+try:
+    from pypdf import PdfReader
+except Exception:
+    PdfReader = None
+try:
+    import docx
+except Exception:
+    docx = None
+import io
+
+def _extract_text_from_upload(uploaded_file) -> str:
+    """
+    Extract text from an uploaded file (PDF, DOCX, TXT, MD, CSV).
+    Returns "" when extraction is not possible.
+    """
+    if uploaded_file is None:
+        return ""
+
+    filename = (getattr(uploaded_file, "name", "") or "").lower()
+
+    # Get raw bytes safely
+    try:
+        file_bytes = uploaded_file.getvalue()
+    except Exception:
+        try:
+            file_bytes = uploaded_file.read()
+        except Exception:
+            return ""
+
+    # Plain-text formats
+    if filename.endswith((".txt", ".md", ".csv")):
+        try:
+            return file_bytes.decode("utf-8", errors="ignore").strip()
+        except Exception:
+            return ""
+
+    # DOCX
+    if filename.endswith(".docx"):
+        if docx is None:
+            st.error("DOCX upload is not supported on this deployment (python-docx missing).")
+            return ""
+        try:
+            d = docx.Document(io.BytesIO(file_bytes))
+            text = "\n".join(p.text for p in d.paragraphs if p.text)
+            return (text or "").strip()
+        except Exception:
+            return ""
+
+    # PDF
+    if filename.endswith(".pdf"):
+        if PdfReader is None:
+            st.error("PDF upload is not supported on this deployment (pypdf missing).")
+            return ""
+        try:
+            reader = PdfReader(io.BytesIO(file_bytes))
+            pages = [(p.extract_text() or "") for p in reader.pages]
+            return "\n".join(pages).strip()
+        except Exception:
+            return ""
+
+    return ""
 
     # ---- Bias (accept multiple key names + formats) ----
     bias_val = pick("bias", "bias_detected", "Bias", "biasDetected", default=None)
@@ -3103,6 +3164,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
