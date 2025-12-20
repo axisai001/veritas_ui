@@ -2301,6 +2301,16 @@ if new_analysis:
     st.session_state["uploaded_filename"] = ""
     _safe_rerun()
 
+Below is your **updated, copy/paste-ready section** with the PARSE step replaced so it **cannot freeze** inside `parse_veritas_json_or_stop()`. This version:
+
+* Uses **strict `json.loads()`** (since you already enforce `response_format={"type":"json_object"}`)
+* Adds a **5-second timeout** so it will never hang at parsing
+* Shows a **Debug expander** with raw output if parsing fails/times out
+* Keeps your `_normalize_report_keys(parsed)` call
+
+Copy/paste this whole block over your current one.
+
+```python
 ## -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
 if submitted:
     prog = st.progress(0, text="Starting analysis…")
@@ -2370,11 +2380,40 @@ if submitted:
         if not final_report:
             raise RuntimeError("Model call returned empty output. Check your model call block.")
 
-        # 3) PARSE
+        # 3) PARSE (STRICT JSON + TIMEOUT + DEBUG)
+        import json
+        import time
+        import concurrent.futures
+
         prog.progress(70, text="Parsing response…")
         status.info("Parsing response…")
 
-        parsed = parse_veritas_json_or_stop(final_report)
+        # Keep raw output for inspection
+        st.session_state["__veritas_last_raw_report__"] = final_report
+
+        def _strict_parse(raw: str):
+            return json.loads(raw)
+
+        t0 = time.time()
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(_strict_parse, final_report)
+                parsed = future.result(timeout=5)  # prevents freezing
+        except concurrent.futures.TimeoutError:
+            status.error("Parsing timed out. Raw model output shown below.")
+            with st.expander("Debug: Raw model output (preview)", expanded=True):
+                st.write("Length:", len(final_report))
+                st.code(final_report[:8000])
+            raise RuntimeError("Parsing timed out.")
+        except Exception as parse_exc:
+            status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
+            with st.expander("Debug: Raw model output (preview)", expanded=True):
+                st.write("Length:", len(final_report))
+                st.code(final_report[:8000])
+            raise
+        finally:
+            st.write("DEBUG parse seconds:", round(time.time() - t0, 3))
+
         parsed = _normalize_report_keys(parsed)
 
         # 4) RENDER
@@ -3223,6 +3262,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
