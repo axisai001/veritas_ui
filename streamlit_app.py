@@ -2168,7 +2168,7 @@ with tabs[0]:
         st.markdown("""
             <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
             <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Bias Detection Model 
+                Bias Detection Tool 
             </p>
         """, unsafe_allow_html=True)
         st.text_area(
@@ -3075,6 +3075,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
