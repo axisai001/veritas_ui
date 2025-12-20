@@ -2422,35 +2422,40 @@ if submitted:
             # Normalizer returned None or invalid output; proceed with current parsed dict
             status.warning("Normalization returned an invalid result; using unnormalized parsed JSON.")
 
-        # 4) RENDER (Safe JSON)
+                # 4) RENDER (Formatted report — matches desired output)
         prog.progress(85, text="Rendering report…")
-        st.subheader("Veritas Report (Parsed JSON)")
 
-        obj = parsed
-        if isinstance(obj, str):
-            s = obj.strip()
-            try:
-                obj = json.loads(s)
-            except Exception:
-                obj = {"raw_string": s}
-        if not isinstance(obj, (dict, list)):
-            obj = {"raw_value": obj}
+        fact = (parsed.get("Fact") or "").strip()
+        bias = (parsed.get("Bias") or "").strip()
+        explanation = (parsed.get("Explanation") or "").strip()
+        revision = (parsed.get("Revision") or "").strip()
 
-        st.json(obj)
+        public_id = st.session_state.get("veritas_analysis_id", "") or st.session_state.get("last_report_id", "")
+        st.session_state["last_report_id"] = public_id
 
-        st.session_state["last_report"] = obj
+        st.session_state["last_report"] = {
+            "Fact": fact,
+            "Bias": bias,
+            "Explanation": explanation,
+            "Revision": revision,
+        }
         st.session_state["report_ready"] = True
+
+        st.markdown(f"**Veritas Analysis ID:** {public_id}")
+
+        bias_is_no = str(bias).strip().lower() == "no"
+        bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
+
+        st.markdown(f"**Fact:** {fact if fact else '—'}")
+        st.markdown(f"**Bias:** {bias_display}")
+        st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
+
+        # ✅ Only show Revision when bias is detected
+        if not bias_is_no and revision:
+            st.markdown(f"**Revision:** {revision}")
 
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
-
-    except Exception as e:
-        status.error("The analysis did not complete. Please try again.")
-        st.exception(e)
-
-    finally:
-        prog.empty()
-        status.empty()
 
 # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
 if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -3283,6 +3288,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
