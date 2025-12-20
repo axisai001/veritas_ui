@@ -2310,20 +2310,18 @@ if submitted:
         # 1) BUILD final_input (typed + uploaded doc)
         user_text = (st.session_state.get("user_input_box") or "").strip()
 
-        # Default to whatever is already in session_state
         extracted = (st.session_state.get("extracted_text") or "").strip()
 
-        # If a document is uploaded on this run, extract text now
         if doc is not None:
             prog.progress(15, text="Reading uploaded file…")
             extracted = (_extract_text_from_upload(doc) or "").strip()
-            st.session_state["extracted_text"] = extracted  # persist for later use
+            st.session_state["extracted_text"] = extracted
 
         final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
         if not final_input:
             status.warning("Please enter text or upload a document.")
-            st.stop()  # graceful stop (no scary traceback)
+            st.stop()
 
         # 2) MODEL CALL
         prog.progress(45, text="Submitting to Veritas…")
@@ -2382,18 +2380,12 @@ if submitted:
 
         def _parse_json_robust(raw: str):
             obj = json.loads(raw)
-
-            # If the model returned JSON as a quoted string (double-encoded), decode again
             if isinstance(obj, str):
                 s = obj.strip()
                 if (s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]")):
-                    obj2 = json.loads(s)
-                    obj = obj2
-
-            # Guarantee dict/list for downstream rendering
+                    obj = json.loads(s)
             if not isinstance(obj, (dict, list)):
                 obj = {"raw": obj}
-
             return obj
 
         t0 = time.time()
@@ -2418,39 +2410,35 @@ if submitted:
 
         parsed = _normalize_report_keys(parsed)
 
-        # 4) RENDER
+        # 4) RENDER (Safe JSON)
         prog.progress(85, text="Rendering report…")
-
         st.subheader("Veritas Report (Parsed JSON)")
 
-        # ---- SAFE JSON RENDER (prevents 'src property must be a valid json object') ----
-        import json
-
         obj = parsed
-
-        # If parsed is accidentally a string, try to decode it into a dict/list
         if isinstance(obj, str):
             s = obj.strip()
             try:
                 obj = json.loads(s)
             except Exception:
-                # Not JSON; wrap so st.json gets a dict
                 obj = {"raw_string": s}
-
-        # If still not a dict/list (e.g., number/bool/None), wrap it
         if not isinstance(obj, (dict, list)):
             obj = {"raw_value": obj}
 
-        # Now it is guaranteed safe for st.json
         st.json(obj)
 
-        # Persist for other UI that expects these
         st.session_state["last_report"] = obj
         st.session_state["report_ready"] = True
-        # ---- END SAFE JSON RENDER ----
 
         prog.progress(100, text="Analysis complete ✓")
         status.success("Analysis complete ✓")
+
+    except Exception as e:
+        status.error("The analysis did not complete. Please try again.")
+        st.exception(e)
+
+    finally:
+        prog.empty()
+        status.empty()
 
 # -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
 if st.session_state.get("report_ready") and st.session_state.get("last_report"):
@@ -3283,6 +3271,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
