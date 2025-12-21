@@ -205,12 +205,14 @@ def log_analysis_run(
 
 def read_analysis_tracker_rows(limit: int = 2000):
     if not os.path.exists(TRACKER_CSV):
-        return [
+        return []
+
     rows = []
     with open(TRACKER_CSV, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for r in reader:
             rows.append(r)
+
     # newest first
     rows.reverse()
     return rows[:limit]
@@ -3491,6 +3493,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
