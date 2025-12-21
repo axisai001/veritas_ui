@@ -2499,27 +2499,27 @@ with tabs[0]:
             prog.empty()
             status.empty()
 
-# -------------------- Analyze Tab: Report Output (renders ONCE) --------------------
-if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-    parsed = st.session_state["last_report"]
-    public_id = st.session_state.get("last_report_id", "")
+            # -------------------- Analyze Tab: Report Output (renders ONCE) --------------------
+            if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+                parsed = st.session_state["last_report"]
+                public_id = st.session_state.get("last_report_id", "")
 
-    fact = (parsed.get("Fact") or "").strip()
-    bias = (parsed.get("Bias") or "").strip()
-    explanation = (parsed.get("Explanation") or "").strip()
-    revision = (parsed.get("Revision") or "").strip()
+                fact = (parsed.get("Fact") or "").strip()
+                bias = (parsed.get("Bias") or "").strip()
+                explanation = (parsed.get("Explanation") or "").strip()
+                revision = (parsed.get("Revision") or "").strip()
 
-    bias_is_no = str(bias).strip().lower() == "no"
-    bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
+                bias_is_no = str(bias).strip().lower() == "no"
+                bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
 
-    st.markdown(f"**Veritas Analysis ID:** {public_id}")
-    st.markdown(f"**Fact:** {fact if fact else '—'}")
-    st.markdown(f"**Bias:** {bias_display}")
-    st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
+                st.markdown(f"**Veritas Analysis ID:** {public_id}")
+                st.markdown(f"**Fact:** {fact if fact else '—'}")
+                st.markdown(f"**Bias:** {bias_display}")
+                st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
 
-    # Only show Revision when bias is detected
-    if (not bias_is_no) and revision:
-        st.markdown(f"**Revision:** {revision}")
+                # Only show Revision when bias is detected
+                if (not bias_is_no) and revision:
+                    st.markdown(f"**Revision:** {revision}")
 
     # -------------------- PDF Download --------------------
     try:
@@ -3344,6 +3344,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
