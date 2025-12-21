@@ -2583,10 +2583,12 @@ with tabs[0]:
                 tester_id=tester_id,
                 analysis_id=public_id,
                 input_text=final_input,
-                elapsed_seconds=(time.time() - run_t0),
+                elapsed_seconds=round(time.time() - run_t0, 3),
                 status="SUCCESS",
                 model_name=MODEL_NAME,
             )
+
+            st.toast("Analysis logged", icon="✅")
 
             prog.progress(100, text="Analysis complete ✓")
             status.success("Analysis complete ✓")
@@ -3444,6 +3446,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
