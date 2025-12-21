@@ -3002,51 +3002,71 @@ if st.session_state.get("is_admin", False):
             _safe_rerun()
 
         sub1, sub2, sub3, sub4, sub5, sub6 = st.tabs([
-            "🕘 History", 
-            "📂 Data Explorer", 
-            "🧹 Maintenance", 
-            "🎨 Branding", 
+            "🕘 History",
+            "📂 Data Explorer",
+            "🧹 Maintenance",
+            "🎨 Branding",
             "🧪 Red Team Tracker",
-            "📊 Analysis Tracker"
+            "📊 Analysis Tracker",
         ])
 
-        # ---- History
+        # -------------------- History --------------------
         with sub1:
             st.write("#### Previous Reports")
-            q = st.text_input("Search by Report ID or text (local DB)", placeholder="e.g., VER-2025… or a phrase…")
+            q = st.text_input(
+                "Search by Report ID or text (local DB)",
+                placeholder="e.g., VER-2025… or a phrase…"
+            )
+
             try:
                 con = sqlite3.connect(DB_PATH)
-                df = pd.read_sql_query("SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json FROM analyses ORDER BY id DESC LIMIT 1000", con)
+                df = pd.read_sql_query(
+                    "SELECT timestamp_utc, public_report_id, internal_report_id, conversation_json "
+                    "FROM analyses ORDER BY id DESC LIMIT 1000",
+                    con
+                )
                 con.close()
             except Exception:
                 df = pd.DataFrame(columns=["timestamp_utc","public_report_id","internal_report_id","conversation_json"])
-            if not df.empty:
+
+            if df.empty:
+                st.info("No reports yet.")
+            else:
                 def extract_preview(js: str) -> str:
                     try:
-                        return json.loads(js).get("assistant_reply","")[:220]
+                        return (json.loads(js).get("assistant_reply", "") or "")[:220]
                     except Exception:
                         return ""
+
                 df["preview"] = df["conversation_json"].apply(extract_preview)
+
                 if q.strip():
                     ql = q.lower()
-                    df = df[df.apply(lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()), axis=1)]
-                st.dataframe(df[["timestamp_utc","public_report_id","internal_report_id","preview"]], use_container_width=True, hide_index=True)
+                    df = df[df.apply(
+                        lambda r: (ql in str(r["public_report_id"]).lower()) or (ql in str(r["preview"]).lower()),
+                        axis=1
+                    )]
+
+                st.dataframe(
+                    df[["timestamp_utc","public_report_id","internal_report_id","preview"]],
+                    use_container_width=True,
+                    hide_index=True
+                )
+
                 sel = st.text_input("Load a report back into the viewer by Report ID (optional)")
                 if st.button("Load Report"):
                     row = df[df["public_report_id"] == sel]
                     if len(row) == 1:
                         try:
-                            txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply","")
+                            txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply", "")
                             st.session_state["last_reply"] = txt
                             st.success("Loaded into Analyze tab.")
                         except Exception:
                             st.error("Could not load that report.")
                     else:
                         st.warning("Report ID not found in the current list.")
-            else:
-                st.info("No reports yet.")
 
-        # ---- Data Explorer
+        # -------------------- Data Explorer --------------------
         with sub2:
             st.write("#### Data Explorer")
             st.caption("Browse app data stored on this instance. Use the download buttons for backups.")
@@ -3058,50 +3078,88 @@ if st.session_state.get("is_admin", False):
                     return pd.DataFrame()
 
             c1, c2 = st.columns(2)
+
             with c1:
                 st.write("##### Auth Events")
                 st.dataframe(_read_csv_safe(AUTH_CSV), use_container_width=True)
                 try:
-                    st.download_button("Download auth_events.csv", data=open(AUTH_CSV, "rb").read(), file_name="auth_events.csv", mime="text/csv")
+                    st.download_button(
+                        "Download auth_events.csv",
+                        data=open(AUTH_CSV, "rb").read(),
+                        file_name="auth_events.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
                 except Exception:
                     pass
 
                 st.write("##### Errors")
                 st.dataframe(_read_csv_safe(ERRORS_CSV), use_container_width=True)
                 try:
-                    st.download_button("Download errors.csv", data=open(ERRORS_CSV, "rb").read(), file_name="errors.csv", mime="text/csv")
+                    st.download_button(
+                        "Download errors.csv",
+                        data=open(ERRORS_CSV, "rb").read(),
+                        file_name="errors.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
                 except Exception:
                     pass
 
                 st.write("##### Acknowledgments")
                 st.dataframe(_read_csv_safe(ACK_CSV), use_container_width=True)
                 try:
-                    st.download_button("Download ack_events.csv", data=open(ACK_CSV, "rb").read(), file_name="ack_events.csv", mime="text/csv")
+                    st.download_button(
+                        "Download ack_events.csv",
+                        data=open(ACK_CSV, "rb").read(),
+                        file_name="ack_events.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
                 except Exception:
                     pass
+
             with c2:
                 st.write("##### Analyses")
                 st.dataframe(_read_csv_safe(ANALYSES_CSV), use_container_width=True)
                 try:
-                    st.download_button("Download analyses.csv", data=open(ANALYSES_CSV, "rb").read(), file_name="analyses.csv", mime="text/csv")
+                    st.download_button(
+                        "Download analyses.csv",
+                        data=open(ANALYSES_CSV, "rb").read(),
+                        file_name="analyses.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
                 except Exception:
                     pass
 
                 st.write("##### Feedback")
                 st.dataframe(_read_csv_safe(FEEDBACK_CSV), use_container_width=True)
                 try:
-                    st.download_button("Download feedback.csv", data=open(FEEDBACK_CSV, "rb").read(), file_name="feedback.csv", mime="text/csv")
+                    st.download_button(
+                        "Download feedback.csv",
+                        data=open(FEEDBACK_CSV, "rb").read(),
+                        file_name="feedback.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
                 except Exception:
                     pass
 
                 st.write("##### Support Tickets")
                 st.dataframe(_read_csv_safe(SUPPORT_CSV), use_container_width=True)
                 try:
-                    st.download_button("Download support_tickets.csv", data=open(SUPPORT_CSV, "rb").read(), file_name="support_tickets.csv", mime="text/csv")
+                    st.download_button(
+                        "Download support_tickets.csv",
+                        data=open(SUPPORT_CSV, "rb").read(),
+                        file_name="support_tickets.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
                 except Exception:
                     pass
 
-        # ---- Maintenance
+        # -------------------- Maintenance --------------------
         with sub3:
             st.write("#### Prune & Wipe Data")
             st.caption("Prune removes rows older than the TTL. Wipe deletes ALL rows in a dataset. Use with care.")
@@ -3109,13 +3167,13 @@ if st.session_state.get("is_admin", False):
             st.write("**Prune by TTL (days)**")
             cpa, cpb, cpc = st.columns(3)
             with cpa:
-                ttl_auth = st.number_input("Auth Events TTL",   min_value=0, value=max(0, AUTH_LOG_TTL_DAYS),     step=1)
-                ttl_err  = st.number_input("Errors TTL",        min_value=0, value=max(0, ERRORS_LOG_TTL_DAYS),  step=1)
-                ttl_ack  = st.number_input("Ack Events TTL",    min_value=0, value=max(0, ACK_TTL_DAYS),         step=1)
+                ttl_auth = st.number_input("Auth Events TTL", min_value=0, value=max(0, AUTH_LOG_TTL_DAYS), step=1)
+                ttl_err  = st.number_input("Errors TTL",     min_value=0, value=max(0, ERRORS_LOG_TTL_DAYS), step=1)
+                ttl_ack  = st.number_input("Ack Events TTL", min_value=0, value=max(0, ACK_TTL_DAYS), step=1)
             with cpb:
-                ttl_ana  = st.number_input("Analyses TTL",      min_value=0, value=max(0, ANALYSES_LOG_TTL_DAYS),step=1)
-                ttl_fb   = st.number_input("Feedback TTL",      min_value=0, value=max(0, FEEDBACK_LOG_TTL_DAYS),step=1)
-                ttl_sup  = st.number_input("Support TTL",       min_value=0, value=max(0, SUPPORT_LOG_TTL_DAYS), step=1)
+                ttl_ana  = st.number_input("Analyses TTL",   min_value=0, value=max(0, ANALYSES_LOG_TTL_DAYS), step=1)
+                ttl_fb   = st.number_input("Feedback TTL",   min_value=0, value=max(0, FEEDBACK_LOG_TTL_DAYS), step=1)
+                ttl_sup  = st.number_input("Support TTL",    min_value=0, value=max(0, SUPPORT_LOG_TTL_DAYS), step=1)
             with cpc:
                 st.markdown("&nbsp;")
                 if st.button("Run Prune Now (CSV + DB)"):
@@ -3136,26 +3194,11 @@ if st.session_state.get("is_admin", False):
             if st.button("Wipe Selected Dataset"):
                 if confirm.strip().upper() == "PURGE":
                     _wipe_db_table(target)
-                    csv_map = {
-                        "auth_events": AUTH_CSV, "errors": ERRORS_CSV, "ack_events": ACK_CSV,
-                        "analyses": ANALYSES_CSV, "feedback": FEEDBACK_CSV, "support_tickets": SUPPORT_CSV
-                    }
-                    path = csv_map.get(target)
-                    if path and os.path.exists(path):
-                        hdr = []
-                        try:
-                            with open(path, "r", encoding="utf-8", newline="") as f:
-                                rdr = csv.reader(f); hdr = next(rdr, [])
-                        except Exception:
-                            pass
-                        with open(path, "w", encoding="utf-8", newline="") as f:
-                            if hdr:
-                                csv.writer(f).writerow(hdr)
                     st.success(f"Wiped: {target}")
                 else:
                     st.error("Confirmation failed. Type PURGE to proceed.")
 
-        # ---- Branding
+        # -------------------- Branding --------------------
         with sub4:
             st.write("#### Branding: Background Image")
             current_bg = _find_local_bg_file()
@@ -3178,8 +3221,10 @@ if st.session_state.get("is_admin", False):
                             st.error("Unsupported file type.")
                         else:
                             for p in Path(STATIC_DIR).glob("bg.*"):
-                                try: p.unlink()
-                                except Exception: pass
+                                try:
+                                    p.unlink()
+                                except Exception:
+                                    pass
                             out = Path(STATIC_DIR) / f"bg.{ext}"
                             out.write_bytes(up.getvalue())
                             st.success(f"Saved background to `static/{out.name}`.")
@@ -3189,7 +3234,8 @@ if st.session_state.get("is_admin", False):
                     removed = False
                     for p in Path(STATIC_DIR).glob("bg.*"):
                         try:
-                            p.unlink(); removed = True
+                            p.unlink()
+                            removed = True
                         except Exception:
                             pass
                     if removed:
@@ -3197,152 +3243,105 @@ if st.session_state.get("is_admin", False):
                         _safe_rerun()
                     else:
                         st.info("No local background to remove.")
-            st.caption("Tip: To use an external image, set a `BG_URL` secret (e.g., a GitHub RAW link).")
 
-        # ---- Red Team Tracker ----
+        # -------------------- Red Team Tracker --------------------
         with sub5:
             st.write("#### 🧪 Red Team Tracker — Phase 1")
             st.caption("Monitor and export all Red Team test sessions. Each analysis is stored daily in CSV and database.")
 
             try:
-                # Load from dedicated Red Team CSV
                 redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
             except Exception as e:
                 st.error(f"Error loading Red Team CSV: {e}")
                 redteam_df = pd.DataFrame()
 
             if redteam_df.empty:
-                st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
-            else:
-                # Sort newest first
-                redteam_df = redteam_df.sort_values(by="timestamp_utc", ascending=False)
-
-            # Convert timestamps for display
-            try:
-                redteam_df["timestamp_utc"] = pd.to_datetime(redteam_df["timestamp_utc"]).dt.strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                pass
-
-            # Add daily filter and summary
-            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-
-            # Make sure required columns exist
-            if "timestamp_utc" not in redteam_df.columns:
-                st.warning("⚠️ Red Team CSV found but missing headers. Attempting repair...")
-                _verify_redteam_csv()
-                redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
-
-            if "timestamp_utc" in redteam_df.columns:
-                show_today = st.checkbox("Show only today's Red Team logs", value=False)
-                display_df = (
-                    redteam_df[redteam_df["timestamp_utc"].astype(str).str.startswith(today_str)]
-                    if show_today else redteam_df
-                )
-                total_logs = len(redteam_df)
-                today_logs = len(display_df)
-                st.write(f"**Total Logs:** {total_logs}  |  **Today's Logs:** {today_logs}")
-            else:
-                st.error("Red Team CSV is missing the 'timestamp_utc' column. Please restart the app after verification.")
+                st.info("No Red Team test data found yet.")
                 display_df = pd.DataFrame()
+            else:
+                # newest first
+                try:
+                    redteam_df = redteam_df.sort_values(by="timestamp_utc", ascending=False)
+                except Exception:
+                    pass
 
-            # ---- Red Team Tracker ----
-with sub5:
-    st.write("#### 🧪 Red Team Tracker — Phase 1")
-    st.caption("Monitor and export all Red Team test sessions. Each analysis is stored daily in CSV and database.")
+                today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                show_today = st.checkbox("Show only today's Red Team logs", value=False)
 
-    try:
-        redteam_df = pd.read_csv(REDTEAM_CHECKS_CSV)
-    except Exception as e:
-        st.error(f"Error loading Red Team CSV: {e}")
-        redteam_df = pd.DataFrame()
+                if "timestamp_utc" in redteam_df.columns:
+                    display_df = (
+                        redteam_df[redteam_df["timestamp_utc"].astype(str).str.startswith(today_str)]
+                        if show_today else redteam_df
+                    )
+                    st.write(f"**Total Logs:** {len(redteam_df)}  |  **Showing:** {len(display_df)}")
+                else:
+                    st.error("Red Team CSV is missing the 'timestamp_utc' column.")
+                    display_df = pd.DataFrame()
 
-    if redteam_df.empty:
-        st.info("No Red Team test data found yet. Once testers begin submitting analyses, they will appear here.")
-        display_df = pd.DataFrame()
-    else:
-        redteam_df = redteam_df.sort_values(by="timestamp_utc", ascending=False)
+            if not display_df.empty:
+                st.dataframe(display_df, use_container_width=True, hide_index=True, height=500)
 
-        # Convert timestamps for display
-        try:
-            redteam_df["timestamp_utc"] = pd.to_datetime(redteam_df["timestamp_utc"]).dt.strftime("%Y-%m-%d %H:%M:%S")
-        except Exception:
-            pass
+                try:
+                    all_csv = redteam_df.to_csv(index=False).encode("utf-8")
+                    shown_csv = display_df.to_csv(index=False).encode("utf-8")
+                    st.download_button("📥 Download All Logs", data=all_csv, file_name="redteam_logs_all.csv", mime="text/csv")
+                    st.download_button("📅 Download Shown Logs", data=shown_csv, file_name=f"redteam_logs_{today_str}.csv", mime="text/csv")
+                except Exception:
+                    pass
 
-        today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        show_today = st.checkbox("Show only today's Red Team logs", value=False)
-
-        if "timestamp_utc" in redteam_df.columns:
-            display_df = (
-                redteam_df[redteam_df["timestamp_utc"].astype(str).str.startswith(today_str)]
-                if show_today else redteam_df
+        # -------------------- Analysis Tracker --------------------
+        with sub6:
+            st.write("#### 📊 Analysis Tracker")
+            st.caption(
+                "Tracks every analysis run executed by testers. "
+                "Includes timestamp (Denver), tester ID, analysis ID, runtime, and status."
             )
-            st.write(f"**Total Logs:** {len(redteam_df)}  |  **Showing:** {len(display_df)}")
-        else:
-            st.error("Red Team CSV is missing the 'timestamp_utc' column.")
-            display_df = pd.DataFrame()
 
-    # Display logs
-    if not display_df.empty:
-        st.dataframe(display_df, use_container_width=True, hide_index=True, height=500)
+            st.caption(f"Tracker path: `{TRACKER_CSV}`")
 
-        # Download buttons
-        all_csv = redteam_df.to_csv(index=False).encode("utf-8")
-        shown_csv = display_df.to_csv(index=False).encode("utf-8")
+            rows = read_analysis_tracker_rows(limit=2000)
 
-        st.download_button("📥 Download All Logs", data=all_csv, file_name="redteam_logs_all.csv", mime="text/csv")
-        st.download_button("📅 Download Shown Logs", data=shown_csv, file_name=f"redteam_logs_{today_str}.csv", mime="text/csv")
+            if not rows:
+                st.info("No analysis runs have been logged yet.")
+            else:
+                df_tracker = pd.DataFrame(rows)
 
-        # Optional tester summary
-        st.markdown("#### 📊 Summary by Tester")
-        try:
-            summary = display_df.groupby("login_id")["test_id"].count().reset_index()
-            summary.columns = ["Tester", "Tests Submitted"]
-            st.table(summary)
-        except Exception:
-            st.info("Summary unavailable (missing expected columns).")
+                preferred_order = [
+                    "timestamp_denver",
+                    "tester_id",
+                    "analysis_id",
+                    "status",
+                    "elapsed_seconds",
+                    "model",
+                    "input_chars",
+                    "input_preview",
+                    "input_sha256",
+                    "error",
+                ]
+                cols = [c for c in preferred_order if c in df_tracker.columns] + \
+                       [c for c in df_tracker.columns if c not in preferred_order]
+                df_tracker = df_tracker[cols]
 
-    st.write("#### 🧩 RedTeam Regression Diagnostics")
-    st.caption("Run internal self-tests to verify refusal logic and gating are functioning correctly.")
-    # (Leave your existing diagnostics button block here unchanged)
+                st.dataframe(df_tracker, use_container_width=True, height=520, hide_index=True)
 
-
-# ---- Analysis Tracker ----
-with sub6:
-    st.write("#### 📊 Analysis Tracker")
-    st.caption(
-        "Tracks every analysis run executed by testers. "
-        "Includes timestamp (Denver), tester ID, analysis ID, runtime, and status."
-    )
-
-    rows = read_analysis_tracker_rows(limit=2000)
-
-    if not rows:
-        st.info("No analysis runs have been logged yet.")
-    else:
-        st.dataframe(
-            rows,
-            use_container_width=True,
-            height=520
-        )
-
-    # Download CSV
-    try:
-        with open(TRACKER_CSV, "rb") as f:
-            st.download_button(
-                "Download analysis_tracker.csv",
-                data=f,
-                file_name="analysis_tracker.csv",
-                mime="text/csv",
-                use_container_width=True,
-            )
-    except Exception as e:
-        st.warning(f"Could not open tracker CSV: {e}")
+                try:
+                    csv_bytes = df_tracker.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        "Download analysis_tracker.csv",
+                        data=csv_bytes,
+                        file_name="analysis_tracker.csv",
+                        mime="text/csv",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"Could not build download: {type(e).__name__}: {e}")
 
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
