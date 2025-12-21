@@ -58,6 +58,55 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # =========================
+# FILE EXTRACTION HELPERS
+# =========================
+def _extract_text_from_upload(uploaded_file) -> str:
+    """
+    Extracts text from uploaded PDF, DOCX, TXT, MD, or CSV files.
+    Returns empty string if extraction fails.
+    """
+    if uploaded_file is None:
+        return ""
+
+    filename = (getattr(uploaded_file, "name", "") or "").lower()
+
+    try:
+        file_bytes = uploaded_file.getvalue()
+    except Exception:
+        try:
+            file_bytes = uploaded_file.read()
+        except Exception:
+            return ""
+
+    # TXT / MD / CSV
+    if filename.endswith((".txt", ".md", ".csv")):
+        try:
+            return file_bytes.decode("utf-8", errors="ignore").strip()
+        except Exception:
+            return ""
+
+    # DOCX
+    if filename.endswith(".docx"):
+        try:
+            import docx
+            doc = docx.Document(io.BytesIO(file_bytes))
+            return "\n".join(p.text for p in doc.paragraphs if p.text).strip()
+        except Exception:
+            return ""
+
+    # PDF
+    if filename.endswith(".pdf"):
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(file_bytes))
+            pages = [(p.extract_text() or "") for p in reader.pages]
+            return "\n".join(pages).strip()
+        except Exception:
+            return ""
+
+    return ""
+
+# =========================
 # ID GENERATORS / HELPERS
 # =========================
 def _new_veritas_id() -> str:
@@ -3338,6 +3387,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
