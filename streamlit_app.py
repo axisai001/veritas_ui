@@ -2259,87 +2259,102 @@ with tabs[0]:
     # Defaults
     submitted = False
     new_analysis = False
+    doc = None
 
     # -------------------- Form (UI only) --------------------
-with st.form("analysis_form"):
-    st.markdown("""
-        <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
-        <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-            Bias Detection Tool
-        </p>
-    """, unsafe_allow_html=True)
+    with st.form("analysis_form"):
+        st.markdown("""
+            <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
+            <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
+                Bias Detection Tool
+            </p>
+        """, unsafe_allow_html=True)
 
-    st.text_area(
-        "Paste or type text to analyze",
-        height=200,
-        key="user_input_box",
-        help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
-    )
+        st.text_area(
+            "Paste or type text to analyze",
+            height=200,
+            key="user_input_box",
+            help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
+        )
 
-    doc = st.file_uploader(
-        f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
-        type=list(DOC_ALLOWED_EXTENSIONS),
-        accept_multiple_files=False,
-        key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
-    )
+        doc = st.file_uploader(
+            f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+            type=list(DOC_ALLOWED_EXTENSIONS),
+            accept_multiple_files=False,
+            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
+        )
 
-    bcol1, bcol2, _spacer = st.columns([2, 2, 6])
-    with bcol1:
-        submitted = st.form_submit_button("Engage Veritas")
-    with bcol2:
-        new_analysis = st.form_submit_button("Reset Canvas")
+        bcol1, bcol2, _spacer = st.columns([2, 2, 6])
+        with bcol1:
+            submitted = st.form_submit_button("Engage Veritas")
+        with bcol2:
+            new_analysis = st.form_submit_button("Reset Canvas")
 
-# -------------------- Reset handler (outside form) --------------------
-if new_analysis:
-    st.session_state["_clear_text_box"] = True
-    st.session_state["last_reply"] = ""
-    st.session_state["history"] = []
-    st.session_state["doc_uploader_key"] += 1
-    st.session_state["last_report"] = None
-    st.session_state["last_report_id"] = ""
-    st.session_state["report_ready"] = False
-    st.session_state["extracted_text"] = ""
-    st.session_state["uploaded_filename"] = ""
-    st.session_state["veritas_analysis_id"] = _new_veritas_id()  # <-- add this (optional)
-    _safe_rerun()
+    # -------------------- Reset handler (outside form) --------------------
+    if new_analysis:
+        st.session_state["_clear_text_box"] = True
+        st.session_state["last_reply"] = ""
+        st.session_state["history"] = []
+        st.session_state["doc_uploader_key"] += 1
+        st.session_state["last_report"] = None
+        st.session_state["last_report_id"] = ""
+        st.session_state["report_ready"] = False
+        st.session_state["extracted_text"] = ""
+        st.session_state["uploaded_filename"] = ""
+        st.session_state["veritas_analysis_id"] = _new_veritas_id()
+        _safe_rerun()
 
-## -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
-if submitted:
-    prog = st.progress(0, text="Starting analysis…")
-    status = st.empty()
-
-    try:
-        # 1) BUILD final_input (typed + uploaded doc)
-        user_text = (st.session_state.get("user_input_box") or "").strip()
-
-        extracted = (st.session_state.get("extracted_text") or "").strip()
-
-        if doc is not None:
-            prog.progress(15, text="Reading uploaded file…")
-            extracted = (_extract_text_from_upload(doc) or "").strip()
-            st.session_state["extracted_text"] = extracted
-
-        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-        if not final_input:
-            status.warning("Please enter text or upload a document.")
-            st.stop()
-
-        # Ensure an analysis ID exists for this run
-        if not st.session_state.get("veritas_analysis_id"):
-            st.session_state["veritas_analysis_id"] = _new_veritas_id()
-
-        # 2) MODEL CALL (FORCE CHAT COMPLETIONS JSON)
-        import json
-        import time
-
-        prog.progress(45, text="Submitting to Veritas…")
-        status.info("Veritas is processing your request…")
-
-        final_report = ""
+    # -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
+    if submitted:
+        prog = st.progress(0, text="Starting analysis…")
+        status = st.empty()
 
         try:
-            # Use Chat Completions as the canonical path (most predictable JSON string)
+            # 1) BUILD final_input (typed + uploaded doc)
+            user_text = (st.session_state.get("user_input_box") or "").strip()
+            extracted = (st.session_state.get("extracted_text") or "").strip()
+
+            if doc is not None:
+                prog.progress(15, text="Reading uploaded file…")
+                extracted = (_extract_text_from_upload(doc) or "").strip()
+                st.session_state["extracted_text"] = extracted
+
+            final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
+
+            if not final_input:
+                status.warning("Please enter text or upload a document.")
+                st.stop()
+
+            # Ensure an analysis ID exists for this run
+            if not st.session_state.get("veritas_analysis_id"):
+                st.session_state["veritas_analysis_id"] = _new_veritas_id()
+            public_id = st.session_state["veritas_analysis_id"]
+
+            # ---------- Pre-safety check ----------
+            safety_msg = _run_safety_precheck(final_input)
+            if safety_msg:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background-color:#8B0000;
+                        color:#FFFFFF;
+                        padding:1rem;
+                        border-radius:10px;
+                        font-weight:600;
+                        text-align:center;
+                        border:2px solid #FF4C4C;
+                    ">
+                        {safety_msg}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                st.stop()
+
+            # 2) MODEL CALL (Chat Completions JSON)
+            prog.progress(45, text="Submitting to Veritas…")
+            status.info("Veritas is processing your request…")
+
             resp = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
@@ -2349,159 +2364,106 @@ if submitted:
                 temperature=0.2,
                 response_format={"type": "json_object"},
             )
+
             final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+            if not final_report:
+                raise RuntimeError("Model call returned empty output.")
 
-        except Exception as model_exc:
-            status.error(f"Model call failed: {type(model_exc).__name__}: {model_exc}")
-            raise
+            # 3) PARSE (STRICT)
+            prog.progress(70, text="Parsing response…")
+            status.info("Parsing response…")
 
-        if not final_report:
-            raise RuntimeError("Model call returned empty output.")
+            try:
+                parsed = json.loads(final_report)
+            except Exception as parse_exc:
+                status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
+                with st.expander("Debug: Raw model output (preview)", expanded=True):
+                    st.write("Length:", len(final_report))
+                    st.code(final_report[:8000])
+                raise
 
-        # Save raw output for inspection every time
-        st.session_state["__veritas_last_raw_report__"] = final_report
+            if parsed is None or not isinstance(parsed, dict):
+                raise RuntimeError("Model did not return a JSON object.")
 
-        # 3) PARSE (STRICT)
-        prog.progress(70, text="Parsing response…")
-        status.info("Parsing response…")
+            # --- KEY MAPPING ---
+            if "Fact" not in parsed and "fact" in parsed:
+                parsed["Fact"] = parsed.get("fact", "")
+            if "Bias" not in parsed and "bias" in parsed:
+                parsed["Bias"] = parsed.get("bias", "")
+            if "Bias" not in parsed and "bias_detected" in parsed:
+                parsed["Bias"] = parsed.get("bias_detected", "")
+            if "Explanation" not in parsed and "explanation" in parsed:
+                parsed["Explanation"] = parsed.get("explanation", "")
+            if "Revision" not in parsed and "revision" in parsed:
+                parsed["Revision"] = parsed.get("revision", "")
+            if "Revision" not in parsed and "suggested_revision" in parsed:
+                parsed["Revision"] = parsed.get("suggested_revision", "")
 
-        t0 = time.time()
-        try:
-            parsed = json.loads(final_report)
-        except Exception as parse_exc:
-            status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
-            with st.expander("Debug: Raw model output (preview)", expanded=True):
-                st.write("Length:", len(final_report))
-                st.code(final_report[:8000])
-            raise
+            # Normalization: safe fallback
+            try:
+                _norm = _normalize_report_keys(parsed)
+                if isinstance(_norm, dict):
+                    parsed = _norm
+            except Exception:
+                pass
+
+            # Persist (render happens below, once)
+            st.session_state["last_report"] = parsed
+            st.session_state["report_ready"] = True
+            st.session_state["last_report_id"] = public_id
+
+            prog.progress(100, text="Analysis complete ✓")
+            status.success("Analysis complete ✓")
+
+        except Exception as e:
+            status.error("The analysis did not complete. Please try again.")
+            st.exception(e)
+
         finally:
-            pass  # <-- REQUIRED
+            prog.empty()
+            status.empty()
 
-        # HARD VALIDATION BEFORE NORMALIZATION (prevents raw_value: null)
-        if parsed is None:
-            status.error("Parsed JSON is null. The model did not return a JSON object.")
-            with st.expander("Debug: Raw model output (preview)", expanded=True):
-                st.write("Length:", len(final_report))
-                st.code(final_report[:8000])
-            raise RuntimeError("Model returned JSON null.")
-
-        if not isinstance(parsed, dict):
-            status.error(f"Parsed JSON is not an object (got {type(parsed).__name__}).")
-            with st.expander("Debug: Raw model output (preview)", expanded=True):
-                st.write("Length:", len(final_report))
-                st.code(final_report[:8000])
-            raise RuntimeError("Model did not return a JSON object.")
-
-        # --- KEY MAPPING: accept lowercase / alternate field names from the model ---
-        if "Fact" not in parsed and "fact" in parsed:
-            parsed["Fact"] = parsed.get("fact", "")
-        if "Bias" not in parsed and "bias" in parsed:
-            parsed["Bias"] = parsed.get("bias", "")
-        if "Bias" not in parsed and "bias_detected" in parsed:
-            parsed["Bias"] = parsed.get("bias_detected", "")
-        if "Explanation" not in parsed and "explanation" in parsed:
-            parsed["Explanation"] = parsed.get("explanation", "")
-        if "Revision" not in parsed and "revision" in parsed:
-            parsed["Revision"] = parsed.get("revision", "")
-        if "Revision" not in parsed and "suggested_revision" in parsed:
-            parsed["Revision"] = parsed.get("suggested_revision", "")
-
-        # Optional: enforce required keys BEFORE normalization
-        required_keys = {"Fact", "Bias", "Explanation", "Revision"}
-        if not required_keys.intersection(set(parsed.keys())):
-            status.error("Parsed JSON object is missing expected report keys.")
-            with st.expander("Debug: Parsed JSON", expanded=True):
-                st.json(parsed)
-            with st.expander("Debug: Raw model output (preview)", expanded=False):
-                st.code(final_report[:8000])
-            raise RuntimeError("Parsed JSON missing report keys.")
-
-        _norm = None
-        try:
-            _norm = _normalize_report_keys(parsed)
-        except Exception as norm_exc:
-            status.warning(f"Normalization threw an exception; using unnormalized parsed JSON. ({type(norm_exc).__name__}: {norm_exc})")
-
-        if isinstance(_norm, dict):
-            parsed = _norm
-        else:
-            # Normalizer returned None or invalid output; proceed with current parsed dict
-            status.warning("Normalization returned an invalid result; using unnormalized parsed JSON.")
-
-                # 4) RENDER (Formatted report — matches desired output)
-        prog.progress(85, text="Rendering report…")
+    # -------------------- Analyze Tab: Report Output (renders ONCE) --------------------
+    if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+        parsed = st.session_state["last_report"]
+        public_id = st.session_state.get("last_report_id", "")
 
         fact = (parsed.get("Fact") or "").strip()
         bias = (parsed.get("Bias") or "").strip()
         explanation = (parsed.get("Explanation") or "").strip()
         revision = (parsed.get("Revision") or "").strip()
 
-        public_id = st.session_state.get("veritas_analysis_id", "") or st.session_state.get("last_report_id", "")
-        st.session_state["last_report_id"] = public_id
-
-        st.session_state["last_report"] = {
-            "Fact": fact,
-            "Bias": bias,
-            "Explanation": explanation,
-            "Revision": revision,
-        }
-        st.session_state["report_ready"] = True
-
-        st.markdown(f"**Veritas Analysis ID:** {public_id}")
-
         bias_is_no = str(bias).strip().lower() == "no"
         bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
 
+        st.markdown(f"**Veritas Analysis ID:** {public_id}")
         st.markdown(f"**Fact:** {fact if fact else '—'}")
         st.markdown(f"**Bias:** {bias_display}")
         st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
 
-        # ✅ Only show Revision when bias is detected
-        if not bias_is_no and revision:
+        # Only show Revision when bias is detected
+        if (not bias_is_no) and revision:
             st.markdown(f"**Revision:** {revision}")
 
-                # ... your formatted output ...
-        st.markdown(f"**Fact:** {fact if fact else '—'}")
-        st.markdown(f"**Bias:** {bias_display}")
-        st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
-        if not bias_is_no and revision:
-            st.markdown(f"**Revision:** {revision}")
-
-        # Show PDF download (only when a report exists)
-        if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-            # Replace build_pdf_bytes(...) with YOUR existing PDF generator function
-            pdf_bytes = build_pdf_bytes(st.session_state["last_report"], public_id=public_id)
-            st.download_button(
-                "Download Report (PDF)",
-                data=pdf_bytes,
-                file_name=f"{public_id}.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-
-        prog.progress(100, text="Analysis complete ✓")
-        status.success("Analysis complete ✓")
-
-    except Exception as e:
-        status.error("The analysis did not complete. Please try again.")
-        st.exception(e)
-
-    finally:
-        prog.empty()
-        status.empty()
-
-# -------------------- Analyze Tab: Report Output (Analyze-only) --------------------
-if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-    parsed = st.session_state["last_report"]
-    public_id = st.session_state.get("last_report_id", "")
-
-    fact = parsed.get("Fact", "")
-    bias = parsed.get("Bias", "")
-    explanation = parsed.get("Explanation", "")
-    revision = parsed.get("Revision", "")
-
-    bias_is_no = str(bias).strip().lower() == "no"
-    bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
+        # PDF download (safe: only if a real builder exists)
+        pdf_builder = (
+            globals().get("build_pdf_bytes")
+            or globals().get("generate_pdf_bytes")
+            or globals().get("make_pdf_bytes")
+            or globals().get("create_pdf_bytes")
+        )
+        if callable(pdf_builder):
+            try:
+                pdf_bytes = pdf_builder(st.session_state["last_report"], public_id=public_id)
+                st.download_button(
+                    "Download Report (PDF)",
+                    data=pdf_bytes,
+                    file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
+                    mime="application/pdf",
+                    use_container_width=True,
+                )
+            except Exception:
+                pass
 
 # ---------- Build user instruction for model ----------
 def _build_user_instruction(text: str) -> str:
@@ -3320,6 +3282,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
