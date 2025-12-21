@@ -2430,6 +2430,17 @@ with tabs[0]:
                 extracted = (_extract_text_from_upload(doc) or "").strip()
                 st.session_state["extracted_text"] = extracted
 
+            # ---- PDF TEXT-BASED GATE (ADD HERE) ----
+            if doc is not None and doc.name.lower().endswith(".pdf"):
+                if len(extracted) < 300:
+                    status.warning(
+                        "This PDF appears to be scanned or has no selectable text. "
+                        "Veritas can only analyze extractable text. "
+                        "Please upload a DOCX/TXT or paste the text, or export a text-based PDF."
+                    )
+                    st.stop()
+            # ---- END PDF GATE ----
+
             final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
             if not final_input:
@@ -3401,6 +3412,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
