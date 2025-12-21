@@ -36,7 +36,7 @@ import sqlite3
 import hmac
 import unicodedata
 import random
-from collections import deque   # ← ADD THIS LINE
+from collections import deque
 from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import timedelta, datetime, timezone
@@ -194,7 +194,7 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     return buffer.read()
 
 # =========================
-# ANALYSIS TRACKER (ADMIN)
+# ANALYSIS TRACKER (NON-UI STORAGE)
 # =========================
 TRACKER_DIR = os.path.join(DATA_DIR, "trackers")
 os.makedirs(TRACKER_DIR, exist_ok=True)
@@ -247,64 +247,11 @@ def read_analysis_tracker_rows(limit: int = 2000):
     rows = []
     with open(TRACKER_CSV, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        rows.extend(reader)
+        for r in reader:
+            rows.append(r)
 
     rows.reverse()  # newest first
     return rows[:limit]
-    
-    # ---- Bias (accept multiple key names + formats) ----
-    bias_val = pick("bias", "bias_detected", "Bias", "biasDetected", default=None)
-
-    # Normalize bias to "Yes"/"No"
-    if isinstance(bias_val, bool):
-        bias_val = "Yes" if bias_val else "No"
-    elif isinstance(bias_val, str):
-        s = bias_val.strip().lower()
-        if s in ["yes", "true", "1"]:
-            bias_val = "Yes"
-        elif s in ["no", "false", "0"]:
-            bias_val = "No"
-        else:
-            # If it contains "yes"/"no" within a label (e.g., "🟢 No")
-            bias_val = "Yes" if "yes" in s else ("No" if "no" in s else "No")
-    else:
-        bias_val = "No"
-
-    # ---- Fact / Explanation ----
-    fact_val = pick("fact", "Fact", default="")
-    expl_val = pick("explanation", "Explanation", default="")
-
-    fact_val = str(fact_val).strip()
-    expl_val = str(expl_val).strip()
-
-    # ---- Revision (accept multiple key names) ----
-    revision_val = pick("revision", "suggested_revision", "Revision", "Suggested Revision", default="")
-    rev_val = str(revision_val).strip()
-
-    # ---- Backfill defaults so UI is never empty ----
-    if not fact_val:
-        fact_val = "A factual summary could not be generated for this input."
-
-    if not expl_val:
-        expl_val = (
-            "No bias was detected under the current criteria based on the wording and framing of the text."
-            if bias_val == "No"
-            else "An explanation could not be generated for this input."
-        )
-
-    # Enforce revision rules:
-    # - Only provide revision when bias is detected
-    if bias_val == "No":
-        rev_val = ""
-    elif bias_val == "Yes" and not rev_val:
-        rev_val = "Revision could not be generated for this input."
-
-    return {
-        "fact": fact_val,
-        "bias": bias_val,
-        "explanation": expl_val,
-        "revision": rev_val,
-    }
 
 # -------------------------------------------------------------------
 # Acknowledgment Gate Configuration
@@ -3398,6 +3345,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
