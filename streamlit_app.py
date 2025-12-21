@@ -51,6 +51,11 @@ from openai import OpenAI
 import httpx
 import random
 random.seed(42)  # deterministic outcomes across sessions
+import os
+import csv
+import hashlib
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import os
 from openai import OpenAI
@@ -148,6 +153,67 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     c.save()
     buffer.seek(0)
     return buffer.read()
+
+# -------------------- Analysis Tracker (Admin) --------------------
+TRACKER_DIR = "audit"
+TRACKER_CSV = os.path.join(TRACKER_DIR, "analysis_tracker.csv")
+
+def _now_denver_iso() -> str:
+    return datetime.now(ZoneInfo("America/Denver")).isoformat(timespec="seconds")
+
+def _safe_preview(text: str, max_chars: int = 220) -> str:
+    t = (text or "").replace("\n", " ").strip()
+    return (t[:max_chars] + "…") if len(t) > max_chars else t
+
+def _sha256(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8", errors="ignore")).hexdigest()
+
+def log_analysis_run(
+    tester_id: str,
+    analysis_id: str,
+    input_text: str,
+    elapsed_seconds: float,
+    status: str = "SUCCESS",
+    model_name: str = "",
+    error: str = "",
+):
+    """
+    Appends one row to audit/analysis_tracker.csv
+    """
+    os.makedirs(TRACKER_DIR, exist_ok=True)
+
+    row = {
+        "timestamp_denver": _now_denver_iso(),
+        "tester_id": (tester_id or "").strip(),
+        "analysis_id": (analysis_id or "").strip(),
+        "status": status,
+        "elapsed_seconds": round(float(elapsed_seconds or 0.0), 3),
+        "model": (model_name or "").strip(),
+        "input_chars": len(input_text or ""),
+        "input_preview": _safe_preview(input_text),
+        "input_sha256": _sha256(input_text),
+        "error": (error or "").strip()[:500],
+    }
+
+    write_header = not os.path.exists(TRACKER_CSV)
+
+    with open(TRACKER_CSV, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if write_header:
+            writer.writeheader()
+        writer.writerow(row)
+
+def read_analysis_tracker_rows(limit: int = 2000):
+    if not os.path.exists(TRACKER_CSV):
+        return [
+    rows = []
+    with open(TRACKER_CSV, "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            rows.append(r)
+    # newest first
+    rows.reverse()
+    return rows[:limit]
 
 # =========================
 # OTHER HELPERS (below)
@@ -2446,6 +2512,8 @@ with tabs[0]:
                 st.stop()
 
             # 2) MODEL CALL (Chat Completions JSON)
+            run_t0 = time.time()
+
             prog.progress(45, text="Submitting to Veritas…")
             status.info("Veritas is processing your request…")
 
@@ -2505,6 +2573,18 @@ with tabs[0]:
             st.session_state["last_report"] = parsed
             st.session_state["report_ready"] = True
             st.session_state["last_report_id"] = public_id
+
+            # -------------------- TRACK ANALYSIS (SUCCESS) --------------------
+            tester_id = (st.session_state.get("login_id") or "").strip()
+
+            log_analysis_run(
+                tester_id=tester_id,
+                analysis_id=public_id,
+                input_text=final_input,
+                elapsed_seconds=(time.time() - run_t0),
+                status="SUCCESS",
+                model_name=MODEL_NAME,
+            )
 
             prog.progress(100, text="Analysis complete ✓")
             status.success("Analysis complete ✓")
@@ -3020,12 +3100,13 @@ if st.session_state.get("is_admin", False):
             st.session_state["is_admin"] = False
             _safe_rerun()
 
-        sub1, sub2, sub3, sub4, sub5 = st.tabs([
+        sub1, sub2, sub3, sub4, sub5, sub6 = st.tabs([
             "🕘 History", 
             "📂 Data Explorer", 
             "🧹 Maintenance", 
             "🎨 Branding", 
-            "🧪 Red Team Tracker"
+            "🧪 Red Team Tracker",
+            "📊 Analysis Tracker"
         ])
 
         # ---- History
@@ -3263,6 +3344,38 @@ if st.session_state.get("is_admin", False):
                 st.error("Red Team CSV is missing the 'timestamp_utc' column. Please restart the app after verification.")
                 display_df = pd.DataFrame()
 
+            # ---- Analysis Tracker ----
+            with sub6:
+                st.write("#### 📊 Analysis Tracker")
+                st.caption(
+                    "Tracks every analysis run executed by testers. "
+                    "Includes timestamp (Denver), tester ID, analysis ID, runtime, and status."
+                )
+
+                rows = read_analysis_tracker_rows(limit=2000)
+
+                if not rows:
+                    st.info("No analysis runs have been logged yet.")
+                else:
+                    st.dataframe(
+                    rows,
+                    use_container_width=True,
+                    height=520
+                )
+
+                # Download CSV
+                try:
+                    with open(TRACKER_CSV, "rb") as f:
+                        st.download_button(
+                            "Download analysis_tracker.csv",
+                            data=f,
+                            file_name="analysis_tracker.csv",
+                            mime="text/csv",
+                            use_container_width=True,
+                        )
+                except Exception as e:
+                    st.warning(f"Could not open tracker CSV: {e}")
+
             # --- Optional tester summary ---
             st.markdown("#### 📊 Summary by Tester")
             summary = display_df.groupby("login_id")["test_id"].count().reset_index()
@@ -3378,6 +3491,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
