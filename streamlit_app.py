@@ -2445,16 +2445,18 @@ if st.session_state.get("report_ready") and st.session_state.get("last_report"):
     if (not bias_is_no) and revision:
         st.markdown(f"**Revision:** {revision}")
 
-    # PDF download (safe: only if a real builder exists)
-    pdf_builder = (
-        globals().get("build_pdf_bytes")
-        or globals().get("generate_pdf_bytes")
-        or globals().get("make_pdf_bytes")
-        or globals().get("create_pdf_bytes")
-    )
-    if callable(pdf_builder):
-        try:
-            pdf_bytes = pdf_builder(st.session_state["last_report"], public_id=public_id)
+    # PDF download (shows a clear message if not configured)
+pdf_builder = (
+    globals().get("build_pdf_bytes")
+    or globals().get("generate_pdf_bytes")
+    or globals().get("make_pdf_bytes")
+    or globals().get("create_pdf_bytes")
+)
+
+if callable(pdf_builder):
+    try:
+        pdf_bytes = pdf_builder(st.session_state["last_report"], public_id=public_id)
+        if pdf_bytes:
             st.download_button(
                 "Download Report (PDF)",
                 data=pdf_bytes,
@@ -2462,8 +2464,12 @@ if st.session_state.get("report_ready") and st.session_state.get("last_report"):
                 mime="application/pdf",
                 use_container_width=True,
             )
-        except Exception:
-            pass
+        else:
+            st.warning("PDF builder returned empty bytes; download is unavailable.")
+    except Exception as pdf_exc:
+        st.warning(f"PDF generation failed: {type(pdf_exc).__name__}: {pdf_exc}")
+else:
+    st.warning("PDF download is not configured yet (no PDF builder function found).")
 
     # --------- CLEANUP: remove lingering processing UI ----------
     # These exist only during a submit run
@@ -3288,6 +3294,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
