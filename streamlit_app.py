@@ -155,7 +155,9 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     return buffer.read()
 
 # -------------------- Analysis Tracker (Admin) --------------------
-TRACKER_DIR = "audit"
+TRACKER_DIR = os.path.join(DATA_DIR, "trackers")
+os.makedirs(TRACKER_DIR, exist_ok=True)
+
 TRACKER_CSV = os.path.join(TRACKER_DIR, "analysis_tracker.csv")
 
 def _now_denver_iso() -> str:
@@ -2571,7 +2573,7 @@ with tabs[0]:
             except Exception:
                 pass
 
-            # Persist (render happens below, once)
+            # ---- After parsing + normalization succeeds ----
             st.session_state["last_report"] = parsed
             st.session_state["report_ready"] = True
             st.session_state["last_report_id"] = public_id
@@ -2587,8 +2589,6 @@ with tabs[0]:
                 status="SUCCESS",
                 model_name=MODEL_NAME,
             )
-
-            st.toast("Analysis logged", icon="✅")
 
             prog.progress(100, text="Analysis complete ✓")
             status.success("Analysis complete ✓")
@@ -3446,6 +3446,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
