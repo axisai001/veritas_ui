@@ -2423,47 +2423,57 @@ with tabs[0]:
             prog.empty()
             status.empty()
 
-    # -------------------- Analyze Tab: Report Output (renders ONCE) --------------------
-    if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-        parsed = st.session_state["last_report"]
-        public_id = st.session_state.get("last_report_id", "")
+# -------------------- Analyze Tab: Report Output (renders ONCE) --------------------
+if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+    parsed = st.session_state["last_report"]
+    public_id = st.session_state.get("last_report_id", "")
 
-        fact = (parsed.get("Fact") or "").strip()
-        bias = (parsed.get("Bias") or "").strip()
-        explanation = (parsed.get("Explanation") or "").strip()
-        revision = (parsed.get("Revision") or "").strip()
+    fact = (parsed.get("Fact") or "").strip()
+    bias = (parsed.get("Bias") or "").strip()
+    explanation = (parsed.get("Explanation") or "").strip()
+    revision = (parsed.get("Revision") or "").strip()
 
-        bias_is_no = str(bias).strip().lower() == "no"
-        bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
+    bias_is_no = str(bias).strip().lower() == "no"
+    bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
 
-        st.markdown(f"**Veritas Analysis ID:** {public_id}")
-        st.markdown(f"**Fact:** {fact if fact else '—'}")
-        st.markdown(f"**Bias:** {bias_display}")
-        st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
+    st.markdown(f"**Veritas Analysis ID:** {public_id}")
+    st.markdown(f"**Fact:** {fact if fact else '—'}")
+    st.markdown(f"**Bias:** {bias_display}")
+    st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
 
-        # Only show Revision when bias is detected
-        if (not bias_is_no) and revision:
-            st.markdown(f"**Revision:** {revision}")
+    # Only show Revision when bias is detected
+    if (not bias_is_no) and revision:
+        st.markdown(f"**Revision:** {revision}")
 
-        # PDF download (safe: only if a real builder exists)
-        pdf_builder = (
-            globals().get("build_pdf_bytes")
-            or globals().get("generate_pdf_bytes")
-            or globals().get("make_pdf_bytes")
-            or globals().get("create_pdf_bytes")
-        )
-        if callable(pdf_builder):
-            try:
-                pdf_bytes = pdf_builder(st.session_state["last_report"], public_id=public_id)
-                st.download_button(
-                    "Download Report (PDF)",
-                    data=pdf_bytes,
-                    file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
-                    mime="application/pdf",
-                    use_container_width=True,
-                )
-            except Exception:
-                pass
+    # PDF download (safe: only if a real builder exists)
+    pdf_builder = (
+        globals().get("build_pdf_bytes")
+        or globals().get("generate_pdf_bytes")
+        or globals().get("make_pdf_bytes")
+        or globals().get("create_pdf_bytes")
+    )
+    if callable(pdf_builder):
+        try:
+            pdf_bytes = pdf_builder(st.session_state["last_report"], public_id=public_id)
+            st.download_button(
+                "Download Report (PDF)",
+                data=pdf_bytes,
+                file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+        except Exception:
+            pass
+
+    # --------- CLEANUP: remove lingering processing UI ----------
+    # These exist only during a submit run
+    if "prog" in locals():
+        prog.empty()
+    if "status" in locals():
+        status.empty()
+
+    # Stop execution so no legacy UI below renders
+    st.stop()
 
 # ---------- Build user instruction for model ----------
 def _build_user_instruction(text: str) -> str:
@@ -3282,6 +3292,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
