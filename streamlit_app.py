@@ -58,6 +58,13 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)
 
 # =========================
+# ID GENERATORS / HELPERS
+# =========================
+def _new_veritas_id() -> str:
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
+    return f"VER-{ts}-{uuid.uuid4().hex[:8].upper()}"
+
+# =========================
 # OPENAI CLIENT + MODEL
 # =========================
 client = OpenAI()
@@ -3337,6 +3344,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
