@@ -2361,7 +2361,7 @@ if submitted:
         # Save raw output for inspection every time
         st.session_state["__veritas_last_raw_report__"] = final_report
 
-                # 3) PARSE (STRICT)
+        # 3) PARSE (STRICT)
         prog.progress(70, text="Parsing response…")
         status.info("Parsing response…")
 
@@ -2375,6 +2375,7 @@ if submitted:
                 st.code(final_report[:8000])
             raise
         finally:
+            pass  # <-- REQUIRED
 
         # HARD VALIDATION BEFORE NORMALIZATION (prevents raw_value: null)
         if parsed is None:
@@ -3319,6 +3320,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
