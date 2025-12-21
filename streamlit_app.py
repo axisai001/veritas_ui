@@ -19,6 +19,9 @@
 # - Cancel buttons removed on login forms.
 # - Admin sessions bypass the Privacy/Terms acknowledgment gate.
 
+# =========================
+# IMPORTS + PATHS (TOP OF FILE)
+# =========================
 import os
 import io
 import csv
@@ -27,68 +30,49 @@ import time
 import json
 import base64
 import uuid
-
 import hashlib
 import secrets
 import sqlite3
+import hmac
+import unicodedata
+import random
+from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
-from collections import deque
-from pathlib import Path
-
-import io
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.pagesizes import LETTER
+from io import BytesIO
 
 import pandas as pd
 import streamlit as st
-import hmac
-import unicodedata
 import streamlit.components.v1 as components
 from openai import OpenAI
-import httpx
-import random
-random.seed(42)  # deterministic outcomes across sessions
-import os
-import csv
-import hashlib
-from datetime import datetime
-from zoneinfo import ZoneInfo
 
-import os
-from openai import OpenAI
+random.seed(42)
 
+# =========================
+# BASE PATHS (MUST EXIST BEFORE TRACKER_DIR)
+# =========================
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = os.path.join(BASE_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# =========================
+# OPENAI CLIENT + MODEL
+# =========================
 client = OpenAI()
 
 MODEL_NAME = os.getenv("OPENAI_MODEL", "").strip()
 if not MODEL_NAME:
-    # Fallback default; replace with the exact model you intend to use
-    MODEL_NAME = "gpt-4.1-mini"
-
-import uuid
-from datetime import datetime, timezone
+    MODEL_NAME = "gpt-4.1-mini"  # fallback
 
 # =========================
-# IMPORTS (top of file)
-# =========================
-import json
-import time
-import streamlit as st
-from io import BytesIO
-
-# (Keep your other imports here, e.g. OpenAI client, doc parsing, etc.)
-
-# =========================
-# PDF BUILDER (MUST BE HERE)
+# PDF BUILDER
 # =========================
 def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     """
     Minimal PDF builder for Veritas report.
     Expects keys: Fact, Bias, Explanation, Revision (Revision may be blank).
     """
-    # Import reportlab inside the function so Streamlit loads even if reportlab is missing
     from reportlab.lib.pagesizes import LETTER
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import inch
@@ -118,7 +102,6 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
 
         c.setFont("Helvetica", 10)
         max_width = width - 2.0 * inch
-
         words = value.split()
         line = ""
 
@@ -144,7 +127,6 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     draw_wrapped("Bias", str(report.get("Bias", "")))
     draw_wrapped("Explanation", str(report.get("Explanation", "")))
 
-    # Only include Revision if present (matches your requirement)
     rev = str(report.get("Revision", "")).strip()
     if rev:
         draw_wrapped("Revision", rev)
@@ -154,7 +136,9 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     buffer.seek(0)
     return buffer.read()
 
-# -------------------- Analysis Tracker (Admin) --------------------
+# =========================
+# ANALYSIS TRACKER (ADMIN)
+# =========================
 TRACKER_DIR = os.path.join(DATA_DIR, "trackers")
 os.makedirs(TRACKER_DIR, exist_ok=True)
 
@@ -179,16 +163,11 @@ def log_analysis_run(
     model_name: str = "",
     error: str = "",
 ):
-    """
-    Appends one row to audit/analysis_tracker.csv
-    """
-    os.makedirs(TRACKER_DIR, exist_ok=True)
-
     row = {
         "timestamp_denver": _now_denver_iso(),
         "tester_id": (tester_id or "").strip(),
         "analysis_id": (analysis_id or "").strip(),
-        "status": status,
+        "status": (status or "").strip(),
         "elapsed_seconds": round(float(elapsed_seconds or 0.0), 3),
         "model": (model_name or "").strip(),
         "input_chars": len(input_text or ""),
@@ -198,7 +177,6 @@ def log_analysis_run(
     }
 
     write_header = not os.path.exists(TRACKER_CSV)
-
     with open(TRACKER_CSV, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=list(row.keys()))
         if write_header:
@@ -212,99 +190,11 @@ def read_analysis_tracker_rows(limit: int = 2000):
     rows = []
     with open(TRACKER_CSV, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
-        for r in reader:
-            rows.append(r)
+        rows.extend(reader)
 
-    # newest first
-    rows.reverse()
+    rows.reverse()  # newest first
     return rows[:limit]
-
-# =========================
-# OTHER HELPERS (below)
-# =========================
-# def _normalize_report_keys(...):
-#     ...
-# def _extract_text_from_upload(...):
-#     ...
-# def _run_safety_precheck(...):
-#     ...
-
-# ---- Global safety defaults (prevents NameError if a stray block runs) ----
-prog = None
-status = None
-
-def _new_veritas_id() -> str:
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
-    return f"VER-{ts}-{uuid.uuid4().hex[:8].upper()}"
-
-def _normalize_report_keys(data: dict) -> dict:
-    def pick(*keys, default=None):
-        for k in keys:
-            if k in data and data.get(k) is not None:
-                return data.get(k)
-        return default
-try:
-    from pypdf import PdfReader
-except Exception:
-    PdfReader = None
-try:
-    import docx
-except Exception:
-    docx = None
-import io
-
-def _extract_text_from_upload(uploaded_file) -> str:
-    """
-    Extract text from an uploaded file (PDF, DOCX, TXT, MD, CSV).
-    Returns "" when extraction is not possible.
-    """
-    if uploaded_file is None:
-        return ""
-
-    filename = (getattr(uploaded_file, "name", "") or "").lower()
-
-    # Get raw bytes safely
-    try:
-        file_bytes = uploaded_file.getvalue()
-    except Exception:
-        try:
-            file_bytes = uploaded_file.read()
-        except Exception:
-            return ""
-
-    # Plain-text formats
-    if filename.endswith((".txt", ".md", ".csv")):
-        try:
-            return file_bytes.decode("utf-8", errors="ignore").strip()
-        except Exception:
-            return ""
-
-    # DOCX
-    if filename.endswith(".docx"):
-        if docx is None:
-            st.error("DOCX upload is not supported on this deployment (python-docx missing).")
-            return ""
-        try:
-            d = docx.Document(io.BytesIO(file_bytes))
-            text = "\n".join(p.text for p in d.paragraphs if p.text)
-            return (text or "").strip()
-        except Exception:
-            return ""
-
-    # PDF
-    if filename.endswith(".pdf"):
-        if PdfReader is None:
-            st.error("PDF upload is not supported on this deployment (pypdf missing).")
-            return ""
-        try:
-            reader = PdfReader(io.BytesIO(file_bytes))
-            pages = [(p.extract_text() or "") for p in reader.pages]
-            return "\n".join(pages).strip()
-        except Exception:
-            return ""
-
-    return ""
-
+    
     # ---- Bias (accept multiple key names + formats) ----
     bias_val = pick("bias", "bias_detected", "Bias", "biasDetected", default=None)
 
@@ -3446,6 +3336,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
