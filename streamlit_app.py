@@ -1246,8 +1246,9 @@ def parse_veritas_json_or_stop(raw: str):
                 f"json.loads error: {type(e).__name__}: {e}\n\n"
                 f"RAW PREVIEW (first 4000 chars):\n{preview}"
             )
-
         data = salvaged
+    finally:
+        pass  # REQUIRED: prevents empty-finally IndentationError
 
     # 4) Normalize
     data = _normalize_report_keys(data)
@@ -3318,6 +3319,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
