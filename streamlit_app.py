@@ -2467,10 +2467,6 @@ if st.session_state.get("report_ready") and st.session_state.get("last_report"):
 
     # --------- CLEANUP: remove lingering processing UI ----------
     # These exist only during a submit run
-    if "prog" in locals():
-        prog.empty()
-    if "status" in locals():
-        status.empty()
 
     # Stop execution so no legacy UI below renders
     st.stop()
@@ -3292,6 +3288,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
