@@ -36,6 +36,7 @@ import sqlite3
 import hmac
 import unicodedata
 import random
+from collections import deque   # ← ADD THIS LINE
 from pathlib import Path
 from typing import Optional, List, Dict
 from datetime import timedelta, datetime, timezone
@@ -3336,6 +3337,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
