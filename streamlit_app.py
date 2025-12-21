@@ -2484,13 +2484,11 @@ with tabs[0]:
             st.session_state["last_report_id"] = public_id
 
             # -------------------- TRACK ANALYSIS (SUCCESS) --------------------
-            tester_id = (st.session_state.get("login_id") or "").strip()
-
             log_analysis_run(
-                tester_id=tester_id,
+                tester_id=(st.session_state.get("login_id") or ""),
                 analysis_id=public_id,
                 input_text=final_input,
-                elapsed_seconds=round(time.time() - run_t0, 3),
+                elapsed_seconds=(time.time() - run_t0),
                 status="SUCCESS",
                 model_name=MODEL_NAME,
             )
@@ -3345,6 +3343,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
