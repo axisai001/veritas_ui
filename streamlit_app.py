@@ -2499,40 +2499,34 @@ with tabs[0]:
             prog.empty()
             status.empty()
 
-            # -------------------- Analyze Tab: Report Output (renders ONCE) --------------------
+            # -------------------- Report Output (Analyze ONLY) --------------------
             if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+
                 parsed = st.session_state["last_report"]
+
+                # 🔒 ALWAYS re-derive public_id from session state
                 public_id = st.session_state.get("last_report_id", "")
 
-                fact = (parsed.get("Fact") or "").strip()
-                bias = (parsed.get("Bias") or "").strip()
-                explanation = (parsed.get("Explanation") or "").strip()
-                revision = (parsed.get("Revision") or "").strip()
-
-                bias_is_no = str(bias).strip().lower() == "no"
-                bias_display = "🟢 No" if bias_is_no else "🔴 Yes"
-
                 st.markdown(f"**Veritas Analysis ID:** {public_id}")
-                st.markdown(f"**Fact:** {fact if fact else '—'}")
-                st.markdown(f"**Bias:** {bias_display}")
-                st.markdown(f"**Explanation:** {explanation if explanation else '—'}")
+                st.markdown(f"**Fact:** {parsed.get('Fact','—')}")
+                st.markdown(f"**Bias:** {parsed.get('Bias','—')}")
+                st.markdown(f"**Explanation:** {parsed.get('Explanation','—')}")
 
-                # Only show Revision when bias is detected
-                if (not bias_is_no) and revision:
-                    st.markdown(f"**Revision:** {revision}")
+                if str(parsed.get("Bias","")).strip().lower() != "no":
+                    st.markdown(f"**Revision:** {parsed.get('Revision','')}")
 
-    # -------------------- PDF Download --------------------
-    try:
-        pdf_bytes = build_pdf_bytes(st.session_state["last_report"], public_id=public_id)
-        st.download_button(
-            "Download Report (PDF)",
-            data=pdf_bytes,
-            file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-        )
-    except Exception as pdf_exc:
-        st.warning(f"PDF download unavailable: {type(pdf_exc).__name__}: {pdf_exc}")
+                # -------------------- PDF DOWNLOAD --------------------
+                try:
+                    pdf_bytes = build_pdf_bytes(parsed, public_id)
+                    st.download_button(
+                        label="Download Report (PDF)",
+                        data=pdf_bytes,
+                        file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                    )
+                except Exception as e:
+                    st.warning(f"PDF download unavailable: {type(e).__name__}")
 
     # Stop here so nothing else prints below (prevents leftover UI)
     st.stop()
@@ -3344,6 +3338,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
