@@ -2452,20 +2452,6 @@ with tabs[0]:
                 st.session_state["veritas_analysis_id"] = _new_veritas_id()
             public_id = st.session_state["veritas_analysis_id"]
 
-            # -------------------- DEBUG: Inspect full input sent to model --------------------
-            with st.expander("Debug: What Veritas is actually analyzing", expanded=False):
-                st.write("Typed chars:", len(user_text))
-                st.write("Extracted chars:", len(extracted))
-                st.write("Final chars:", len(final_input))
-                st.write("Final lines:", len(final_input.splitlines()))
-
-                st.markdown("**Beginning of input:**")
-                st.code(final_input[:2000])
-
-                st.markdown("**End of input:**")
-                st.code(final_input[-2000:])
-            # -------------------------------------------------------------------------------
-
             # ---------- Pre-safety check ----------
             safety_msg = _run_safety_precheck(final_input)
             if safety_msg:
@@ -3412,6 +3398,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
