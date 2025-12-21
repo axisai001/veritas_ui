@@ -65,13 +65,25 @@ if not MODEL_NAME:
 import uuid
 from datetime import datetime, timezone
 
+# =========================
+# IMPORTS (top of file)
+# =========================
+import json
+import time
+import streamlit as st
 from io import BytesIO
 
+# (Keep your other imports here, e.g. OpenAI client, doc parsing, etc.)
+
+# =========================
+# PDF BUILDER (MUST BE HERE)
+# =========================
 def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     """
     Minimal PDF builder for Veritas report.
     Expects keys: Fact, Bias, Explanation, Revision (Revision may be blank).
     """
+    # Import reportlab inside the function so Streamlit loads even if reportlab is missing
     from reportlab.lib.pagesizes import LETTER
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import inch
@@ -136,6 +148,16 @@ def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
     c.save()
     buffer.seek(0)
     return buffer.read()
+
+# =========================
+# OTHER HELPERS (below)
+# =========================
+# def _normalize_report_keys(...):
+#     ...
+# def _extract_text_from_upload(...):
+#     ...
+# def _run_safety_precheck(...):
+#     ...
 
 # ---- Global safety defaults (prevents NameError if a stray block runs) ----
 prog = None
@@ -2517,31 +2539,21 @@ if st.session_state.get("report_ready") and st.session_state.get("last_report"):
     if (not bias_is_no) and revision:
         st.markdown(f"**Revision:** {revision}")
 
-    # PDF download (shows a clear message if not configured)
-pdf_builder = (
-    globals().get("build_pdf_bytes")
-    or globals().get("generate_pdf_bytes")
-    or globals().get("make_pdf_bytes")
-    or globals().get("create_pdf_bytes")
-)
-
-if callable(pdf_builder):
+    # -------------------- PDF Download --------------------
     try:
-        pdf_bytes = pdf_builder(st.session_state["last_report"], public_id=public_id)
-        if pdf_bytes:
-            st.download_button(
-                "Download Report (PDF)",
-                data=pdf_bytes,
-                file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
-                mime="application/pdf",
-                use_container_width=True,
-            )
-        else:
-            st.warning("PDF builder returned empty bytes; download is unavailable.")
+        pdf_bytes = build_pdf_bytes(st.session_state["last_report"], public_id=public_id)
+        st.download_button(
+            "Download Report (PDF)",
+            data=pdf_bytes,
+            file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
     except Exception as pdf_exc:
-        st.warning(f"PDF generation failed: {type(pdf_exc).__name__}: {pdf_exc}")
-else:
-    st.warning("PDF download is not configured yet (no PDF builder function found).")
+        st.warning(f"PDF download unavailable: {type(pdf_exc).__name__}: {pdf_exc}")
+
+    # Stop here so nothing else prints below (prevents leftover UI)
+    st.stop()
 
     # --------- CLEANUP: remove lingering processing UI ----------
     # These exist only during a submit run
@@ -3366,6 +3378,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
