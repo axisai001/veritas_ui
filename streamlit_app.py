@@ -65,6 +65,78 @@ if not MODEL_NAME:
 import uuid
 from datetime import datetime, timezone
 
+from io import BytesIO
+
+def build_pdf_bytes(report: dict, public_id: str = "") -> bytes:
+    """
+    Minimal PDF builder for Veritas report.
+    Expects keys: Fact, Bias, Explanation, Revision (Revision may be blank).
+    """
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import inch
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=LETTER)
+    width, height = LETTER
+
+    y = height - 1.0 * inch
+
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(1.0 * inch, y, "Veritas Report")
+    y -= 0.35 * inch
+
+    c.setFont("Helvetica", 10)
+    if public_id:
+        c.drawString(1.0 * inch, y, f"Veritas Analysis ID: {public_id}")
+        y -= 0.25 * inch
+
+    def draw_wrapped(label: str, value: str):
+        nonlocal y
+        value = (value or "—").strip()
+
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(1.0 * inch, y, f"{label}:")
+        y -= 0.18 * inch
+
+        c.setFont("Helvetica", 10)
+        max_width = width - 2.0 * inch
+
+        words = value.split()
+        line = ""
+
+        for w in words:
+            test = (line + " " + w).strip()
+            if c.stringWidth(test, "Helvetica", 10) <= max_width:
+                line = test
+            else:
+                c.drawString(1.0 * inch, y, line)
+                y -= 0.16 * inch
+                line = w
+
+                if y < 1.0 * inch:
+                    c.showPage()
+                    y = height - 1.0 * inch
+                    c.setFont("Helvetica", 10)
+
+        if line:
+            c.drawString(1.0 * inch, y, line)
+            y -= 0.22 * inch
+
+    draw_wrapped("Fact", str(report.get("Fact", "")))
+    draw_wrapped("Bias", str(report.get("Bias", "")))
+    draw_wrapped("Explanation", str(report.get("Explanation", "")))
+
+    # Only include Revision if present (matches your requirement)
+    rev = str(report.get("Revision", "")).strip()
+    if rev:
+        draw_wrapped("Revision", rev)
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer.read()
+
 # ---- Global safety defaults (prevents NameError if a stray block runs) ----
 prog = None
 status = None
@@ -3294,6 +3366,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
