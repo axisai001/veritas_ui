@@ -2243,8 +2243,8 @@ def show_login():
     
             # Optional format guard (adjust to your real ID scheme)
             # If you don't have a prefix standard, you can remove this block.
-            if not login_id_clean.startswith("tester-"):
-                st.error("Invalid Tester ID format.")
+            if not re.fullmatch(r"bt-\d{4}-\d{3}", login_id_clean):
+                st.error("Invalid Tester ID format. Expected format like BT-2025-016.")
                 st.stop()
 
             # ----------------------------
@@ -3419,6 +3419,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
