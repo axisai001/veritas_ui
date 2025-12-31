@@ -51,6 +51,14 @@ from openai import OpenAI
 random.seed(42)
 
 # =========================
+# ACCESS CONTROL: BANNED TESTER IDS
+# =========================
+BANNED_TESTER_IDS = {
+    "BT-2025-005",  # <-- replace with the tester ID to ban
+    # add more as needed
+}
+
+# =========================
 # BASE PATHS (MUST EXIST BEFORE TRACKER_DIR)
 # =========================
 BASE_DIR = Path(__file__).resolve().parent
@@ -109,6 +117,14 @@ def _extract_text_from_upload(uploaded_file) -> str:
 # =========================
 # ID GENERATORS / HELPERS
 # =========================
+def normalize_tester_id(raw: str) -> str:
+    return (raw or "").strip().upper()
+
+def is_banned_tester_id(tester_id: str) -> bool:
+    return normalize_tester_id(tester_id) in {
+        normalize_tester_id(x) for x in BANNED_TESTER_IDS
+    }
+    
 def _new_veritas_id() -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
     return f"VER-{ts}-{uuid.uuid4().hex[:8].upper()}"
@@ -2187,12 +2203,21 @@ def show_login():
                 st.error("Network error")
                 st.stop()
 
+            # ----------------------------
+            # HARD BLOCK: BANNED TESTER IDS
+            # ----------------------------
+            login_id_clean = normalize_tester_id(login_id)
+            if is_banned_tester_id(login_id_clean):
+                st.error(
+                    "Access denied. This Tester ID does not currently have access to the Veritas BETA environment."
+                )
+                st.stop()
+
             # ✅ Secure password check using normalization
             if hmac.compare_digest(_norm(pwd), _norm(st.secrets["APP_PASSWORD"])):
                 st.session_state["authed"] = True
                 st.session_state["is_admin"] = False
 
-                login_id_clean = (login_id or "").strip().lower()
                 st.session_state["login_id"] = login_id_clean
                 st.session_state["_fail_times"].clear()
                 st.session_state["_locked_until"] = 0.0
@@ -3341,6 +3366,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
