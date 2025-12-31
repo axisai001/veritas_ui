@@ -51,11 +51,25 @@ from openai import OpenAI
 random.seed(42)
 
 # =========================
-# ACCESS CONTROL: BANNED TESTER IDS
+# ACCESS CONTROL: TESTER IDS
 # =========================
+ALLOWED_TESTER_IDS = {
+    "BT-2025-001",
+    "BT-2025-003",
+    "BT-2025-004",
+    "BT-2025-006",
+    "BT-2025-009",
+    "BT-2025-010",
+    "BT-2025-011",
+    "BT-2025-013",
+    "BT-2025-014",
+    "BT-2025-016",
+    "BT-2025-018",
+    # add all issued tester IDs here
+}
+
 BANNED_TESTER_IDS = {
-    "BT-2025-005",  # <-- replace with the tester ID to ban
-    # add more as needed
+    "BT-2025-005",  # dropped out of BETA
 }
 
 # =========================
@@ -356,6 +370,22 @@ BG_URL      = os.environ.get("BG_URL")      or st.secrets.get("BG_URL", "")
 
 # ----- Streamlit bootstrap -----
 st.set_page_config(page_title=APP_TITLE, page_icon="🧭", layout="centered")
+
+# ----------------------------
+# GLOBAL ENFORCEMENT: BANNED TESTERS
+# ----------------------------
+current_id = normalize_tester_id(st.session_state.get("login_id"))
+
+if st.session_state.get("authed", False) and is_banned_tester_id(current_id):
+    st.session_state["authed"] = False
+    st.session_state["is_admin"] = False
+    st.session_state["login_id"] = ""
+
+    st.error(
+        "Access revoked. This Tester ID does not currently have access "
+        "to the Veritas BETA environment."
+    )
+    st.stop()
 
 # ----- Rerun & query param helpers -----
 def _safe_rerun():
@@ -2204,14 +2234,37 @@ def show_login():
                 st.stop()
 
             # ----------------------------
-            # HARD BLOCK: BANNED TESTER IDS
+            # REQUIRE TESTER ID (ENFORCED)
             # ----------------------------
             login_id_clean = normalize_tester_id(login_id)
+            if not login_id_clean:
+                st.error("Tester ID is required.")
+                st.stop()
+    
+            # Optional format guard (adjust to your real ID scheme)
+            # If you don't have a prefix standard, you can remove this block.
+            if not login_id_clean.startswith("tester-"):
+                st.error("Invalid Tester ID format.")
+                st.stop()
+
+            # ----------------------------
+            # HARD BLOCK: BANNED TESTER IDS
+            # ----------------------------
             if is_banned_tester_id(login_id_clean):
                 st.error(
                     "Access denied. This Tester ID does not currently have access to the Veritas BETA environment."
                 )
                 st.stop()
+
+            # ----------------------------
+            # ALLOWLIST ENFORCEMENT (RECOMMENDED)
+            # ----------------------------
+            # If you do not want allowlisting, remove this block.
+            if "ALLOWED_TESTER_IDS" in globals() and isinstance(ALLOWED_TESTER_IDS, (set, list, tuple)):
+                allowed_norm = {normalize_tester_id(x) for x in ALLOWED_TESTER_IDS}
+                if login_id_clean not in allowed_norm:
+                    st.error("Access denied. Tester ID not recognized.")
+                    st.stop()
 
             # ✅ Secure password check using normalization
             if hmac.compare_digest(_norm(pwd), _norm(st.secrets["APP_PASSWORD"])):
@@ -3366,6 +3419,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
