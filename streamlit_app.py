@@ -55,7 +55,6 @@ random.seed(42)
 # =========================
 ALLOWED_TESTER_IDS = {
     "BT-2025-001",
-    "BT-2025-002",
     "BT-2025-003",
     "BT-2025-004",
     "BT-2025-006",
@@ -71,6 +70,7 @@ ALLOWED_TESTER_IDS = {
 
 BANNED_TESTER_IDS = {
     "BT-2025-005",  # dropped out of BETA
+    "BT-2025-002",  # pending signed NDA
 }
 
 # =========================
@@ -3414,6 +3414,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
