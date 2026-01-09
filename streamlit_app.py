@@ -54,8 +54,13 @@ random.seed(42)
 # ACCESS CONTROL: TESTER IDS
 # =========================
 ALLOWED_TESTER_IDS = {
-    "BT-2025-001",
     "BT-2025-002",
+    # add all issued tester IDs here
+}
+
+BANNED_TESTER_IDS = {
+    "BT-2025-005",  # dropped out of BETA
+    "BT-2025-001",
     "BT-2025-003",
     "BT-2025-004",
     "BT-2025-006",
@@ -66,11 +71,6 @@ ALLOWED_TESTER_IDS = {
     "BT-2025-014",
     "BT-2025-016",
     "BT-2025-018",
-    # add all issued tester IDs here
-}
-
-BANNED_TESTER_IDS = {
-    "BT-2025-005",  # dropped out of BETA
 }
 
 # =========================
@@ -3414,6 +3414,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
