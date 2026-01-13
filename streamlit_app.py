@@ -43,6 +43,9 @@ from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from io import BytesIO
 
+import re
+from typing import Dict, Any, List, Tuple
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -953,6 +956,162 @@ Rules:
 Do not include any other keys or any text outside the JSON object.
 """
 
+# --- Interpretive overreach patterns (intent/impact escalation) ---
+_OVERREACH_PATTERNS = [
+    r"\bintends?\b",
+    r"\bdesigned to\b",
+    r"\btrying to\b",
+    r"\bseeks to\b",
+    r"\btargets?\b",
+    r"\bweaponiz(es|ed|ing)\b",
+    r"\bwill (?:cause|lead to|result in)\b",
+    r"\bguarantees?\b",
+    r"\bproves?\b",
+    r"\bmost likely\b",
+    r"\bclearly\b",
+    r"\bundeniably\b",
+    r"\bwithout question\b",
+]
+
+_SOFTENING_REPLACEMENTS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"\bclearly\b", re.IGNORECASE), "potentially"),
+    (re.compile(r"\bundeniably\b", re.IGNORECASE), "plausibly"),
+    (re.compile(r"\bwithout question\b", re.IGNORECASE), "based on the wording"),
+    (re.compile(r"\bwill (cause|lead to|result in)\b", re.IGNORECASE), "may $1"),
+    (re.compile(r"\bproves?\b", re.IGNORECASE), "suggests"),
+    (re.compile(r"\bmost likely\b", re.IGNORECASE), "may"),
+    (re.compile(r"\bintends?\b", re.IGNORECASE), "may be interpreted as"),
+    (re.compile(r"\bdesigned to\b", re.IGNORECASE), "could be interpreted to"),
+    (re.compile(r"\btrying to\b", re.IGNORECASE), "may be perceived as"),
+    (re.compile(r"\bseeks to\b", re.IGNORECASE), "may have the effect of"),
+    (re.compile(r"\btargets?\b", re.IGNORECASE), "could disproportionately affect"),
+]
+
+def _normalize_ws(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "")).strip()
+
+def _extract_quoted_spans(text: str) -> List[str]:
+    # “...” or "..."
+    spans = re.findall(r"“([^”]{6,})”|\"([^\"]{6,})\"", text or "")
+    out = []
+    for a, b in spans:
+        out.append((a or b).strip())
+    return [s for s in out if s]
+
+def _evidence_support_score(explanation: str, original_text: str) -> float:
+    """
+    Score 0.0–1.0 for how well the explanation is supported by explicit text.
+    Strongest signal: explanation includes direct quotes that appear verbatim in the original text.
+    Secondary: explanation references exact substrings (short phrases) present in original text.
+    """
+    exp = _normalize_ws(explanation)
+    src = _normalize_ws(original_text)
+
+    if not exp or not src:
+        return 0.0
+
+    quotes = _extract_quoted_spans(exp)
+    quote_hits = sum(1 for q in quotes if _normalize_ws(q) in src)
+
+    # Light-weight substring evidence: look for 2–5 word phrases in explanation that exist in source.
+    # We do NOT want to overfit; this is a conservative heuristic.
+    words = exp.split()
+    phrase_hits = 0
+    checked = 0
+    for n in (5, 4, 3, 2):
+        for i in range(0, max(0, len(words) - n + 1), max(1, n)):  # step by n to avoid huge loops
+            phrase = " ".join(words[i:i+n])
+            phrase_n = phrase.strip(".,;:()[]{}\"'").lower()
+            if len(phrase_n) < 12:
+                continue
+            checked += 1
+            if phrase_n in src.lower():
+                phrase_hits += 1
+            if checked >= 40:  # cap work
+                break
+        if checked >= 40:
+            break
+
+    # Scoring: quotes are strong; phrase hits are weak.
+    score = 0.0
+    if quote_hits >= 2:
+        score = 0.85
+    elif quote_hits == 1:
+        score = 0.65
+    else:
+        # no quotes found/verified
+        if phrase_hits >= 3:
+            score = 0.55
+        elif phrase_hits == 2:
+            score = 0.40
+        elif phrase_hits == 1:
+            score = 0.25
+        else:
+            score = 0.10
+
+    return max(0.0, min(1.0, score))
+
+def _soften_overreach(text: str, aggressive: bool) -> str:
+    if not text:
+        return text
+
+    out = text
+    for pat, repl in _SOFTENING_REPLACEMENTS:
+        out = pat.sub(repl, out)
+
+    if aggressive:
+        # Remove remaining intent/impact escalation tokens when evidence is very weak
+        for p in _OVERREACH_PATTERNS:
+            out = re.sub(p, "", out, flags=re.IGNORECASE)
+        out = re.sub(r"\s{2,}", " ", out).strip()
+
+    return out
+
+def apply_interpretation_confidence_calibration(result_json: Dict[str, Any], original_text: str) -> Dict[str, Any]:
+    """
+    VER-REM-001: Prevent interpretive overreach by constraining explanation language to explicit text support.
+    Operates ONLY on the allowed schema keys: fact, bias_detected, explanation, suggested_revision.
+    """
+    if not isinstance(result_json, dict):
+        return result_json
+
+    bias_detected = (result_json.get("bias_detected") or "").strip()
+    explanation = result_json.get("explanation") or ""
+    suggested_revision = result_json.get("suggested_revision") or ""
+
+    # Only calibrate when bias_detected is Yes, because that's where overreach is most harmful.
+    # If bias_detected is No, keep explanation conservative but still soften egregious certainty language.
+    score = _evidence_support_score(explanation, original_text)
+
+    # Evidence bands (tunable):
+    # <0.30: weak support -> aggressive softening + force hedging language
+    # 0.30–0.60: moderate -> softening only
+    # >0.60: strong -> leave as-is
+    if score < 0.30:
+        explanation = _soften_overreach(explanation, aggressive=True)
+        # Ensure explanation explicitly frames as text-based interpretation
+        if explanation and "based on" not in explanation.lower():
+            explanation = f"Based on the explicit wording provided, {explanation[0].lower() + explanation[1:] if len(explanation) > 1 else explanation}"
+        if bias_detected.lower() == "yes" and suggested_revision:
+            suggested_revision = _soften_overreach(suggested_revision, aggressive=False)
+
+    elif score < 0.60:
+        explanation = _soften_overreach(explanation, aggressive=False)
+        if bias_detected.lower() == "yes" and suggested_revision:
+            suggested_revision = _soften_overreach(suggested_revision, aggressive=False)
+    else:
+        # strong evidence: still apply mild replacement of absolute certainty if present
+        explanation = _soften_overreach(explanation, aggressive=False)
+
+    result_json["explanation"] = explanation
+    result_json["suggested_revision"] = suggested_revision
+
+    # Optional internal debugging (DO NOT return to end user if you must keep strict JSON keys)
+    # If your system enforces strict keys, DO NOT add extra keys. Keep this commented.
+    # result_json["_ver_rem_001"] = {"evidence_score": round(score, 2)}
+
+    return result_json
+    
 # ===== Scope Gate Policy (Reference / Documentation Only) =====
 SCOPE_GATE_POLICY_TEXT = """
 ----------------------------------------------------------------------
@@ -1343,8 +1502,6 @@ def parse_veritas_json_or_stop(raw: str):
         salvaged = _salvage_numbered_report_to_json(raw)
 
         if salvaged is None:
-            # DO NOT st.stop() here — it looks like a hang.
-            # Instead: surface the failure and show raw output for diagnosis.
             preview = (raw or "")[:4000]
             raise ValueError(
                 "Parser could not load JSON and salvage failed. "
@@ -1354,6 +1511,13 @@ def parse_veritas_json_or_stop(raw: str):
         data = salvaged
     finally:
         pass  # REQUIRED: prevents empty-finally IndentationError
+
+    # === VER-REM-001: Interpretation Confidence Calibration ===
+    if isinstance(data, dict):
+        data = apply_interpretation_confidence_calibration(
+            data,
+            original_text=user_text
+        )
 
     # 4) Normalize
     data = _normalize_report_keys(data)
@@ -3414,6 +3578,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
