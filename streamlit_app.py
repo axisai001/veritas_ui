@@ -1111,7 +1111,142 @@ def apply_interpretation_confidence_calibration(result_json: Dict[str, Any], ori
     # result_json["_ver_rem_001"] = {"evidence_score": round(score, 2)}
 
     return result_json
-    
+
+# ============================================================
+# VER-REM-002 — Fact vs Inference Boundary Enforcement
+# ============================================================
+
+# Terms/phrases that indicate inference, intent attribution, impact claims, or evaluation.
+# These are disallowed in the `fact` field.
+_FACT_DISALLOWED_PATTERNS = [
+    # Intent / motive attribution
+    (re.compile(r"\b(intends?|aims?|seeks?|designed|meant)\b", re.IGNORECASE), ""),
+    (re.compile(r"\b(designed to|meant to|intended to|aimed at|seeking to)\b", re.IGNORECASE), ""),
+
+    # Impact / effect / harm claims
+    (re.compile(r"\b(disadvantage[s]?|exclude[s]?|marginalize[s]?|harm[s]?|oppress(es|ed|ing)?)\b", re.IGNORECASE), ""),
+    (re.compile(r"\b(affect[s]?|impact[s]?|burden[s]?|penalize[s]?|stigmatize[s]?)\b", re.IGNORECASE), ""),
+
+    # Causal determinism
+    (re.compile(r"\b(leads? to|results? in|causes?|creates?|produces?)\b", re.IGNORECASE), ""),
+
+    # Evaluative / normative framing (belongs in explanation, not fact)
+    (re.compile(r"\b(problematic|biased|discriminatory|unfair|concerning|inappropriate)\b", re.IGNORECASE), ""),
+
+    # Modal/hedging language (facts should be literal; hedging implies inference)
+    (re.compile(r"\b(may|might|could|potentially|likely|suggests?)\b", re.IGNORECASE), ""),
+
+    # Group attribution / protected-class inference in fact field
+    # (Facts should not infer demographic impacts.)
+    (re.compile(r"\b(caregivers?|parents?|mothers?|fathers?|disabled|disabilities|minorities|marginalized)\b", re.IGNORECASE), ""),
+]
+
+# Phrases that commonly introduce interpretive clauses in "fact" sentences.
+# We'll strip trailing clauses starting at these markers.
+_FACT_CLAUSE_BREAKERS = [
+    "which", "that", "thereby", "thus", "therefore", "leading", "resulting", "causing",
+    "by excluding", "by disadvantaging", "by discriminating", "in order to"
+]
+
+def _fact_normalize_ws(s: str) -> str:
+    return re.sub(r"\s+", " ", (s or "")).strip()
+
+def _strip_after_clause_breakers(text: str) -> str:
+    """
+    Removes trailing interpretive clauses that often begin with clause breakers.
+    Keeps the earliest literal segment.
+    """
+    t = text or ""
+    lowered = t.lower()
+    cut_idx = None
+    for cb in _FACT_CLAUSE_BREAKERS:
+        if " " in cb:
+            idx = lowered.find(cb)
+        else:
+            m = re.search(rf"\b{re.escape(cb)}\b", lowered)
+            idx = m.start() if m else -1
+        if idx is not None and idx >= 0:
+            if cut_idx is None or idx < cut_idx:
+                cut_idx = idx
+    if cut_idx is not None:
+        t = t[:cut_idx].strip()
+    return t
+
+def _sanitize_fact_text(fact: str) -> str:
+    """
+    Remove disallowed inference markers and tidy up punctuation/spaces.
+    """
+    if not fact:
+        return fact
+    out = fact
+
+    # Remove disallowed patterns
+    for pat, repl in _FACT_DISALLOWED_PATTERNS:
+        out = pat.sub(repl, out)
+
+    # Strip interpretive trailing clauses
+    out = _strip_after_clause_breakers(out)
+
+    # Cleanup spacing and punctuation artifacts
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    out = re.sub(r"\s+([,.;:])", r"\1", out).strip()
+    out = re.sub(r"^[,.;:\-]\s*", "", out).strip()
+
+    # Ensure it ends with a period (fact is one sentence per schema expectation)
+    if out and out[-1] not in ".!?":
+        out += "."
+
+    return out
+
+def _fact_has_minimal_text_support(fact: str, original_text: str) -> bool:
+    """
+    Conservative support check:
+    - Extract 2–5 word chunks from fact and ensure at least one chunk appears in original text.
+    """
+    f = _fact_normalize_ws(fact).lower()
+    src = _fact_normalize_ws(original_text).lower()
+    if not f or not src:
+        return False
+
+    words = [w.strip(".,;:()[]{}\"'") for w in f.split() if w.strip(".,;:()[]{}\"'")]
+
+    # Short facts: require at least two distinct word hits
+    if len(words) < 6:
+        hits = sum(1 for w in set(words) if len(w) >= 4 and w in src)
+        return hits >= 2
+
+    # Longer facts: require one 3–5 word phrase overlap
+    for n in (5, 4, 3, 2):
+        for i in range(0, max(0, len(words) - n + 1), max(1, n)):
+            phrase = " ".join(words[i:i+n]).strip()
+            if len(phrase) < 12:
+                continue
+            if phrase in src:
+                return True
+    return False
+
+def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -> Dict[str, Any]:
+    """
+    VER-REM-002: Enforces that `fact` remains literal-only and text-supported.
+    Modifies only `fact` and adds no new keys.
+    """
+    if not isinstance(result_json, dict):
+        return result_json
+
+    fact = result_json.get("fact") or ""
+    fact_clean = _sanitize_fact_text(fact)
+
+    # Fallback if sanitization empties content
+    if not fact_clean or len(_fact_normalize_ws(fact_clean)) < 12:
+        fact_clean = "The text describes the stated requirements or conditions."
+
+    # Optional minimal support check; otherwise neutral literal fallback
+    if original_text and not _fact_has_minimal_text_support(fact_clean, original_text):
+        fact_clean = "The text states the described requirement, condition, or eligibility criteria."
+
+    result_json["fact"] = fact_clean
+    return result_json
+
 # ===== Scope Gate Policy (Reference / Documentation Only) =====
 SCOPE_GATE_POLICY_TEXT = """
 ----------------------------------------------------------------------
@@ -1511,6 +1646,13 @@ def parse_veritas_json_or_stop(raw: str):
         data = salvaged
     finally:
         pass  # REQUIRED: prevents empty-finally IndentationError
+
+    # === VER-REM-002: Fact vs Inference Boundary Enforcement ===
+    if isinstance(data, dict):
+        data = enforce_fact_literal_only(
+            data,
+            original_text=user_text
+        )
 
     # === VER-REM-001: Interpretation Confidence Calibration ===
     if isinstance(data, dict):
@@ -3578,6 +3720,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
