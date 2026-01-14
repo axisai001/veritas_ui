@@ -1726,6 +1726,13 @@ def parse_veritas_json_or_stop(raw: str):
     # 4) Normalize
     data = _normalize_report_keys(data)
 
+    # === FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ===
+    if isinstance(data, dict):
+        data = _final_fact_modal_lock(
+            data,
+            original_text=user_text
+        )
+
     # 5) Validate
     required = {"fact", "bias", "explanation", "revision"}
     if not isinstance(data, dict) or not required.issubset(data.keys()):
@@ -3782,6 +3789,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
