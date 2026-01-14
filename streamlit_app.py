@@ -1309,6 +1309,40 @@ def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -
     result_json["fact"] = fact_clean
     return result_json
 
+def _final_fact_modal_lock(data: Dict[str, Any], original_text: str) -> Dict[str, Any]:
+    """
+    FINAL AUTHORITY: Prevents obligation escalation in `fact`
+    when input uses recommendatory language (e.g., 'should').
+    """
+    if not isinstance(data, dict):
+        return data
+
+    fact = data.get("fact")
+    if not isinstance(fact, str) or not original_text:
+        return data
+
+    src = original_text.lower()
+
+    # Only enforce when input uses "should"
+    if "should" not in src:
+        return data
+
+    # Skip ONLY if input is explicitly mandatory
+    has_mandatory_modal = bool(
+        re.search(r"\bmust\b", src) or
+        re.search(r"\b(is|are)\s+required(\s+to)?\b", src)
+    )
+    if has_mandatory_modal:
+        return data
+
+    out = fact
+    out = re.sub(r"\b(is|are)\s+required\s+to\b", "should", out, flags=re.IGNORECASE)
+    out = re.sub(r"\b(is|are)\s+required\b", "should", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bmust\b", "should", out, flags=re.IGNORECASE)
+
+    data["fact"] = out
+    return data
+
 # ===== Scope Gate Policy (Reference / Documentation Only) =====
 SCOPE_GATE_POLICY_TEXT = """
 ----------------------------------------------------------------------
@@ -3789,6 +3823,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
