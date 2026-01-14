@@ -1297,10 +1297,6 @@ def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -
     fact = result_json.get("fact") or ""
     fact_clean = _sanitize_fact_text(fact)
 
-    # === VER-REM-002 FIX: preserve obligation strength from source text ===
-    if original_text and "should" in original_text.lower():
-        fact_clean = re.sub(r"\bare required to\b", "should", fact_clean, flags=re.IGNORECASE)
-
     # Fallback if sanitization empties content
     if not fact_clean or len(_fact_normalize_ws(fact_clean)) < 12:
         fact_clean = "The text describes the stated requirements or conditions."
@@ -3786,6 +3782,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
