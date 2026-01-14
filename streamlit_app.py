@@ -1192,6 +1192,33 @@ def _sanitize_fact_text(fact: str) -> str:
 
     out = fact
 
+    # === VER-REM-002 FIX: preserve obligation strength ===
+    # If the source text used "should", prevent escalation to "are required to"
+    out = re.sub(
+        r"\bare required to\b",
+        "should",
+        out,
+        flags=re.IGNORECASE
+    ) if "should" in fact.lower() else out
+
+    # Remove disallowed inference markers
+    for pat, repl in _FACT_DISALLOWED_PATTERNS:
+        out = pat.sub(repl, out)
+
+    # Strip interpretive trailing clauses
+    out = _strip_after_clause_breakers(out)
+
+    # Cleanup spacing and punctuation artifacts
+    out = re.sub(r"\s{2,}", " ", out).strip()
+    out = re.sub(r"\s+([,.;:])", r"\1", out).strip()
+    out = re.sub(r"^[,.;:\-]\s*", "", out).strip()
+
+    # Ensure it ends with a period (fact is one sentence per schema expectation)
+    if out and out[-1] not in ".!?":
+        out += "."
+
+    return out
+
     # Remove disallowed patterns
     for pat, repl in _FACT_DISALLOWED_PATTERNS:
         out = pat.sub(repl, out)
@@ -1251,6 +1278,10 @@ def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -
 
     fact = result_json.get("fact") or ""
     fact_clean = _sanitize_fact_text(fact)
+
+    # === VER-REM-002 FIX: preserve obligation strength from source text ===
+    if original_text and "should" in original_text.lower():
+        fact_clean = re.sub(r"\bare required to\b", "should", fact_clean, flags=re.IGNORECASE)
 
     # Fallback if sanitization empties content
     if not fact_clean or len(_fact_normalize_ws(fact_clean)) < 12:
@@ -3736,6 +3767,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
