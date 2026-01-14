@@ -1134,6 +1134,7 @@ _FACT_DISALLOWED_PATTERNS = [
     (re.compile(r"\b(problematic|biased|discriminatory|unfair|concerning|inappropriate)\b", re.IGNORECASE), ""),
 
     # Modal/hedging language (facts should be literal; hedging implies inference)
+    # NOTE: kept to enforce "literal-only" (no hedging in fact field).
     (re.compile(r"\b(may|might|could|potentially|likely|suggests?)\b", re.IGNORECASE), ""),
 
     # Group attribution / protected-class inference in fact field
@@ -1143,9 +1144,12 @@ _FACT_DISALLOWED_PATTERNS = [
 
 # Phrases that commonly introduce interpretive clauses in "fact" sentences.
 # We'll strip trailing clauses starting at these markers.
+# IMPORTANT: do NOT include "that" — it destroys valid factual constructions ("states that ...")
 _FACT_CLAUSE_BREAKERS = [
-    "which", "that", "thereby", "thus", "therefore", "leading", "resulting", "causing",
-    "by excluding", "by disadvantaging", "by discriminating", "in order to"
+    "which", "thereby", "thus", "therefore",
+    "leading", "resulting", "causing",
+    "by excluding", "by disadvantaging", "by discriminating",
+    "in order to",
 ]
 
 def _fact_normalize_ws(s: str) -> str:
@@ -1156,20 +1160,27 @@ def _strip_after_clause_breakers(text: str) -> str:
     Removes trailing interpretive clauses that often begin with clause breakers.
     Keeps the earliest literal segment.
     """
-    t = text or ""
+    t = (text or "").strip()
+    if not t:
+        return t
+
     lowered = t.lower()
     cut_idx = None
+
     for cb in _FACT_CLAUSE_BREAKERS:
         if " " in cb:
             idx = lowered.find(cb)
         else:
             m = re.search(rf"\b{re.escape(cb)}\b", lowered)
             idx = m.start() if m else -1
+
         if idx is not None and idx >= 0:
             if cut_idx is None or idx < cut_idx:
                 cut_idx = idx
+
     if cut_idx is not None:
         t = t[:cut_idx].strip()
+
     return t
 
 def _sanitize_fact_text(fact: str) -> str:
@@ -1178,6 +1189,7 @@ def _sanitize_fact_text(fact: str) -> str:
     """
     if not fact:
         return fact
+
     out = fact
 
     # Remove disallowed patterns
@@ -1201,7 +1213,7 @@ def _sanitize_fact_text(fact: str) -> str:
 def _fact_has_minimal_text_support(fact: str, original_text: str) -> bool:
     """
     Conservative support check:
-    - Extract 2–5 word chunks from fact and ensure at least one chunk appears in original text.
+    - Extract a small set of words/phrases from the fact and verify overlap with original text.
     """
     f = _fact_normalize_ws(fact).lower()
     src = _fact_normalize_ws(original_text).lower()
@@ -1210,20 +1222,24 @@ def _fact_has_minimal_text_support(fact: str, original_text: str) -> bool:
 
     words = [w.strip(".,;:()[]{}\"'") for w in f.split() if w.strip(".,;:()[]{}\"'")]
 
-    # Short facts: require at least two distinct word hits
+    # Short facts: require at least two distinct word hits (>=4 chars)
     if len(words) < 6:
         hits = sum(1 for w in set(words) if len(w) >= 4 and w in src)
         return hits >= 2
 
-    # Longer facts: require one 3–5 word phrase overlap
-    for n in (5, 4, 3, 2):
-        for i in range(0, max(0, len(words) - n + 1), max(1, n)):
+    # Longer facts: require at least one 3–5 word phrase overlap
+    for n in (5, 4, 3):
+        for i in range(0, max(0, len(words) - n + 1), n):
             phrase = " ".join(words[i:i+n]).strip()
-            if len(phrase) < 12:
+            if len(phrase) < 10:
                 continue
             if phrase in src:
                 return True
-    return False
+
+    # Fallback overlap: at least 3 distinct substantive word hits
+    substantive = [w for w in set(words) if len(w) >= 5]
+    hits = sum(1 for w in substantive if w in src)
+    return hits >= 3
 
 def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -> Dict[str, Any]:
     """
@@ -1240,7 +1256,7 @@ def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -
     if not fact_clean or len(_fact_normalize_ws(fact_clean)) < 12:
         fact_clean = "The text describes the stated requirements or conditions."
 
-    # Optional minimal support check; otherwise neutral literal fallback
+    # Ensure minimal textual support; otherwise neutral literal fallback
     if original_text and not _fact_has_minimal_text_support(fact_clean, original_text):
         fact_clean = "The text states the described requirement, condition, or eligibility criteria."
 
@@ -3720,6 +3736,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
