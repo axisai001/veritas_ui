@@ -1268,6 +1268,24 @@ def _fact_has_minimal_text_support(fact: str, original_text: str) -> bool:
     hits = sum(1 for w in substantive if w in src)
     return hits >= 3
 
+def _preserve_should_obligation(fact_text: str, original_text: str) -> str:
+    if not fact_text or not original_text:
+        return fact_text
+
+    src = original_text.lower()
+
+    if "should" not in src:
+        return fact_text
+
+    if "must" in src or "required" in src:
+        return fact_text
+
+    out = fact_text
+    out = re.sub(r"\b(is|are)\s+required\s+to\b", "should", out, flags=re.IGNORECASE)
+    out = re.sub(r"\b(is|are)\s+required\b", "should", out, flags=re.IGNORECASE)
+    out = re.sub(r"\bmust\b", "should", out, flags=re.IGNORECASE)
+    return out
+
 def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -> Dict[str, Any]:
     """
     VER-REM-002: Enforces that `fact` remains literal-only and text-supported.
@@ -1291,6 +1309,7 @@ def enforce_fact_literal_only(result_json: Dict[str, Any], original_text: str) -
     if original_text and not _fact_has_minimal_text_support(fact_clean, original_text):
         fact_clean = "The text states the described requirement, condition, or eligibility criteria."
 
+    fact_clean = _preserve_should_obligation(fact_clean, original_text)
     result_json["fact"] = fact_clean
     return result_json
 
@@ -3767,6 +3786,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
