@@ -1762,10 +1762,12 @@ def parse_veritas_json_or_stop(raw: str):
 
     # === FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ===
     if isinstance(data, dict):
-        data = _final_fact_modal_lock(
-            data,
-            original_text=user_text
-        )
+        data = _final_fact_modal_lock(data, original_text=user_text)
+
+    # DEBUG PROBE (temporary)
+    st.write("DEBUG: user_text contains 'should' =", "should" in (user_text or "").lower())
+    st.write("DEBUG: keys =", sorted(list(data.keys())) if isinstance(data, dict) else type(data))
+    st.write("DEBUG: fact AFTER final lock =", data.get("fact") if isinstance(data, dict) else None)
 
     # 5) Validate
     required = {"fact", "bias", "explanation", "revision"}
@@ -3823,6 +3825,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
