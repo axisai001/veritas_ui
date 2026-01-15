@@ -3055,6 +3055,7 @@ with tabs[0]:
             if isinstance(parsed, dict):
                 parsed = enforce_fact_literal_only(parsed, original_text=original_text)
                 parsed = _final_fact_modal_lock(parsed, original_text=original_text)
+                st.write("DEBUG fact AFTER lock:", parsed.get("fact", "")[:160])
 
             # Persist final report state
             st.session_state["last_report"] = parsed
@@ -3932,6 +3933,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
