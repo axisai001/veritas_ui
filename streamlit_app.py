@@ -3091,13 +3091,19 @@ with tabs[0]:
                 # 🔒 ALWAYS re-derive public_id from session state
                 public_id = st.session_state.get("last_report_id", "")
 
-                st.markdown(f"**Veritas Analysis ID:** {public_id}")
-                st.markdown(f"**Fact:** {parsed.get('Fact','—')}")
-                st.markdown(f"**Bias:** {parsed.get('Bias','—')}")
-                st.markdown(f"**Explanation:** {parsed.get('Explanation','—')}")
+                # Support both legacy TitleCase keys and current lowercase schema keys
+                fact_val = parsed.get("fact", parsed.get("Fact", "—"))
+                bias_val = parsed.get("bias_detected", parsed.get("Bias", parsed.get("bias", "—")))
+                expl_val = parsed.get("explanation", parsed.get("Explanation", "—"))
+                rev_val  = parsed.get("suggested_revision", parsed.get("Revision", parsed.get("revision", "")))
 
-                if str(parsed.get("Bias","")).strip().lower() != "no":
-                    st.markdown(f"**Revision:** {parsed.get('Revision','')}")
+                st.markdown(f"**Veritas Analysis ID:** {public_id}")
+                st.markdown(f"**Fact:** {fact_val}")
+                st.markdown(f"**Bias:** {bias_val}")
+                st.markdown(f"**Explanation:** {expl_val}")
+
+                if str(bias_val).strip().lower() != "no":
+                    st.markdown(f"**Revision:** {rev_val}")
 
                 # -------------------- PDF DOWNLOAD --------------------
                 try:
@@ -3933,6 +3939,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
