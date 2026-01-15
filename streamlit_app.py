@@ -46,6 +46,42 @@ from io import BytesIO
 import re
 from typing import Dict, Any, List, Tuple
 
+def _extract_text_to_analyze(final_input: Any) -> str:
+    """
+    Extract the literal 'Text to Analyze' payload from common input formats.
+    Returns "" if not found.
+    """
+    if not final_input:
+        return ""
+
+    # Case 1: dict payload
+    if isinstance(final_input, dict):
+        for k in ("text_to_analyze", "text", "input_text", "user_text", "content"):
+            v = final_input.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+
+    # Case 2: string payload containing the label
+    if isinstance(final_input, str):
+        s = final_input
+        m = re.search(
+            r'Text to Analyze:\s*"""(.*?)"""',
+            s,
+            flags=re.DOTALL | re.IGNORECASE
+        )
+        if m:
+            return m.group(1).strip()
+
+        m = re.search(
+            r"Text to Analyze:\s*(.+)$",
+            s,
+            flags=re.IGNORECASE | re.DOTALL
+        )
+        if m:
+            return m.group(1).strip()
+
+    return ""
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
@@ -3838,6 +3874,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
