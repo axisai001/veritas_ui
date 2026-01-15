@@ -3004,17 +3004,14 @@ with tabs[0]:
                 )
 
             # ---- FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ----
-            original_text = _extract_text_to_analyze(final_input)
+            original_text = _extract_text_to_analyze(final_input) or str(final_input or "")
 
             if isinstance(parsed, dict):
-                parsed = _final_fact_modal_lock(
-                    parsed,
-                    original_text=original_text
-            )
+                parsed = _final_fact_modal_lock(parsed, original_text=original_text)
 
             st.session_state["last_report"] = parsed
-            st.session_state["report_ready"] = True
             st.session_state["last_report_id"] = public_id
+            st.session_state["report_ready"] = True
 
             # -------------------- TRACK ANALYSIS (SUCCESS) --------------------
             log_analysis_run(
@@ -3874,6 +3871,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
