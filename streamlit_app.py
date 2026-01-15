@@ -48,8 +48,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 
-DEBUG_FACT_LOCK = False
-
 random.seed(42)
 
 def extract_explicit_text_payload(final_input: Any) -> str:
@@ -3047,12 +3045,6 @@ with tabs[0]:
             # Use canonical extractor so the lock always sees raw user text (including "should")
             original_text = extract_explicit_text_payload(final_input) or ""
 
-            # ---- DEBUG (TEMP): prove what the lock is seeing ----
-            st.write("DEBUG original_text preview:", (original_text or "")[:160])
-            st.write("DEBUG has_should:", "should" in (original_text or "").lower())
-            if isinstance(parsed, dict):
-                st.write("DEBUG fact BEFORE lock:", parsed.get("fact", "")[:160])
-
             # Apply VER-REM-002 fact enforcement + final modal lock on the exact object being stored
             if isinstance(parsed, dict):
                 parsed = enforce_fact_literal_only(parsed, original_text=original_text)
@@ -3941,6 +3933,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
