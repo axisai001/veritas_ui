@@ -3041,19 +3041,16 @@ with tabs[0]:
             except Exception:
                 pass
 
-            # === FINAL FACT MODAL LOCK (ABSOLUTE LAST AUTHORITY) ===
-            if isinstance(parsed, dict):
-                parsed = _final_fact_modal_lock(
-                    parsed,
-                    original_text=user_text  # MUST be the original input text variable
-                )
-
             # ---- FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ----
-            original_text = _extract_text_to_analyze(final_input) or str(final_input or "")
+            # Use canonical extractor so the lock always sees raw user text (including "should")
+            original_text = extract_explicit_text_payload(final_input) or ""
 
+            # Apply VER-REM-002 fact enforcement + final modal lock on the exact object being stored
             if isinstance(parsed, dict):
+                parsed = enforce_fact_literal_only(parsed, original_text=original_text)
                 parsed = _final_fact_modal_lock(parsed, original_text=original_text)
 
+            # Persist final report state
             st.session_state["last_report"] = parsed
             st.session_state["last_report_id"] = public_id
             st.session_state["report_ready"] = True
@@ -3929,6 +3926,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
