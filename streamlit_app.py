@@ -2967,7 +2967,15 @@ with tabs[0]:
                     original_text=user_text  # MUST be the original input text variable
                 )
 
-            # ---- After parsing + normalization + FINAL LOCK succeeds ----
+            # ---- FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ----
+            original_text = _extract_text_to_analyze(final_input)
+
+            if isinstance(parsed, dict):
+                parsed = _final_fact_modal_lock(
+                    parsed,
+                    original_text=original_text
+            )
+
             st.session_state["last_report"] = parsed
             st.session_state["report_ready"] = True
             st.session_state["last_report_id"] = public_id
@@ -3830,6 +3838,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
