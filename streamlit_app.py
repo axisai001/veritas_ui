@@ -93,30 +93,45 @@ import re
 from typing import Dict, Any, List, Tuple
 # (other imports…)
 
-# >>> PASTE THIS FUNCTION RIGHT HERE (top-level) <<<
 def extract_explicit_text_payload(final_input: Any) -> str:
     """
     Canonical extractor for the literal 'Text to Analyze' payload.
-    Returns "" if not found.
+    Returns the raw user text so downstream enforcement (VER-REM-002)
+    can reliably inspect obligation language such as 'should'.
     """
     if not final_input:
         return ""
 
+    # Case 1: Plain string input (MOST COMMON)
     if isinstance(final_input, str):
-        m = re.search(r'Text to Analyze:\s*"""(.*?)"""', final_input, flags=re.DOTALL | re.IGNORECASE)
+        # Prefer labeled block if present
+        m = re.search(
+            r'Text to Analyze:\s*"""(.*?)"""',
+            final_input,
+            flags=re.DOTALL | re.IGNORECASE
+        )
         if m:
             return m.group(1).strip()
-        m = re.search(r"Text to Analyze:\s*(.+)$", final_input, flags=re.DOTALL | re.IGNORECASE)
-        if m:
-            return m.group(1).strip()
-        return ""
 
+        m = re.search(
+            r"Text to Analyze:\s*(.+)$",
+            final_input,
+            flags=re.DOTALL | re.IGNORECASE
+        )
+        if m:
+            return m.group(1).strip()
+
+        # ✅ CRITICAL: If no label exists, treat entire string as text-to-analyze
+        return final_input.strip()
+
+    # Case 2: Dict payload
     if isinstance(final_input, dict):
         for k in ("text_to_analyze", "Text to Analyze", "text", "input_text", "user_text", "content"):
             v = final_input.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
 
+        # Nested dict payloads
         for k in ("payload", "data", "input", "request", "body"):
             v = final_input.get(k)
             if isinstance(v, dict):
@@ -125,22 +140,35 @@ def extract_explicit_text_payload(final_input: Any) -> str:
                     if isinstance(vv, str) and vv.strip():
                         return vv.strip()
 
+    # Case 3: List-of-messages payload (chat-style)
     if isinstance(final_input, list):
         for item in reversed(final_input):
             if isinstance(item, dict):
                 c = item.get("content")
-                if isinstance(c, str) and c:
-                    m = re.search(r'Text to Analyze:\s*"""(.*?)"""', c, flags=re.DOTALL | re.IGNORECASE)
+
+                if isinstance(c, str) and c.strip():
+                    m = re.search(
+                        r'Text to Analyze:\s*"""(.*?)"""',
+                        c,
+                        flags=re.DOTALL | re.IGNORECASE
+                    )
                     if m:
                         return m.group(1).strip()
+                    return c.strip()
+
                 if isinstance(c, list):
                     for part in reversed(c):
                         if isinstance(part, dict):
                             txt = part.get("text")
-                            if isinstance(txt, str) and txt:
-                                m = re.search(r'Text to Analyze:\s*"""(.*?)"""', txt, flags=re.DOTALL | re.IGNORECASE)
+                            if isinstance(txt, str) and txt.strip():
+                                m = re.search(
+                                    r'Text to Analyze:\s*"""(.*?)"""',
+                                    txt,
+                                    flags=re.DOTALL | re.IGNORECASE
+                                )
                                 if m:
                                     return m.group(1).strip()
+                                return txt.strip()
 
     return ""
 
@@ -3939,6 +3967,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
