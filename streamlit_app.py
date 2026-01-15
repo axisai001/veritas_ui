@@ -38,49 +38,10 @@ import unicodedata
 import random
 from collections import deque
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Any, Dict, List, Tuple, Optional
 from datetime import timedelta, datetime, timezone
 from zoneinfo import ZoneInfo
 from io import BytesIO
-
-import re
-from typing import Dict, Any, List, Tuple
-
-def _extract_text_to_analyze(final_input: Any) -> str:
-    """
-    Extract the literal 'Text to Analyze' payload from common input formats.
-    Returns "" if not found.
-    """
-    if not final_input:
-        return ""
-
-    # Case 1: dict payload
-    if isinstance(final_input, dict):
-        for k in ("text_to_analyze", "text", "input_text", "user_text", "content"):
-            v = final_input.get(k)
-            if isinstance(v, str) and v.strip():
-                return v.strip()
-
-    # Case 2: string payload containing the label
-    if isinstance(final_input, str):
-        s = final_input
-        m = re.search(
-            r'Text to Analyze:\s*"""(.*?)"""',
-            s,
-            flags=re.DOTALL | re.IGNORECASE
-        )
-        if m:
-            return m.group(1).strip()
-
-        m = re.search(
-            r"Text to Analyze:\s*(.+)$",
-            s,
-            flags=re.IGNORECASE | re.DOTALL
-        )
-        if m:
-            return m.group(1).strip()
-
-    return ""
 
 import pandas as pd
 import streamlit as st
@@ -88,10 +49,6 @@ import streamlit.components.v1 as components
 from openai import OpenAI
 
 random.seed(42)
-
-import re
-from typing import Dict, Any, List, Tuple
-# (other imports…)
 
 def extract_explicit_text_payload(final_input: Any) -> str:
     """
@@ -102,27 +59,22 @@ def extract_explicit_text_payload(final_input: Any) -> str:
     if not final_input:
         return ""
 
-    # Case 1: Plain string input (MOST COMMON)
+    # Case 1: Plain string input (most common)
     if isinstance(final_input, str):
+        s = final_input.strip()
+
         # Prefer labeled block if present
-        m = re.search(
-            r'Text to Analyze:\s*"""(.*?)"""',
-            final_input,
-            flags=re.DOTALL | re.IGNORECASE
-        )
+        m = re.search(r'Text to Analyze:\s*"""(.*?)"""', s, flags=re.DOTALL | re.IGNORECASE)
         if m:
             return m.group(1).strip()
 
-        m = re.search(
-            r"Text to Analyze:\s*(.+)$",
-            final_input,
-            flags=re.DOTALL | re.IGNORECASE
-        )
+        # Fallback: label without triple quotes
+        m = re.search(r"Text to Analyze:\s*(.+)$", s, flags=re.DOTALL | re.IGNORECASE)
         if m:
             return m.group(1).strip()
 
-        # ✅ CRITICAL: If no label exists, treat entire string as text-to-analyze
-        return final_input.strip()
+        # ✅ Critical: If no label exists, treat the whole string as the payload
+        return s
 
     # Case 2: Dict payload
     if isinstance(final_input, dict):
@@ -147,30 +99,40 @@ def extract_explicit_text_payload(final_input: Any) -> str:
                 c = item.get("content")
 
                 if isinstance(c, str) and c.strip():
-                    m = re.search(
-                        r'Text to Analyze:\s*"""(.*?)"""',
-                        c,
-                        flags=re.DOTALL | re.IGNORECASE
-                    )
+                    cc = c.strip()
+                    m = re.search(r'Text to Analyze:\s*"""(.*?)"""', cc, flags=re.DOTALL | re.IGNORECASE)
                     if m:
                         return m.group(1).strip()
-                    return c.strip()
+
+                    m = re.search(r"Text to Analyze:\s*(.+)$", cc, flags=re.DOTALL | re.IGNORECASE)
+                    if m:
+                        return m.group(1).strip()
+
+                    return cc
 
                 if isinstance(c, list):
                     for part in reversed(c):
                         if isinstance(part, dict):
                             txt = part.get("text")
                             if isinstance(txt, str) and txt.strip():
-                                m = re.search(
-                                    r'Text to Analyze:\s*"""(.*?)"""',
-                                    txt,
-                                    flags=re.DOTALL | re.IGNORECASE
-                                )
+                                tt = txt.strip()
+                                m = re.search(r'Text to Analyze:\s*"""(.*?)"""', tt, flags=re.DOTALL | re.IGNORECASE)
                                 if m:
                                     return m.group(1).strip()
-                                return txt.strip()
+
+                                m = re.search(r"Text to Analyze:\s*(.+)$", tt, flags=re.DOTALL | re.IGNORECASE)
+                                if m:
+                                    return m.group(1).strip()
+
+                                return tt
 
     return ""
+
+def _extract_text_to_analyze(final_input: Any) -> str:
+    """
+    Legacy wrapper to ensure any older call sites still use the canonical extractor.
+    """
+    return extract_explicit_text_payload(final_input)
 
 # =========================
 # ACCESS CONTROL: TESTER IDS
@@ -3967,6 +3929,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
