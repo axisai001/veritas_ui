@@ -89,6 +89,61 @@ from openai import OpenAI
 
 random.seed(42)
 
+import re
+from typing import Dict, Any, List, Tuple
+# (other imports…)
+
+# >>> PASTE THIS FUNCTION RIGHT HERE (top-level) <<<
+def extract_explicit_text_payload(final_input: Any) -> str:
+    """
+    Canonical extractor for the literal 'Text to Analyze' payload.
+    Returns "" if not found.
+    """
+    if not final_input:
+        return ""
+
+    if isinstance(final_input, str):
+        m = re.search(r'Text to Analyze:\s*"""(.*?)"""', final_input, flags=re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        m = re.search(r"Text to Analyze:\s*(.+)$", final_input, flags=re.DOTALL | re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+        return ""
+
+    if isinstance(final_input, dict):
+        for k in ("text_to_analyze", "Text to Analyze", "text", "input_text", "user_text", "content"):
+            v = final_input.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+
+        for k in ("payload", "data", "input", "request", "body"):
+            v = final_input.get(k)
+            if isinstance(v, dict):
+                for kk in ("text_to_analyze", "Text to Analyze", "text", "input_text", "user_text", "content"):
+                    vv = v.get(kk)
+                    if isinstance(vv, str) and vv.strip():
+                        return vv.strip()
+
+    if isinstance(final_input, list):
+        for item in reversed(final_input):
+            if isinstance(item, dict):
+                c = item.get("content")
+                if isinstance(c, str) and c:
+                    m = re.search(r'Text to Analyze:\s*"""(.*?)"""', c, flags=re.DOTALL | re.IGNORECASE)
+                    if m:
+                        return m.group(1).strip()
+                if isinstance(c, list):
+                    for part in reversed(c):
+                        if isinstance(part, dict):
+                            txt = part.get("text")
+                            if isinstance(txt, str) and txt:
+                                m = re.search(r'Text to Analyze:\s*"""(.*?)"""', txt, flags=re.DOTALL | re.IGNORECASE)
+                                if m:
+                                    return m.group(1).strip()
+
+    return ""
+
 # =========================
 # ACCESS CONTROL: TESTER IDS
 # =========================
@@ -3146,9 +3201,17 @@ if submitted:
     if IMPERATIVE_RE.search(final_input):
         render_refusal("out_of_scope", "R-O-001", ["imperative"])
 
-        # --- Text-to-Analyze gating ---
-        if not has_explicit_text_payload(final_input):
+        # --- Text-to-Analyze gating (CAPTURE RAW INPUT HERE) ---
+        text_to_analyze = extract_explicit_text_payload(final_input)
+
+        if not text_to_analyze:
             render_refusal("out_of_scope", "R-O-003", ["missing:Text to Analyze"])
+            # IMPORTANT: keep whatever your app uses here (return / st.stop / etc.)
+            # If this code path previously stopped execution, do the same now.
+            st.stop()
+
+        # Store the raw user text for final-stage post-processing
+        st.session_state["_text_to_analyze"] = text_to_analyze
 
     # ---------- Intent / scope gate ----------
     intent = detect_intent(final_input)
@@ -3312,6 +3375,11 @@ if has_report_content:
 public_id = _gen_public_report_id()
 internal_id = _gen_internal_report_id()
 log_analysis(public_id, internal_id, parsed)
+
+# ---- FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ----
+original_text = st.session_state.get("_text_to_analyze", "")
+if isinstance(parsed, dict):
+    parsed = _final_fact_modal_lock(parsed, original_text=original_text)
 
 st.session_state["last_report"] = parsed
 st.session_state["last_report_id"] = public_id
@@ -3871,6 +3939,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
