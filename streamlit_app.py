@@ -1424,6 +1424,119 @@ def _final_fact_modal_lock(data: Dict[str, Any], original_text: str) -> Dict[str
     data["fact"] = out
     return data
 
+# ============================================================
+# VER-REM-003 — Ambiguity ≠ Bias Disambiguation
+# ============================================================
+
+# Ambiguity indicators: vague thresholds, discretion, underspecified conditions.
+_AMBIGUITY_PATTERNS: List[re.Pattern] = [
+    re.compile(r"\b(as needed|as appropriate|as applicable|when necessary|if necessary|if applicable)\b", re.IGNORECASE),
+    re.compile(r"\b(reasonable|appropriate|sufficient|adequate|proper)\b", re.IGNORECASE),
+    re.compile(r"\b(at (?:the )?discretion of|discretionary|subject to (?:approval|review)|may be determined by)\b", re.IGNORECASE),
+    re.compile(r"\b(case[- ]by[- ]case|from time to time|periodically|as determined)\b", re.IGNORECASE),
+    re.compile(r"\b(standard(s)?|criteria|guidelines)\b", re.IGNORECASE),  # often ambiguous when undefined
+]
+
+# Bias "hard signals": if present, do NOT force bias to "No" just because ambiguity exists.
+# This is intentionally conservative: we only auto-downgrade when bias signals are absent.
+_BIAS_SIGNAL_PATTERNS: List[re.Pattern] = [
+    # Explicit group/protected class references
+    re.compile(r"\b(race|ethnic|nationality|religion|gender|sex|sexual orientation|disability|disabled|age|pregnant)\b", re.IGNORECASE),
+    re.compile(r"\b(men|women|male|female|mother|father|parents|caregivers)\b", re.IGNORECASE),
+
+    # Exclusion / preference / eligibility gating language
+    re.compile(r"\b(only|must not|shall not|ineligible|not eligible|will not be considered|excluded)\b", re.IGNORECASE),
+    re.compile(r"\b(prefer(?:red|ence)?|priority will be given|no exceptions)\b", re.IGNORECASE),
+
+    # Disparate impact style language (even if not a protected class)
+    re.compile(r"\b(disproportionately|burden|barrier|restrict(?:ed|ive)|gatekeep(?:ing)?)\b", re.IGNORECASE),
+]
+
+def _ambiguity_score(text: str) -> float:
+    """
+    Returns 0.0–1.0 ambiguity likelihood based on presence/volume of ambiguity indicators.
+    Deterministic heuristic; conservative by design.
+    """
+    if not text:
+        return 0.0
+
+    hits = 0
+    for pat in _AMBIGUITY_PATTERNS:
+        if pat.search(text):
+            hits += 1
+
+    # Simple banding (tunable)
+    if hits >= 3:
+        return 0.85
+    if hits == 2:
+        return 0.65
+    if hits == 1:
+        return 0.40
+    return 0.0
+
+def _has_bias_signals(text: str) -> bool:
+    if not text:
+        return False
+    return any(p.search(text) for p in _BIAS_SIGNAL_PATTERNS)
+
+def apply_ambiguity_disambiguation(result_json: Dict[str, Any], original_text: str) -> Dict[str, Any]:
+    """
+    VER-REM-003: If language is ambiguous but lacks bias signals, ensure ambiguity is
+    flagged in explanation WITHOUT labeling as bias.
+
+    Schema-safe:
+      - May modify: bias_detected, explanation, suggested_revision
+      - Does not add keys.
+    """
+    if not isinstance(result_json, dict):
+        return result_json
+
+    src = (original_text or "").strip()
+    if not src:
+        return result_json
+
+    ambiguity = _ambiguity_score(src)
+    if ambiguity <= 0.0:
+        return result_json
+
+    bias_signals = _has_bias_signals(src)
+
+    bias_detected = (result_json.get("bias_detected") or "").strip()
+    explanation = (result_json.get("explanation") or "").strip()
+    suggested_revision = result_json.get("suggested_revision") or ""
+
+    # If model already says "No", we just annotate ambiguity in explanation.
+    # If model says "Yes" BUT we detect ambiguity with no bias signals, downgrade to "No".
+    if not bias_signals:
+        # Force No-bias outcome because ambiguity alone is not bias.
+        result_json["bias_detected"] = "No"
+        result_json["suggested_revision"] = ""  # No revision for non-bias per schema
+
+        # Prepend/insert ambiguity note while keeping explanation short and evidence-bounded.
+        ambiguity_note = (
+            "The language is ambiguous due to undefined or discretionary terms, "
+            "but ambiguity alone does not constitute bias under current criteria."
+        )
+
+        if explanation:
+            # Avoid duplicating note if re-run
+            if "language is ambiguous" not in explanation.lower():
+                result_json["explanation"] = f"{ambiguity_note} {explanation}"
+        else:
+            result_json["explanation"] = ambiguity_note
+
+        return result_json
+
+    # If bias signals exist, we DO NOT override bias_detected.
+    # We only add a note that some wording is ambiguous (secondary observation).
+    ambiguity_note = "Note: Some terms are ambiguous/underspecified, which may reduce clarity."
+    if explanation and "ambiguous" not in explanation.lower():
+        result_json["explanation"] = f"{explanation} {ambiguity_note}"
+    elif not explanation:
+        result_json["explanation"] = ambiguity_note
+
+    return result_json
+
 # ===== Scope Gate Policy (Reference / Documentation Only) =====
 SCOPE_GATE_POLICY_TEXT = """
 ----------------------------------------------------------------------
@@ -1824,16 +1937,26 @@ def parse_veritas_json_or_stop(raw: str):
     finally:
         pass  # REQUIRED: prevents empty-finally IndentationError
 
-    # === VER-REM-002: Fact vs Inference Boundary Enforcement ===
+
+    # === VER-REM-003: Ambiguity ≠ Bias Disambiguation (MUST RUN FIRST) ===
     if isinstance(data, dict):
-        data = enforce_fact_literal_only(
+        data = apply_ambiguity_disambiguation(
             data,
             original_text=user_text
         )
 
+
     # === VER-REM-001: Interpretation Confidence Calibration ===
     if isinstance(data, dict):
         data = apply_interpretation_confidence_calibration(
+            data,
+            original_text=user_text
+        )
+
+
+    # === VER-REM-002: Fact vs Inference Boundary Enforcement ===
+    if isinstance(data, dict):
+        data = enforce_fact_literal_only(
             data,
             original_text=user_text
         )
@@ -3932,6 +4055,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
