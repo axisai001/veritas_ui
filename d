@@ -1006,11 +1006,11 @@ def gatekeeper_check(user_text: str) -> tuple[bool, str]:
     return (False, "🚫 Request rejected — insufficient content for analysis.")
 
 # ===== Identity + Veritas Prompts (EXACT as provided) =====
-IDENTITY_PROMPT = "I'm Veritas — a bias, disinformation, and fallacy detection tool."
+IDENTITY_PROMPT = "I'm Veritas — a bias detection tool."
 
 # ===== Default System Prompt (Veritas v3.1 - Phase 2 Ready) =====
 DEFAULT_SYSTEM_PROMPT = """
-You are Veritas, a bias detection and academic language analysis model.
+You are Veritas, a bias detection analysis model.
 
 You MUST produce an output with EXACTLY TWO SECTIONS, in this order, using these exact headers:
 
@@ -1967,39 +1967,31 @@ def parse_veritas_json_or_stop(raw: str):
             original_text=user_text
         )
 
+    # VER-REM-004: Legacy schema v3.x post-processing DISABLED
+    # NOTE: Disabled to preserve Objective vs Advisory separation (schema v4)
 
-    # === VER-REM-001: Interpretation Confidence Calibration ===
-    if isinstance(data, dict):
-        data = apply_interpretation_confidence_calibration(
-            data,
-            original_text=user_text
-        )
+    # if isinstance(data, dict):
+    #     data = apply_interpretation_confidence_calibration(
+    #         data,
+    #         original_text=user_text
+    #     )
 
+    # VER-REM-004: Legacy schema v3.x post-processing DISABLED
+    # NOTE: Disabled to preserve Objective vs Advisory separation (schema v4)
 
     # === VER-REM-002: Fact vs Inference Boundary Enforcement ===
-    if isinstance(data, dict):
-        data = enforce_fact_literal_only(
-            data,
-            original_text=user_text
-        )
+    # if isinstance(data, dict):
+    #     data = enforce_fact_literal_only(
+    #         data,
+    #         original_text=user_text
+    #     )
 
-    # 4) Normalize
-    data = _normalize_report_keys(data)
+    # VER-REM-004 (Option A): Disable ALL legacy schema v3.x post-processing for v4 outputs
+    # data = _normalize_report_keys(data)
 
-    # === FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ===
-    if isinstance(data, dict):
-        data = _final_fact_modal_lock(data, original_text=user_text)
+    # if isinstance(data, dict):
+    #     data = _final_fact_modal_lock(data, original_text=user_text)
 
-    # 5) Validate
-    required = {"fact", "bias", "explanation", "revision"}
-    if not isinstance(data, dict) or not required.issubset(data.keys()):
-        st.stop()
-
-    # === FINAL FACT MODAL LOCK (ABSOLUTE LAST STEP BEFORE RETURN) ===
-    if isinstance(data, dict):
-        data = _final_fact_modal_lock(data, original_text=user_text)
-
-    return data
 
         # ---------- CLEANUP / NORMALIZATION ----------
 
@@ -3070,194 +3062,117 @@ with tabs[0]:
         st.session_state["veritas_analysis_id"] = _new_veritas_id()
         _safe_rerun()
 
-    # -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
-    if submitted:
-        prog = st.progress(0, text="Starting analysis…")
-        status = st.empty()
+# -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
+if submitted:
+    prog = st.progress(0, text="Starting analysis…")
+    status = st.empty()
 
-        try:
-            # 1) BUILD final_input (typed + uploaded doc)
-            user_text = (st.session_state.get("user_input_box") or "").strip()
-            extracted = (st.session_state.get("extracted_text") or "").strip()
+    try:
+        # 1) BUILD final_input (typed + uploaded doc)
+        user_text = (st.session_state.get("user_input_box") or "").strip()
+        extracted = (st.session_state.get("extracted_text") or "").strip()
 
-            if doc is not None:
-                prog.progress(15, text="Reading uploaded file…")
-                extracted = (_extract_text_from_upload(doc) or "").strip()
-                st.session_state["extracted_text"] = extracted
+        if doc is not None:
+            prog.progress(15, text="Reading uploaded file…")
+            extracted = (_extract_text_from_upload(doc) or "").strip()
+            st.session_state["extracted_text"] = extracted
 
-            # ---- PDF TEXT-BASED GATE (ADD HERE) ----
-            if doc is not None and doc.name.lower().endswith(".pdf"):
-                if len(extracted) < 300:
-                    status.warning(
-                        "This PDF appears to be scanned or has no selectable text. "
-                        "Veritas can only analyze extractable text. "
-                        "Please upload a DOCX/TXT or paste the text, or export a text-based PDF."
-                    )
-                    st.stop()
-            # ---- END PDF GATE ----
-
-            final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-            if not final_input:
-                status.warning("Please enter text or upload a document.")
-                st.stop()
-
-            # Ensure an analysis ID exists for this run
-            if not st.session_state.get("veritas_analysis_id"):
-                st.session_state["veritas_analysis_id"] = _new_veritas_id()
-            public_id = st.session_state["veritas_analysis_id"]
-
-            # ---------- Pre-safety check ----------
-            safety_msg = _run_safety_precheck(final_input)
-            if safety_msg:
-                st.markdown(
-                    f"""
-                    <div style="
-                        background-color:#8B0000;
-                        color:#FFFFFF;
-                        padding:1rem;
-                        border-radius:10px;
-                        font-weight:600;
-                        text-align:center;
-                        border:2px solid #FF4C4C;
-                    ">
-                        {safety_msg}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+        # ---- PDF TEXT-BASED GATE (KEEP) ----
+        if doc is not None and doc.name.lower().endswith(".pdf"):
+            if len(extracted) < 300:
+                status.warning(
+                    "This PDF appears to be scanned or has no selectable text. "
+                    "Veritas can only analyze extractable text. "
+                    "Please upload a DOCX/TXT or paste the text, or export a text-based PDF."
                 )
                 st.stop()
+        # ---- END PDF GATE ----
 
-            # 2) MODEL CALL (Chat Completions JSON)
-            run_t0 = time.time()
+        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
 
-            prog.progress(45, text="Submitting to Veritas…")
-            status.info("Veritas is processing your request…")
+        if not final_input:
+            status.warning("Please enter text or upload a document.")
+            st.stop()
 
-            resp = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": final_input},
-                ],
-                temperature=0.2,
-                response_format={"type": "json_object"},
+        # Ensure an analysis ID exists for this run
+        if not st.session_state.get("veritas_analysis_id"):
+            st.session_state["veritas_analysis_id"] = _new_veritas_id()
+        public_id = st.session_state["veritas_analysis_id"]
+
+        # ---------- Pre-safety check ----------
+        safety_msg = _run_safety_precheck(final_input)
+        if safety_msg:
+            st.markdown(
+                f"""
+                <div style="
+                    background-color:#8B0000;
+                    color:#FFFFFF;
+                    padding:1rem;
+                    border-radius:10px;
+                    font-weight:600;
+                    text-align:center;
+                    border:2px solid #FF4C4C;
+                ">
+                    {safety_msg}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
+            st.stop()
 
-            final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
-            if not final_report:
-                raise RuntimeError("Model call returned empty output.")
+        # 2) MODEL CALL (Schema v4: plain text; no JSON enforcement)
+        run_t0 = time.time()
 
-            # 3) PARSE (STRICT)
-            prog.progress(70, text="Parsing response…")
-            status.info("Parsing response…")
+        prog.progress(45, text="Submitting to Veritas…")
+        status.info("Veritas is processing your request…")
 
-            try:
-                parsed = json.loads(final_report)
-            except Exception as parse_exc:
-                status.error(f"Parse failed: {type(parse_exc).__name__}: {parse_exc}")
-                with st.expander("Debug: Raw model output (preview)", expanded=True):
-                    st.write("Length:", len(final_report))
-                    st.code(final_report[:8000])
-                raise
+        resp = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": final_input},
+            ],
+            temperature=0.2,
+        )
 
-            if parsed is None or not isinstance(parsed, dict):
-                raise RuntimeError("Model did not return a JSON object.")
+        final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+        if not final_report:
+            raise RuntimeError("Model call returned empty output.")
 
-            # --- KEY MAPPING ---
-            if "Fact" not in parsed and "fact" in parsed:
-                parsed["Fact"] = parsed.get("fact", "")
-            if "Bias" not in parsed and "bias" in parsed:
-                parsed["Bias"] = parsed.get("bias", "")
-            if "Bias" not in parsed and "bias_detected" in parsed:
-                parsed["Bias"] = parsed.get("bias_detected", "")
-            if "Explanation" not in parsed and "explanation" in parsed:
-                parsed["Explanation"] = parsed.get("explanation", "")
-            if "Revision" not in parsed and "revision" in parsed:
-                parsed["Revision"] = parsed.get("revision", "")
-            if "Revision" not in parsed and "suggested_revision" in parsed:
-                parsed["Revision"] = parsed.get("suggested_revision", "")
+        # Persist final report state (v4 = plain text, immutable)
+        st.session_state["last_report"] = final_report
+        st.session_state["last_report_id"] = public_id
+        st.session_state["report_ready"] = True
 
-           # Normalization: safe fallback
-            try:
-                _norm = _normalize_report_keys(parsed)
-                if isinstance(_norm, dict):
-                    parsed = _norm
-            except Exception:
-                pass
+        # -------------------- TRACK ANALYSIS (SUCCESS) --------------------
+        log_analysis_run(
+            tester_id=(st.session_state.get("login_id") or ""),
+            analysis_id=public_id,
+            input_text=final_input,
+            elapsed_seconds=(time.time() - run_t0),
+            status="SUCCESS",
+            model_name=MODEL_NAME,
+        )
 
-            # ---- FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ----
-            # Use canonical extractor so the lock always sees raw user text (including "should")
-            original_text = extract_explicit_text_payload(final_input) or ""
+        prog.progress(100, text="Analysis complete ✓")
+        status.success("Analysis complete ✓")
 
-            # Apply VER-REM-002 fact enforcement + final modal lock on the exact object being stored
-            if isinstance(parsed, dict):
-                parsed = enforce_fact_literal_only(parsed, original_text=original_text)
-                parsed = _final_fact_modal_lock(parsed, original_text=original_text)
+    except Exception as e:
+        status.error("The analysis did not complete. Please try again.")
+        st.exception(e)
 
-            # Persist final report state
-            st.session_state["last_report"] = parsed
-            st.session_state["last_report_id"] = public_id
-            st.session_state["report_ready"] = True
+    finally:
+        prog.empty()
+        status.empty()
 
-            # -------------------- TRACK ANALYSIS (SUCCESS) --------------------
-            log_analysis_run(
-                tester_id=(st.session_state.get("login_id") or ""),
-                analysis_id=public_id,
-                input_text=final_input,
-                elapsed_seconds=(time.time() - run_t0),
-                status="SUCCESS",
-                model_name=MODEL_NAME,
-            )
+        # -------------------- Report Output (Analyze ONLY) --------------------
+        if st.session_state.get("report_ready") and st.session_state.get("last_report"):
 
-            prog.progress(100, text="Analysis complete ✓")
-            status.success("Analysis complete ✓")
+            final_report = st.session_state["last_report"]  # v4 plain text
+            public_id = st.session_state.get("last_report_id", "")
 
-        except Exception as e:
-            status.error("The analysis did not complete. Please try again.")
-            st.exception(e)
-
-        finally:
-            prog.empty()
-            status.empty()
-
-            # -------------------- Report Output (Analyze ONLY) --------------------
-            if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-
-                parsed = st.session_state["last_report"]
-
-                # 🔒 ALWAYS re-derive public_id from session state
-                public_id = st.session_state.get("last_report_id", "")
-
-                # Support both legacy TitleCase keys and current lowercase schema keys
-                fact_val = parsed.get("fact", parsed.get("Fact", "—"))
-                bias_val = parsed.get("bias_detected", parsed.get("Bias", parsed.get("bias", "—")))
-                expl_val = parsed.get("explanation", parsed.get("Explanation", "—"))
-                rev_val  = parsed.get("suggested_revision", parsed.get("Revision", parsed.get("revision", "")))
-
-                st.markdown(f"**Veritas Analysis ID:** {public_id}")
-                st.markdown(f"**Fact:** {fact_val}")
-                st.markdown(f"**Bias:** {bias_val}")
-                st.markdown(f"**Explanation:** {expl_val}")
-
-                if str(bias_val).strip().lower() != "no":
-                    st.markdown(f"**Revision:** {rev_val}")
-
-                # -------------------- PDF DOWNLOAD --------------------
-                try:
-                    pdf_bytes = build_pdf_bytes(parsed, public_id)
-                    st.download_button(
-                        label="Download Report (PDF)",
-                        data=pdf_bytes,
-                        file_name=f"{public_id}.pdf" if public_id else "veritas_report.pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                    )
-                except Exception as e:
-                    st.warning(f"PDF download unavailable: {type(e).__name__}")
-
-    # Stop here so nothing else prints below (prevents leftover UI)
-    st.stop()
+            st.markdown(f"**Veritas Analysis ID:** {public_id}")
+            st.markdown(final_report)
 
     # --------- CLEANUP: remove lingering processing UI ----------
     # These exist only during a submit run
@@ -4077,6 +3992,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
