@@ -3194,10 +3194,12 @@ def _build_user_instruction(text: str) -> str:
 # ---------- Basic output schema check ----------
 def _looks_strict(text: str) -> bool:
     """
-    Verifies that the model output contains the expected Veritas sections.
+    Verifies that the model output contains the expected Veritas v4 sections.
     """
-    required = ["fact", "bias", "explanation", "revision"]
-    return all(word in text.lower() for word in required)
+    if not text:
+        return False
+    t = text.lower()
+    return ("objective_findings" in t) and ("advisory_guidance" in t)
 
 # --- Handle Veritas Analysis only when submitted ---
 if submitted:
@@ -3992,6 +3994,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
