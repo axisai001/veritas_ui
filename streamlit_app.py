@@ -1027,6 +1027,7 @@ PROHIBITED:
 
 REQUIRED:
 - Both sections must always appear (even if minimal).
+"""
 
 # --- Interpretive overreach patterns (intent/impact escalation) ---
 _OVERREACH_PATTERNS = [
@@ -3952,6 +3953,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
