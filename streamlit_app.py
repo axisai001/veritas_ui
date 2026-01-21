@@ -3703,10 +3703,10 @@ if st.session_state.get("is_admin", False):
                             st.session_state["last_report_id"] = sel
 
                             st.success("Loaded into Analyze tab.")
-                    except Exception:
+                        except Exception:
                             st.error("Could not load that report.")
-                else:
-                    st.warning("Report ID not found in the current list.")
+                    else:
+                        st.warning("Report ID not found in the current list.")
 
         # -------------------- Data Explorer --------------------
         with sub2:
@@ -3983,6 +3983,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
