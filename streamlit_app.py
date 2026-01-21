@@ -1942,23 +1942,14 @@ def parse_veritas_json_or_stop(raw: str):
         raw = re.sub(r"^```(json)?\s*", "", raw, flags=re.IGNORECASE).strip()
         raw = re.sub(r"\s*```$", "", raw).strip()
 
-    # 3) Parse JSON
-    try:
-        data = json.loads(raw)
-    except Exception as e:
-        salvaged = _salvage_numbered_report_to_json(raw)
-
-        if salvaged is None:
-            preview = (raw or "")[:4000]
-            raise ValueError(
-                "Parser could not load JSON and salvage failed. "
-                f"json.loads error: {type(e).__name__}: {e}\n\n"
-                f"RAW PREVIEW (first 4000 chars):\n{preview}"
-            )
-        data = salvaged
-    finally:
-        pass  # REQUIRED: prevents empty-finally IndentationError
-
+    # --- VER-REM-004 (v4) ---
+    # JSON parsing disabled.
+    # Veritas v4 returns plain-text sections only:
+    # - Objective Findings
+    # - Advisory Guidance
+    #
+    # raw output is preserved as-is.
+    data = raw
 
     # === VER-REM-003: Ambiguity ≠ Bias Disambiguation (MUST RUN FIRST) ===
     if isinstance(data, dict):
@@ -3051,7 +3042,7 @@ with tabs[0]:
     # -------------------- Reset handler (outside form) --------------------
     if new_analysis:
         st.session_state["_clear_text_box"] = True
-        st.session_state["last_reply"] = ""
+        st.session_state["last_report"]
         st.session_state["history"] = []
         st.session_state["doc_uploader_key"] += 1
         st.session_state["last_report"] = None
@@ -3192,14 +3183,15 @@ def _build_user_instruction(text: str) -> str:
     )
 
 # ---------- Basic output schema check ----------
-def _looks_strict(text: str) -> bool:
+def _looks_v4(text: str) -> bool:
     """
     Verifies that the model output contains the expected Veritas v4 sections.
     """
     if not text:
         return False
+
     t = text.lower()
-    return ("objective_findings" in t) and ("advisory_guidance" in t)
+    return ("objective findings" in t) and ("advisory guidance" in t)
 
     # ---------- Pre-safety check (Tier 2 immediate stops) ----------
     safety_msg = _run_safety_precheck(final_input)
@@ -3664,12 +3656,16 @@ if st.session_state.get("is_admin", False):
                 st.info("No reports yet.")
             else:
                 def extract_preview(js: str) -> str:
-                    try:
-                        return (json.loads(js).get("assistant_reply", "") or "")[:220]
-                    except Exception:
+                    if not js:
                         return ""
-
-                df["preview"] = df["conversation_json"].apply(extract_preview)
+                    # v4 compatible: conversation_json may be JSON-wrapped or raw text
+                    try:
+                        obj = json.loads(js)
+                        if isinstance(obj, dict):
+                            return (obj.get("assistant_reply", "") or "")[:220]
+                    except Exception:
+                        pass
+                    return str(js)[:220]
 
                 if q.strip():
                     ql = q.lower()
@@ -3688,14 +3684,29 @@ if st.session_state.get("is_admin", False):
                 if st.button("Load Report"):
                     row = df[df["public_report_id"] == sel]
                     if len(row) == 1:
+                        raw_js = row.iloc[0]["conversation_json"]
                         try:
-                            txt = json.loads(row.iloc[0]["conversation_json"]).get("assistant_reply", "")
-                            st.session_state["last_reply"] = txt
+                            # v4 compatible: conversation_json may be JSON envelope OR plain text
+                            txt = ""
+                            try:
+                                obj = json.loads(raw_js)
+                                if isinstance(obj, dict):
+                                    txt = obj.get("assistant_reply", "") or ""
+                                else:
+                                    txt = str(raw_js)
+                            except Exception:
+                                txt = str(raw_js)
+
+                            # Load into the v4 viewer state
+                            st.session_state["last_report"] = txt
+                            st.session_state["report_ready"] = True
+                            st.session_state["last_report_id"] = sel
+
                             st.success("Loaded into Analyze tab.")
-                        except Exception:
+                    except Exception:
                             st.error("Could not load that report.")
-                    else:
-                        st.warning("Report ID not found in the current list.")
+                else:
+                    st.warning("Report ID not found in the current list.")
 
         # -------------------- Data Explorer --------------------
         with sub2:
@@ -3972,6 +3983,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
