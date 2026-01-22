@@ -2983,9 +2983,9 @@ with tabs[0]:
     # -------------------- Form (UI only) --------------------
     with st.form("analysis_form"):
         st.markdown("""
-            <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
+            <h3 style="margin-bottom:0.25rem;">Veritas — Content Analysis & Advisory System</h3>
             <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Veritas analyzes written content for structural and contextual signals—including potential bias indicators—and offers non-prescriptive advisory guidance.
+                Veritas analyzes written content for structural and contextual signals, including potential bias indicators, and offers non-prescriptive advisory guidance.
             </p>
         """, unsafe_allow_html=True)
 
@@ -3953,6 +3953,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
