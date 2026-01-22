@@ -2782,7 +2782,7 @@ def _note_failed_login(attempted_secret: str = ""):
 
 # ====== Pre-login screen (User vs Admin) ======
 def show_login():
-    st.subheader("Launch Veritas - BETA Program")
+    st.subheader("Launch Veritas")
 
     # ---- User/Admin toggle ----
     auth_choice = st.radio(
@@ -2985,7 +2985,7 @@ with tabs[0]:
         st.markdown("""
             <h3 style="margin-bottom:0.25rem;">Veritas Analysis</h3>
             <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Bias Detection Tool
+                Veritas analyzes written content for structural and contextual signals—including potential bias indicators—and offers non-prescriptive advisory guidance.
             </p>
         """, unsafe_allow_html=True)
 
@@ -3953,6 +3953,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
