@@ -2609,12 +2609,10 @@ def _wipe_db_table(table: str):
     except Exception:
         pass
 
-# Boot-time pruning
+# -------------------- Boot-time pruning (core systems only) --------------------
 _prune_csv_by_ttl(AUTH_CSV, AUTH_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ANALYSES_CSV, ANALYSES_LOG_TTL_DAYS)
-_prune_csv_by_ttl(FEEDBACK_CSV, FEEDBACK_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ERRORS_CSV, ERRORS_LOG_TTL_DAYS)
-_prune_csv_by_ttl(SUPPORT_CSV, SUPPORT_LOG_TTL_DAYS)
 _prune_csv_by_ttl(ACK_CSV, ACK_TTL_DAYS)
 
 # ====== Global CSS ======
@@ -3736,6 +3734,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
