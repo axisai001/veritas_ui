@@ -3057,11 +3057,18 @@ if submitted:
     user_input = st.session_state.get("user_input_box", "").strip()
 
     refusal = rr_check_refusal(user_input)
-    if getattr(refusal, "should_refuse", False):
-        output = rr_render_refusal(
+    if refusal.should_refuse:
+        log_refusal_event(
             analysis_id=analysis_id,
-            category=(getattr(refusal, "category", None) or "restricted_request")
+            category=refusal.category,
+            reason=refusal.reason,
+            source="typed",
+            input_text=user_input,  # used only for hashing/length; do not store raw
+            customer_id=st.session_state.get("customer_id"),
+            app_key_id=st.session_state.get("app_key_id"),
+            ui_session_id=st.session_state.get("ui_session_id"),
         )
+        output = rr_render_refusal(analysis_id=analysis_id, category=refusal.category, reason=refusal.reason)
         st.session_state["last_report"] = output
         st.markdown(output)
         st.stop()
@@ -3077,11 +3084,18 @@ if submitted:
         st.stop()
 
     refusal = rr_check_refusal(combined_text)
-    if getattr(refusal, "should_refuse", False):
-        output = rr_render_refusal(
+    if refusal.should_refuse:
+        log_refusal_event(
             analysis_id=analysis_id,
-            category=(getattr(refusal, "category", None) or "restricted_request")
+            category=refusal.category,
+            reason=refusal.reason,
+            source="document",
+            input_text=combined_text,
+            customer_id=st.session_state.get("customer_id"),
+                app_key_id=st.session_state.get("app_key_id"),
+        ui_session_id=st.session_state.get("ui_session_id"),
         )
+        output = rr_render_refusal(analysis_id=analysis_id, category=refusal.category, reason=refusal.reason)
         st.session_state["last_report"] = output
         st.markdown(output)
         st.stop()
@@ -3572,6 +3586,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
