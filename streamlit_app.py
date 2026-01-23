@@ -2982,35 +2982,79 @@ with tabs[0]:
     new_analysis = False
     doc = None
 
-    # -------------------- Form (UI only) --------------------
-    with st.form("analysis_form"):
-        st.markdown("""
-            <h3 style="margin-bottom:0.25rem;">Veritas — Content Analysis & Advisory System</h3>
-            <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Veritas analyzes written content for structural and contextual signals, including potential bias indicators, and offers non-prescriptive advisory guidance.
-            </p>
-        """, unsafe_allow_html=True)
+# -------------------- Form (UI only) --------------------
+with st.form("analysis_form"):
+    st.markdown("""
+        <h3 style="margin-bottom:0.25rem;">Veritas — Content Analysis & Advisory System</h3>
+        <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
+            Veritas analyzes written content for structural and contextual signals, including potential bias indicators, 
+            and offers non-prescriptive advisory guidance.
+        </p>
+    """, unsafe_allow_html=True)
 
-        st.text_area(
-            "Paste or type text to analyze",
-            height=200,
-            key="user_input_box",
-            help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
+    st.text_area(
+        "Paste or type text to analyze",
+        height=200,
+        key="user_input_box",
+        help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
+    )
+
+    doc = st.file_uploader(
+        f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+        type=list(DOC_ALLOWED_EXTENSIONS),
+        accept_multiple_files=False,
+        key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
+    )
+
+    bcol1, bcol2, _spacer = st.columns([2, 2, 6])
+    with bcol1:
+        submitted = st.form_submit_button("Engage Veritas")
+    with bcol2:
+        new_analysis = st.form_submit_button("Reset Canvas")
+
+# -------------------- Reset handler (outside form) --------------------
+if new_analysis:
+    st.session_state["user_input_box"] = ""
+    st.session_state["last_report"] = ""
+    st.session_state["doc_uploader_key"] += 1
+    st.rerun()
+
+# -------------------- Logic (AFTER form) --------------------
+if submitted:
+    user_input = st.session_state.get("user_input_box", "").strip()
+
+    refusal = check_refusal(user_input)
+    if refusal.should_refuse:
+        output = render_refusal(
+            analysis_id=analysis_id,
+            category=refusal.category or "restricted_request"
         )
+        st.session_state["last_report"] = output
+        st.markdown(output)
+        st.stop()
 
-        doc = st.file_uploader(
-            f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
-            type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False,
-            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
+    extracted_text = ""
+    if doc is not None:
+        extracted_text = extract_document_text(doc)
+
+    combined_text = extracted_text if extracted_text else user_input
+
+    if not combined_text.strip():
+        st.warning("Please paste text or upload a document to analyze.")
+        st.stop()
+
+    refusal = check_refusal(combined_text)
+    if refusal.should_refuse:
+        output = render_refusal(
+            analysis_id=analysis_id,
+            category=refusal.category or "restricted_request"
         )
+        st.session_state["last_report"] = output
+        st.markdown(output)
+        st.stop()
 
-        bcol1, bcol2, _spacer = st.columns([2, 2, 6])
-        with bcol1:
-            submitted = st.form_submit_button("Engage Veritas")
-        with bcol2:
-            new_analysis = st.form_submit_button("Reset Canvas")
-
+    # STEP 5: ONLY BELOW THIS LINE may the OpenAI / Veritas analysis run
+    
     # -------------------- Reset handler (outside form) --------------------
     if new_analysis:
         st.session_state["_clear_text_box"] = True
@@ -3955,6 +3999,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
