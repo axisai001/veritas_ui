@@ -3725,13 +3725,18 @@ if tab_admin is not None:
             # ---------------- Export ----------------
             csv_data = df.to_csv(index=False).encode("utf-8")
             st.download_button(
-                label="Download Refusal Log (CSV)
+                label="Download Refusal Log (CSV)",
+                data=csv_data,
+                file_name="veritas_refusal_log.csv",
+                mime="text/csv",
+            )
 
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
