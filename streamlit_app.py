@@ -50,6 +50,31 @@ from openai import OpenAI
 
 from refusal_router import check_refusal, render_refusal
 
+# =========================
+# SESSION INITIALIZATION (MUST RUN BEFORE UI / LOGIC)
+# =========================
+
+def ensure_analysis_id() -> str:
+    """
+    Ensures a stable, application-level Analysis ID exists
+    for refusal handling, auditability, and support tracing.
+    """
+    if "analysis_id" not in st.session_state or not st.session_state["analysis_id"]:
+        st.session_state["analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
+    return st.session_state["analysis_id"]
+
+
+# ---- initialize required session keys safely ----
+if "doc_uploader_key" not in st.session_state:
+    st.session_state["doc_uploader_key"] = 0
+
+if "last_report" not in st.session_state:
+    st.session_state["last_report"] = ""
+
+
+# ---- guarantee analysis_id exists for ALL execution paths ----
+analysis_id = ensure_analysis_id()
+
 random.seed(42)
 
 def extract_explicit_text_payload(final_input: Any) -> str:
@@ -3999,6 +4024,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
