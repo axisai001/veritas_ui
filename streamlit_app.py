@@ -2976,10 +2976,12 @@ with st.sidebar:
         _safe_rerun()
 
 # ================= Tabs =================
-tab_names = ["🔍 Analyze", "💬 Feedback", "🛟 Support", "❓ Help"]
-# Only reveal  if authenticated as admin
+tab_names = ["🔍 Analyze"]
+
+# Only reveal Admin tab if authenticated as admin
 if st.session_state.get("is_admin", False):
     tab_names.append("🛡️ Admin")
+
 tabs = st.tabs(tab_names)
 
 # -------------------- Analyze Tab --------------------
@@ -4024,6 +4026,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
