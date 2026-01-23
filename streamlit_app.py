@@ -3485,12 +3485,14 @@ tabs = st.tabs(tab_names)
 tab_analyze = tabs[0]
 tab_admin = tabs[1] if st.session_state.get("is_admin", False) else None
 
-
-# 2. Analyze tab (ONLY analyze UI)
 with tab_analyze:
-    # form
-    # refusal logic
-    # analysis output
+    # -------------------- Form (UI only) --------------------
+    with st.form("analysis_form"):
+        st.markdown("Veritas — Content Analysis")
+        submitted = st.form_submit_button("Engage Veritas")
+
+    if submitted:
+        st.write("Analysis runs here")
 
 # 3. Admin tab (ONLY admin UI)  ← THIS BLOCK
 # -------------------- Admin Tab (Refusal Dashboard) --------------------
@@ -3570,6 +3572,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
