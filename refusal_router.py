@@ -39,8 +39,32 @@ def check_refusal(user_text: str) -> RefusalResult:
 
     return RefusalResult(False)
 
-def render_refusal(analysis_id: str, category: str) -> str:
-    # Must remain two sections: Objective Findings + Advisory Guidance
+def render_refusal(*args, **kwargs) -> str:
+    """
+    Render a two-section Veritas v4 compliant refusal.
+
+    Supports both:
+      - render_refusal(analysis_id, category)
+      - render_refusal(analysis_id=..., category=...)
+
+    This prevents Streamlit runtime TypeErrors when call-sites use keyword args.
+    """
+    # Accept keyword style
+    analysis_id = kwargs.get("analysis_id", None)
+    category = kwargs.get("category", None)
+
+    # Accept positional fallback if keywords weren't provided
+    if analysis_id is None and len(args) >= 1:
+        analysis_id = args[0]
+    if category is None and len(args) >= 2:
+        category = args[1]
+
+    # Defaults
+    if not analysis_id:
+        analysis_id = "VTX-UNKNOWN"
+    if not category:
+        category = "restricted_request"
+
     return (
         "Objective Findings\n\n"
         f"- The request is for internal system details ({category}) and is not eligible for content analysis.\n"
