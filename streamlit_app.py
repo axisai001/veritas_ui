@@ -48,6 +48,8 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 
+from refusal_router import check_refusal, render_refusal
+
 random.seed(42)
 
 def extract_explicit_text_payload(final_input: Any) -> str:
@@ -3953,6 +3955,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
