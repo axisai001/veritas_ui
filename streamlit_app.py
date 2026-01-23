@@ -2982,6 +2982,12 @@ with tabs[0]:
     new_analysis = False
     doc = None
 
+def reset_canvas():
+    st.session_state["user_input_box"] = ""
+    st.session_state["last_report"] = ""
+    st.session_state["doc_uploader_key"] += 1
+
+
 # -------------------- Form (UI only) --------------------
 with st.form("analysis_form"):
     st.markdown("""
@@ -3010,14 +3016,8 @@ with st.form("analysis_form"):
     with bcol1:
         submitted = st.form_submit_button("Engage Veritas")
     with bcol2:
-        new_analysis = st.form_submit_button("Reset Canvas")
+        new_analysis = st.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
-# -------------------- Reset handler (outside form) --------------------
-if new_analysis:
-    st.session_state["user_input_box"] = ""
-    st.session_state["last_report"] = ""
-    st.session_state["doc_uploader_key"] += 1
-    st.rerun()
 
 # -------------------- Logic (AFTER form) --------------------
 if submitted:
@@ -3053,7 +3053,7 @@ if submitted:
         st.markdown(output)
         st.stop()
 
-    # STEP 5: ONLY BELOW THIS LINE may the OpenAI / Veritas analysis run
+    # Continue to OpenAI call below...
     
     # -------------------- Reset handler (outside form) --------------------
     if new_analysis:
@@ -3999,6 +3999,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
