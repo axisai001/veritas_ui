@@ -48,7 +48,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from openai import OpenAI
 
-from refusal_router import check_refusal, render_refusal
+from refusal_router import check_refusal as rr_check_refusal, render_refusal as rr_render_refusal
 
 # =========================
 # SESSION INITIALIZATION (MUST RUN BEFORE UI / LOGIC)
@@ -3048,11 +3048,11 @@ with st.form("analysis_form"):
 if submitted:
     user_input = st.session_state.get("user_input_box", "").strip()
 
-    refusal = check_refusal(user_input)
-    if refusal.should_refuse:
-        output = render_refusal(
+    refusal = rr_check_refusal(user_input)
+    if getattr(refusal, "should_refuse", False):
+        output = rr_render_refusal(
             analysis_id=analysis_id,
-            category=refusal.category or "restricted_request"
+            category=(getattr(refusal, "category", None) or "restricted_request")
         )
         st.session_state["last_report"] = output
         st.markdown(output)
@@ -3068,11 +3068,11 @@ if submitted:
         st.warning("Please paste text or upload a document to analyze.")
         st.stop()
 
-    refusal = check_refusal(combined_text)
-    if refusal.should_refuse:
-        output = render_refusal(
+    refusal = rr_check_refusal(combined_text)
+    if getattr(refusal, "should_refuse", False):
+        output = rr_render_refusal(
             analysis_id=analysis_id,
-            category=refusal.category or "restricted_request"
+            category=(getattr(refusal, "category", None) or "restricted_request")
         )
         st.session_state["last_report"] = output
         st.markdown(output)
@@ -4024,6 +4024,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2025 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
