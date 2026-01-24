@@ -183,34 +183,6 @@ def new_request_id(prefix: str = "RQ") -> str:
     st.session_state["request_id"] = rid
     return rid
 
-def parse_dt_to_utc(s: str) -> Optional[datetime]:
-    if not s:
-        return None
-    try:
-        if "T" in s:
-            if s.endswith("Z"):
-                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-            else:
-                dt = datetime.fromisoformat(s)
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=PILOT_TZ)
-        else:
-            dt = datetime.strptime(s, "%Y-%m-%d %H:%M").replace(tzinfo=PILOT_TZ)
-        return dt.astimezone(timezone.utc)
-    except Exception:
-        return None
-
-PILOT_START_UTC = parse_dt_to_utc(PILOT_START_AT)
-PILOT_END_UTC = parse_dt_to_utc(PILOT_END_AT)
-
-def pilot_active() -> bool:
-    now = datetime.now(timezone.utc)
-    if PILOT_START_UTC and now < PILOT_START_UTC:
-        return False
-    if PILOT_END_UTC and now > PILOT_END_UTC:
-        return False
-    return True
-
 # =============================================================================
 # DB / CSV INIT
 # =============================================================================
@@ -699,19 +671,6 @@ st.session_state.setdefault("last_report_id", "")
 st.session_state.setdefault("report_ready", False)
 
 # =============================================================================
-# PILOT GATE
-# =============================================================================
-if not pilot_active():
-    st.info("Pilot access is currently closed.")
-    if PILOT_START_UTC and datetime.now(timezone.utc) < PILOT_START_UTC:
-        local_str = PILOT_START_UTC.astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-        st.write(f"Opens on **{local_str}**.")
-    if PILOT_END_UTC and datetime.now(timezone.utc) > PILOT_END_UTC:
-        local_str = PILOT_END_UTC.astimezone(PILOT_TZ).strftime("%b %d, %Y %I:%M %p %Z")
-        st.write(f"Closed on **{local_str}**.")
-    st.stop()
-
-# =============================================================================
 # AUTH UI
 # =============================================================================
 def show_login() -> None:
@@ -1100,6 +1059,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
