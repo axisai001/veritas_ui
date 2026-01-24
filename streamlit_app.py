@@ -821,11 +821,20 @@ with tab_analyze:
     st.subheader("Veritas — Content Analysis and Advisory System")
     st.caption("Veritas returns objective findings with non-prescriptive advisory guidance.")
 
+    # Show the Analysis ID only AFTER a report exists
     if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
-    with st.form("analysis_form"):
-        st.text_area("Paste or type text to analyze", height=220, key="user_input_box")
+    # -----------------------------
+    # FORM (collect inputs only)
+    # -----------------------------
+    with st.form("analysis_form", clear_on_submit=False):
+        user_text = st.text_area(
+            "Paste or type text to analyze",
+            height=220,
+            key="user_input_box",
+        )
+
         doc = st.file_uploader(
             f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
@@ -833,14 +842,20 @@ with tab_analyze:
             key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
         )
 
-        if submitted:
-            new_request_id()
+        c1, c2 = st.columns([1, 1])
+        submitted = c1.form_submit_button("Engage Veritas")
+        c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
-            if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-                st.error("Too many requests. Please wait and try again.")
-                st.stop()
+    # -----------------------------
+    # SUBMIT HANDLER (outside form)
+    # -----------------------------
+    if submitted:
+        new_request_id()
 
-        user_text = (st.session_state.get("user_input_box") or "").strip()
+        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+            st.error("Too many requests. Please wait and try again.")
+            st.stop()
+
         extracted_text = ""
         source = "typed"
 
@@ -848,7 +863,7 @@ with tab_analyze:
             extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
             if extracted_text:
                 source = "document"
-    
+
         final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
 
         if not final_input:
@@ -858,8 +873,6 @@ with tab_analyze:
         # Generate Analysis ID ONLY now that analysis will proceed
         st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
         analysis_id = st.session_state["veritas_analysis_id"]
-
-        # continue into analysis...
 
         # Refusal pre-check (single source of truth)
         try:
@@ -872,11 +885,12 @@ with tab_analyze:
                     source=source,
                     input_text=final_input,
                 )
-                st.session_state["last_report"] = render_refusal(analysis_id, refusal.category, refusal.reason)
+                st.session_state["last_report"] = render_refusal(
+                    analysis_id, refusal.category, refusal.reason
+                )
                 st.session_state["last_report_id"] = analysis_id
                 st.session_state["report_ready"] = True
-                st.markdown(st.session_state["last_report"])
-                st.stop()
+                _safe_rerun()
         except Exception as e:
             log_error_event("REFUSAL_ROUTER_ERROR", "/analyze", 500, repr(e))
 
@@ -900,6 +914,7 @@ with tab_analyze:
                 ],
                 temperature=TEMPERATURE,
             )
+
             report = (resp.choices[0].message.content or "").strip() if resp and resp.choices else ""
             if not report:
                 raise RuntimeError("Empty response from model.")
@@ -915,7 +930,8 @@ with tab_analyze:
                     ],
                     temperature=TEMPERATURE,
                 )
-                report = (resp2.choices[0].message.content or "").strip() if resp2 and resp2.choices else report
+                report2 = (resp2.choices[0].message.content or "").strip() if resp2 and resp2.choices else ""
+                report = report2 or report
 
             st.session_state["last_report"] = report
             st.session_state["last_report_id"] = analysis_id
@@ -936,6 +952,12 @@ with tab_analyze:
         finally:
             prog.empty()
 
+        # Rerun to show the report + Analysis ID consistently
+        _safe_rerun()
+
+    # -----------------------------
+    # DISPLAY LAST REPORT (always)
+    # -----------------------------
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         st.markdown(st.session_state["last_report"])
 
@@ -1061,6 +1083,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
