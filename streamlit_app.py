@@ -2861,6 +2861,8 @@ def show_login():
 
     st.session_state["auth_view"] = "admin" if auth_choice == "Admin" else "user"
 
+    raise SystemExit("DEBUG STOP")
+
     # ---- Normalization helper ----
     def _norm(s: str) -> str:
         """Normalize and strip hidden spaces/newlines."""
@@ -3221,6 +3223,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
