@@ -9,7 +9,6 @@
 # - Privacy/Terms acknowledgment gate for non-admins (persisted)
 # - Refusal routing (refusal_router.py) + refusal telemetry (CSV + SQLite)
 # - Analysis logging (CSV + SQLite) WITHOUT storing full user text
-# - Support + Feedback forms (CSV + SQLite)
 # - PDF/DOCX/TXT/MD/CSV text extraction
 #
 # Dependencies:
@@ -81,8 +80,6 @@ DB_PATH = str(DATA_DIR / "veritas.db")
 ANALYSES_CSV = str(DATA_DIR / "analyses.csv")
 ERRORS_CSV = str(DATA_DIR / "errors.csv")
 AUTH_CSV = str(DATA_DIR / "auth_events.csv")
-SUPPORT_CSV = str(DATA_DIR / "support_tickets.csv")
-FEEDBACK_CSV = str(DATA_DIR / "feedback.csv")
 ACK_CSV = str(DATA_DIR / "ack_events.csv")
 REFUSALS_CSV = str(DATA_DIR / "refusal_telemetry.csv")
 
@@ -271,32 +268,6 @@ def _init_db() -> None:
         )
     """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS support_tickets (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp_utc TEXT,
-            ticket_id TEXT,
-            full_name TEXT,
-            email TEXT,
-            analysis_id TEXT,
-            issue TEXT,
-            session_id TEXT,
-            login_id TEXT
-        )
-    """)
-
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS feedback (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp_utc TEXT,
-            rating INTEGER,
-            email TEXT,
-            comments TEXT,
-            session_id TEXT,
-            login_id TEXT
-        )
-    """)
-
     con.commit()
     con.close()
 
@@ -348,24 +319,18 @@ _init_csv(ANALYSES_CSV, ["timestamp_utc","analysis_id","session_id","login_id","
 _init_csv(ERRORS_CSV, ["timestamp_utc","request_id","route","kind","http_status","detail","session_id","login_id"])
 _init_csv(ACK_CSV, ["timestamp_utc","ack_key","session_id","login_id","acknowledged","privacy_url","terms_url"])
 _init_csv(REFUSALS_CSV, ["created_utc","analysis_id","source","category","reason","input_len","input_sha256"])
-_init_csv(SUPPORT_CSV, ["timestamp_utc","ticket_id","full_name","email","analysis_id","issue","session_id","login_id"])
-_init_csv(FEEDBACK_CSV, ["timestamp_utc","rating","email","comments","session_id","login_id"])
 
 _prune_csv(AUTH_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ANALYSES_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ERRORS_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ACK_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(REFUSALS_CSV, TTL_DAYS_DEFAULT)
-_prune_csv(SUPPORT_CSV, TTL_DAYS_DEFAULT)
-_prune_csv(FEEDBACK_CSV, TTL_DAYS_DEFAULT)
 
 _prune_table("auth_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("analyses", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("errors", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("ack_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("refusal_events", "created_utc", TTL_DAYS_DEFAULT)
-_prune_table("support_tickets", "timestamp_utc", TTL_DAYS_DEFAULT)
-_prune_table("feedback", "timestamp_utc", TTL_DAYS_DEFAULT)
 
 # =============================================================================
 # LOGGING
@@ -962,95 +927,6 @@ with tab_analyze:
         st.markdown(st.session_state["last_report"])
 
 # =============================================================================
-# FEEDBACK TAB
-# =============================================================================
-with tab_feedback:
-    st.subheader("Feedback")
-    st.caption("Feedback is stored for internal review.")
-
-    with st.form("feedback_form"):
-        rating = st.slider("Rating", 1, 5, 4)
-        email = st.text_input("Email (optional)")
-        comments = st.text_area("Comments", height=140)
-        submit = st.form_submit_button("Submit Feedback")
-
-    if submit:
-        ts = _now_utc_iso()
-        sid = ensure_session_id()
-        login_id = st.session_state.get("login_id", "")
-
-        try:
-            with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerow([ts, rating, (email or "")[:120], (comments or "")[:2000], sid, login_id])
-        except Exception:
-            pass
-
-        try:
-            _db_exec(
-                """INSERT INTO feedback (timestamp_utc,rating,email,comments,session_id,login_id)
-                   VALUES (?,?,?,?,?,?)""",
-                (ts, int(rating), (email or "")[:120], (comments or "")[:2000], sid, login_id),
-            )
-        except Exception as e:
-            log_error_event("FEEDBACK_DB_WRITE", "/feedback", 500, repr(e))
-
-        st.success("Feedback submitted. Thank you.")
-
-# =============================================================================
-# SUPPORT TAB
-# =============================================================================
-with tab_support:
-    st.subheader("Support")
-    st.caption("Submit a ticket and include the Veritas Analysis ID when possible.")
-
-    with st.form("support_form"):
-        full_name = st.text_input("Full Name")
-        email = st.text_input("Email")
-        analysis_id_in = st.text_input("Veritas Analysis ID", value=st.session_state.get("last_report_id") or ensure_analysis_id())
-        issue = st.text_area("Describe the issue", height=160)
-        submit = st.form_submit_button("Submit Ticket")
-
-    if submit:
-        ticket_id = f"SUP-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3).upper()}"
-        ts = _now_utc_iso()
-        sid = ensure_session_id()
-        login_id = st.session_state.get("login_id", "")
-
-        try:
-            with open(SUPPORT_CSV, "a", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerow([ts, ticket_id, (full_name or "")[:120], (email or "")[:120], (analysis_id_in or "")[:60], (issue or "")[:4000], sid, login_id])
-        except Exception:
-            pass
-
-        try:
-            _db_exec(
-                """INSERT INTO support_tickets (timestamp_utc,ticket_id,full_name,email,analysis_id,issue,session_id,login_id)
-                   VALUES (?,?,?,?,?,?,?,?)""",
-                (ts, ticket_id, (full_name or "")[:120], (email or "")[:120], (analysis_id_in or "")[:60], (issue or "")[:4000], sid, login_id),
-            )
-        except Exception as e:
-            log_error_event("SUPPORT_DB_WRITE", "/support", 500, repr(e))
-
-        st.success(f"Ticket submitted. Ticket ID: {ticket_id}")
-
-# =============================================================================
-# HELP TAB
-# =============================================================================
-with tab_help:
-    st.subheader("Help")
-    st.markdown(
-        """
-- Paste or upload the content you want analyzed.
-- Veritas returns only two sections: **Objective Findings** and **Advisory Guidance**.
-- Use the **Veritas Analysis ID** for customer support and audit traceability.
-"""
-    )
-    if PRIVACY_URL:
-        st.markdown(f"- Privacy Policy: {PRIVACY_URL}")
-    if TERMS_URL:
-        st.markdown(f"- Terms of Use: {TERMS_URL}")
-
-# =============================================================================
 # ADMIN TAB
 # =============================================================================
 if tab_admin is not None:
@@ -1083,6 +959,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
