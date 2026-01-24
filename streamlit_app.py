@@ -3059,15 +3059,10 @@ with tab_analyze:
 
 # -------------------- Form (UI only) --------------------
 with st.form("analysis_form"):
-    st.markdown(
-        """
-        <h3 style="margin-bottom:0.25rem;">Veritas — Content Analysis & Advisory System</h3>
-        <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-            Veritas analyzes written content for structural and contextual signals, including potential bias indicators,
-            and offers non-prescriptive advisory guidance.
-        </p>
-        """,
-        unsafe_allow_html=True,
+    st.subheader("Veritas - Content Analysis and Advisory System")
+    st.caption(
+        "Veritas analyzes written content for structural and contextual signals, "
+        "including potential bias indicators, and offers non-prescriptive advisory guidance."
     )
 
     st.text_area(
@@ -3078,7 +3073,7 @@ with st.form("analysis_form"):
     )
 
     doc = st.file_uploader(
-        f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+        f"Upload document (drag & drop) - Max {int(MAX_UPLOAD_MB)}MB - Types: PDF, DOCX, TXT, MD, CSV",
         type=list(DOC_ALLOWED_EXTENSIONS),
         accept_multiple_files=False,
         key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
@@ -3634,6 +3629,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
