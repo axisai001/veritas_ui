@@ -3036,17 +3036,6 @@ if st.session_state.get("is_admin", False):
 # -------------------- Analyze Tab --------------------
 with tabs[0]:
 
-    # --- (Optional) red team banner ---
-    if st.session_state.get("is_redteam", False):
-        st.markdown(
-            """
-            <div style="background-color:#B71C1C;color:white;padding:0.75rem;border-radius:8px;margin-bottom:1rem;">
-            🧪 <b>Red Team Mode Active:</b> All inputs and outputs are being logged for testing.
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
     # Ensure uploader key exists
     if "doc_uploader_key" not in st.session_state:
         st.session_state["doc_uploader_key"] = 0
@@ -3641,6 +3630,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
