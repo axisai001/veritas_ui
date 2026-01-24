@@ -848,7 +848,7 @@ with tab_analyze:
 
                 log_refusal_event(
                     analysis_id=analysis_id,
-                    category=refusal.category,
+                    category=str(getattr(refusal.category, "value", refusal.category)),
                     reason=refusal.reason,
                     source=source,
                     input_text=final_input,
@@ -963,6 +963,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
