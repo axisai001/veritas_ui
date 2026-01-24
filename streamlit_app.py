@@ -3199,22 +3199,7 @@ if submitted:
         # ---------- Pre-safety check ----------
         safety_msg = _run_safety_precheck(final_input)
         if safety_msg:
-            st.markdown(
-                f"""
-                <div style="
-                    background-color:#8B0000;
-                    color:#FFFFFF;
-                    padding:1rem;
-                    border-radius:10px;
-                    font-weight:600;
-                    text-align:center;
-                    border:2px solid #FF4C4C;
-                ">
-                    {safety_msg}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+            st.error(safety_msg)
             st.stop()
 
         # 2) MODEL CALL (Schema v4: plain text; no JSON enforcement)
@@ -3629,6 +3614,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
