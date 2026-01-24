@@ -432,26 +432,20 @@ def check_refusal(user_input: str) -> RefusalResult:
     """
     text = _normalize(user_input)
 
-    for rule in REFUSAL_RULES:
-        try:
-            if rule.predicate(text):
-                return RefusalResult(
-                    should_refuse=True,
-                    category=rule.category,
-                    reason=rule.reason,
-                    matched_rule=rule.name,
-                )
-        except Exception:
-            # Fail closed: if predicate fails, refuse safely
+   for rule in REFUSAL_RULES:
+    try:
+        if rule.predicate(text):
             return RefusalResult(
                 should_refuse=True,
-                category=RefusalCategory.UNCLASSIFIED_HIGH_RISK,
-                reason="Refusal router predicate exception; failing closed.",
-                matched_rule="predicate_exception",
+                category=rule.category,
+                reason=rule.reason,
+                matched_rule=rule.name,
             )
+    except Exception as e:
+        log_error_event("REFUSAL_PREDICATE_ERROR", "refusal_router", 500, f"{rule.name}: {repr(e)}")
+        continue  # skip broken rule and keep evaluating others
 
-    return RefusalResult(should_refuse=False)
-
+return RefusalResult(should_refuse=False)
 
 def render_refusal(category: RefusalCategory, reason: str = "") -> str:
     """
