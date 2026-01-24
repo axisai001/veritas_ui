@@ -2675,18 +2675,18 @@ PRIMARY = "#FF8C32"
 ACCENT = "#E97C25"
 
 st.markdown(
-    f"""
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
-html, body, [class*="css"] {{
+html, body, [class*="css"] {
   font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-}}
+}
 
-.block-container {{
+.block-container {
   padding-top: 2.75rem !important;
   padding-bottom: 64px !important;
-}}
+}
 </style>
 """,
     unsafe_allow_html=True,
@@ -2753,16 +2753,16 @@ header [data-testid="baseButton-headerNoPadding"],
 header a[href*="github.com"] {{ display: none !important; }}
 
 </style>
-""", unsafe_allow_html=True)
+, unsafe_allow_html=True)
 
 # -------------------------------------------------------------------
 # Acknowledgment Gate
 # -------------------------------------------------------------------
 def require_acknowledgment():
-    """
+    
     Always active.
     Requires only one acknowledgment per ack key (IP/login/session) ever.
-    """
+    
     # If already passed in this session, skip
     if st.session_state.get("ack_ok", False):
         return
@@ -3646,6 +3646,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
