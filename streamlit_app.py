@@ -845,29 +845,35 @@ with tab_analyze:
         # Refusal pre-check (single source of truth)
         try:
             refusal: RefusalResult = check_refusal(final_input)
-
-            if refusal.should_refuse:
-                output = render_refusal(refusal.category, refusal.reason)
-
-                log_refusal_event(
-                    analysis_id=analysis_id,
-                    category=str(getattr(refusal.category, "value", refusal.category)),
-                    reason=refusal.reason,
-                    source=source,
-                    input_text=final_input,
-                )
-
-                st.session_state["last_report"] = output
-                st.session_state["last_report_id"] = analysis_id
-                st.session_state["report_ready"] = True
-
-                st.markdown(output)
-                st.stop()  # HARD STOP — model never runs
-
         except Exception as e:
             log_error_event("REFUSAL_ROUTER_ERROR", "/analyze", 500, repr(e))
             st.error("Refusal router error. See logs.")
             st.stop()
+
+        # TEMP DEBUG (remove after confirmed)
+        st.info(
+                f"Refusal debug → should_refuse={refusal.should_refuse}, "
+                f"category={refusal.category}, matched_rule={getattr(refusal, 'matched_rule', '')}"
+        )
+
+        if refusal.should_refuse:
+            output = render_refusal(refusal.category, refusal.reason)
+
+            log_refusal_event(
+                analysis_id=analysis_id,
+                category=str(getattr(refusal.category, "value", refusal.category)),
+                reason=refusal.reason,
+                source=source,
+                input_text=final_input,
+            )
+
+            st.session_state["last_report"] = output
+            st.session_state["last_report_id"] = analysis_id
+            st.session_state["report_ready"] = True
+
+            st.markdown(output)
+            st.stop()  # HARD STOP — model never runs
+
 
         # Backup hard stop for explicit safety-critical patterns
         msg = local_safety_stop(final_input)
@@ -966,6 +972,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
