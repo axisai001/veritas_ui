@@ -39,6 +39,9 @@ from openai import OpenAI
 # Refusal Router (required companion file)
 from refusal_router import check_refusal, render_refusal, RefusalResult
 
+import refusal_router as rr
+st.sidebar.write("refusal_router loaded from:", rr.__file__)
+
 # =============================================================================
 # CONFIG
 # =============================================================================
@@ -963,6 +966,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
