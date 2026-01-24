@@ -3056,35 +3056,39 @@ def reset_canvas():
     st.session_state["doc_uploader_key"] += 1
 
 with tab_analyze:
-    # -------------------- Form (UI only) --------------------
-    with st.form("analysis_form"):
-        st.markdown("""
-            <h3 style="margin-bottom:0.25rem;">Veritas — Content Analysis & Advisory System</h3>
-            <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
-                Veritas analyzes written content for structural and contextual signals, including potential bias indicators, 
-                and offers non-prescriptive advisory guidance.
-            </p>
-        """, unsafe_allow_html=True)
 
-        st.text_area(
-            "Paste or type text to analyze",
-            height=200,
-            key="user_input_box",
-            help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears."
-        )
+# -------------------- Form (UI only) --------------------
+with st.form("analysis_form"):
+    st.markdown(
+        """
+        <h3 style="margin-bottom:0.25rem;">Veritas — Content Analysis & Advisory System</h3>
+        <p style="font-size:0.95rem; opacity:0.85; margin-top:0;">
+            Veritas analyzes written content for structural and contextual signals, including potential bias indicators,
+            and offers non-prescriptive advisory guidance.
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
 
-        doc = st.file_uploader(
-            f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
-            type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False,
-            key=f"doc_uploader_{st.session_state['doc_uploader_key']}"
-        )
+    st.text_area(
+        "Paste or type text to analyze",
+        height=200,
+        key="user_input_box",
+        help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears.",
+    )
 
-        bcol1, bcol2, _spacer = st.columns([2, 2, 6])
-        with bcol1:
-            submitted = st.form_submit_button("Engage Veritas")
-        with bcol2:
-            new_analysis = st.form_submit_button("Reset Canvas", on_click=reset_canvas)
+    doc = st.file_uploader(
+        f"Upload document (drag & drop) — Max {int(MAX_UPLOAD_MB)}MB — Types: PDF, DOCX, TXT, MD, CSV",
+        type=list(DOC_ALLOWED_EXTENSIONS),
+        accept_multiple_files=False,
+        key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
+    )
+
+    bcol1, bcol2, _spacer = st.columns([2, 2, 6])
+    with bcol1:
+        submitted = st.form_submit_button("Engage Veritas")
+    with bcol2:
+        new_analysis = st.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
 # -------------------- Logic (AFTER form) --------------------
 if submitted:
@@ -3630,6 +3634,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
