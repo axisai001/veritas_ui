@@ -3105,7 +3105,7 @@ if submitted:
     if refusal.should_refuse:
         log_refusal_event(
             analysis_id=analysis_id,
-            category=refusal.category,
+            category=refusal.category or "restricted_request",
             reason=refusal.reason,
             source="typed",
             input_text=user_input,  # used only for hashing/length; do not store raw
@@ -3113,7 +3113,12 @@ if submitted:
             app_key_id=st.session_state.get("app_key_id"),
             ui_session_id=st.session_state.get("ui_session_id"),
         )
-        output = rr_render_refusal(analysis_id=analysis_id, category=refusal.category, reason=refusal.reason)
+
+        output = rr_render_refusal(
+            analysis_id=analysis_id,
+            category=refusal.category or "restricted_request",
+            reason=refusal.reason,
+        )
         st.session_state["last_report"] = output
         st.markdown(output)
         st.stop()
@@ -3132,15 +3137,20 @@ if submitted:
     if refusal.should_refuse:
         log_refusal_event(
             analysis_id=analysis_id,
-            category=refusal.category,
+            category=refusal.category or "restricted_request",
             reason=refusal.reason,
             source="document",
-            input_text=combined_text,
+            input_text=combined_text,  # hashing/len only; do not store raw
             customer_id=st.session_state.get("customer_id"),
-                app_key_id=st.session_state.get("app_key_id"),
-        ui_session_id=st.session_state.get("ui_session_id"),
+            app_key_id=st.session_state.get("app_key_id"),
+            ui_session_id=st.session_state.get("ui_session_id"),
         )
-        output = rr_render_refusal(analysis_id=analysis_id, category=refusal.category, reason=refusal.reason)
+
+        output = rr_render_refusal(
+            analysis_id=analysis_id,
+            category=refusal.category or "restricted_request",
+            reason=refusal.reason,
+        )
         st.session_state["last_report"] = output
         st.markdown(output)
         st.stop()
@@ -3631,6 +3641,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
