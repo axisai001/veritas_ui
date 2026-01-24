@@ -843,6 +843,8 @@ with tab_analyze:
         try:
             refusal: RefusalResult = check_refusal(final_input)
             if refusal.should_refuse:
+                output = render_refusal(analysis_id, refusal.category, refusal.reason)
+
                 log_refusal_event(
                     analysis_id=analysis_id,
                     category=refusal.category,
@@ -850,12 +852,14 @@ with tab_analyze:
                     source=source,
                     input_text=final_input,
                 )
-                st.session_state["last_report"] = render_refusal(
-                    analysis_id, refusal.category, refusal.reason
-                )
+
+                st.session_state["last_report"] = output
                 st.session_state["last_report_id"] = analysis_id
                 st.session_state["report_ready"] = True
-                _safe_rerun()
+
+                st.markdown(output)
+                st.stop()  # ← REQUIRED
+
         except Exception as e:
             log_error_event("REFUSAL_ROUTER_ERROR", "/analyze", 500, repr(e))
 
@@ -917,9 +921,6 @@ with tab_analyze:
         finally:
             prog.empty()
 
-        # Rerun to show the report + Analysis ID consistently
-        _safe_rerun()
-
     # -----------------------------
     # DISPLAY LAST REPORT (always)
     # -----------------------------
@@ -959,6 +960,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
