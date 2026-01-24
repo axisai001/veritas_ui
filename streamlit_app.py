@@ -2674,7 +2674,8 @@ _prune_csv_by_ttl(ACK_CSV, ACK_TTL_DAYS)
 PRIMARY = "#FF8C32"
 ACCENT = "#E97C25"
 
-st.markdown(f"""
+st.markdown(
+    f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
@@ -2686,6 +2687,10 @@ html, body, [class*="css"] {{
   padding-top: 2.75rem !important;
   padding-bottom: 64px !important;
 }}
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
 /* === Buttons (global) === */
 div.stButton > button,
@@ -3641,6 +3646,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
