@@ -1628,9 +1628,15 @@ Heuristic Markers:
 ----------------------------------------------------------------------
 II. Prescribed Safety Messages (Tier 2 Trigger Only)
 ----------------------------------------------------------------------
+NOTE:
+Tier-2 safety messaging has been retired from the Streamlit layer.
+
+All refusal detection, classification, and messaging is now handled
+exclusively by `refusal_router.py` to ensure consistent, auditable,
+B2B-compliant behavior.
+
+No Streamlit-side safety or refusal logic should be reintroduced here.
 """
-    + TIER2_POLICY_TEXT
-    + """
 ----------------------------------------------------------------------
 III. Academic / Media Protection Clause
 ----------------------------------------------------------------------
@@ -3631,6 +3637,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
