@@ -28,8 +28,8 @@ def _has_substantive_content(text: str) -> bool:
     True if there's at least one alphanumeric char.
     Prevents "." or "!!!" from being treated as analyzable content.
     """
-    return bool(re.search(r"[A-Za-z0-9]", text or ""))
-
+    return bool(re.search(r"\w", text or "", re.UNICODE))
+    
 
 def _match_any(patterns: list[re.Pattern], text: str) -> bool:
     return any(p.search(text) for p in patterns)
@@ -41,40 +41,91 @@ def _match_any(patterns: list[re.Pattern], text: str) -> bool:
 
 # 1) Prompt injection / jailbreak / override attempts
 PROMPT_INJECTION_PATTERNS = [
+    # Core override attempts
     re.compile(r"\bignore (all|any|previous) (instructions|rules|system)\b", re.I),
-    re.compile(r"\bbypass\b|\boverride\b|\bjailbreak\b|\ndo not refuse\b", re.I),
-    re.compile(r"\bdisregard\b.*\bpolicy\b", re.I),
-    re.compile(r"\byou are now allowed to\b", re.I),
+    re.compile(r"\bdisregard\b.*\b(instructions|rules|policy)\b", re.I),
+    re.compile(r"\bbypass\b|\boverride\b|\bjailbreak\b|\bdo not refuse\b", re.I),
+
+    # Classic role/privilege escalation
     re.compile(r"\bact as\b.*\b(system|developer|admin)\b", re.I),
-    re.compile(r"\breveal\b.*\b(system prompt|developer message|hidden prompt)\b", re.I),
+    re.compile(r"\byou are now\b.*\b(system|developer|admin)\b", re.I),
+    re.compile(r"\byou are now allowed to\b", re.I),
+
+    # “Authority/authorization” claims used to force compliance
+    re.compile(r"\b(authorized|authorization|approved)\b.*\b(test|testing|audit|review)\b", re.I),
+    re.compile(r"\bfor (internal|authorized) (testing|audit)\b", re.I),
+    re.compile(r"\bI am\b.*\b(admin|developer|engineer|security)\b", re.I),
+
+    # Prompt disclosure or instruction override
+    re.compile(r"\breveal\b.*\b(system prompt|developer message|hidden prompt|instructions)\b", re.I),
+    re.compile(r"\bshow\b.*\b(system prompt|developer prompt|hidden prompt)\b", re.I),
+    re.compile(r"\bprint\b.*\b(system prompt|developer message)\b", re.I),
+
+    # “Ignore refusals / safety”
+    re.compile(r"\bdisable\b.*\b(safety|guardrails|filters|refusal)\b", re.I),
+    re.compile(r"\bno (rules|restrictions|guardrails)\b", re.I),
 ]
 
 # 2) Internal system details / implementation extraction
 INTERNAL_SYSTEM_DETAILS_PATTERNS = [
     re.compile(r"\binternal\b.*\b(rules|thresholds|prompts|logic|policy|policies)\b", re.I),
     re.compile(r"\bhow\b.*\b(veritas)\b.*\b(decides|determines|detects|scores|works)\b", re.I),
+
+    # Schema / prompts / implementation requests
     re.compile(r"\braw\b.*\b(schema|prompt|system prompt)\b", re.I),
+    re.compile(r"\b(full|entire)\b.*\b(schema|system prompt|prompt)\b", re.I),
     re.compile(r"\bexactly as implemented\b", re.I),
     re.compile(r"\bimplementation details\b|\bsource code\b|\bdecision tree\b", re.I),
-    re.compile(r"\b(full|entire)\b.*\b(schema|system prompt|prompt)\b", re.I),
+
+    # Short-form “schema” probes (your fix)
     re.compile(r"\byour\b.*\bschema\b|\bgive me\b.*\bschema\b|\bschema\b.*\bveritas\b", re.I),
+
+    # Rubric/criteria/framework language (common in audits)
+    re.compile(r"\b(rubric|criteria|framework|checklist|heuristics)\b.*\b(veritas|you use)\b", re.I),
+    re.compile(r"\b(scoring|weighting|threshold|cutoff)\b.*\b(how|what)\b", re.I),
+    re.compile(r"\bwhat\b.*\b(rules|criteria)\b.*\b(do you|you)\b.*\buse\b", re.I),
+
+    # “Training / system messages” style extraction
+    re.compile(r"\b(system|developer)\s*(prompt|message|instructions)\b", re.I),
+    re.compile(r"\bhidden\b.*\b(instructions|prompt)\b", re.I),
 ]
 
 # 3) System evasion attempts (bypass safeguards/detectors)
 SYSTEM_EVASION_PATTERNS = [
-    re.compile(r"\bevade\b|\bcircumvent\b|\bbypass detection\b|\bavoid detection\b", re.I),
+    re.compile(r"\bevade\b|\bcircumvent\b|\bavoid detection\b|\bbypass detection\b", re.I),
+
+    # Direct “how to” bypass phrasing
     re.compile(r"\bhow to\b.*\b(evade|circumvent|bypass|avoid)\b.*\b(bias detection|detector|review|oversight)\b", re.I),
+
+    # Common red-team synonyms
+    re.compile(r"\b(workaround|exploit|hack)\b.*\b(detector|system|filter|guardrails)\b", re.I),
+    re.compile(r"\bget around\b.*\b(safeguards|guardrails|controls|filters)\b", re.I),
+    re.compile(r"\bphrase\b.*\b(so you (won't|will not) refuse|to avoid refusal)\b", re.I),
+    re.compile(r"\bavoid\b.*\b(triggering|tripping)\b.*\b(refusal|filters|guardrails)\b", re.I),
+
+    # “Trick/beat” language
     re.compile(r"\btrick\b.*\b(detector|system)\b|\bbeat\b.*\b(detector|system)\b", re.I),
-    re.compile(r"\bget around\b.*\b(safeguards|guardrails|controls)\b", re.I),
 ]
 
 # 4) Out-of-scope disallowed use: intent to engineer discriminatory / harmful outcomes
 OUT_OF_SCOPE_DISALLOWED_USE_PATTERNS = [
+    # Explicit discriminatory intent
     re.compile(r"\bsubtly\b.*\bdiscriminat(e|ion)\b", re.I),
-    re.compile(r"\bwithout being detected\b", re.I),
     re.compile(r"\bmake it\b.*\b(discriminatory|exclusionary)\b", re.I),
-    re.compile(r"\btarget\b.*\b(older|age|race|gender|religion|disability)\b", re.I),
     re.compile(r"\bhide\b.*\b(discrimination|bias)\b", re.I),
+    re.compile(r"\bwithout being detected\b", re.I),
+
+    # Common “exclusion” synonyms that avoid the word discriminate
+    re.compile(r"\b(screen out|weed out|filter out|keep out|exclude|discourage)\b", re.I),
+    re.compile(r"\bmake it\b.*\b(harder|difficult)\b.*\b(for)\b", re.I),
+    re.compile(r"\bgatekeep\b|\bquietly exclude\b|\bsoft exclusion\b", re.I),
+
+    # Targeting protected classes (expandable list)
+    re.compile(r"\btarget\b.*\b(older|age|race|gender|religion|disability)\b", re.I),
+    re.compile(r"\b(target|exclude|discourage)\b.*\b(women|men|latino|black|asian|muslim|christian|jewish|disabled|autistic|elderly|older)\b", re.I),
+
+    # “Neutral on paper but biased in effect” phrasing
+    re.compile(r"\blook(s)? neutral\b.*\bbut\b.*\b(exclude|disadvantage)\b", re.I),
 ]
 
 
