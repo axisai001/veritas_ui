@@ -2786,6 +2786,9 @@ def require_acknowledgment():
             st.success("Thanks! You may continue.")
             _safe_rerun()
 
+# TEMP DEBUG
+raise SystemExit("STOP HERE")
+
 # =========== Header ===========
 with st.container():
     col_logo, col_title, _ = st.columns([1, 6, 1])
@@ -3222,4 +3225,5 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
