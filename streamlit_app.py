@@ -67,12 +67,6 @@ _raw_admin_emails = (os.environ.get("ADMIN_EMAILS") or "").strip()
 if _raw_admin_emails:
     ADMIN_EMAILS = {e.strip().lower() for e in _raw_admin_emails.split(",") if e.strip()}
 
-# Pilot time gate (optional)
-PILOT_TZ_NAME = os.environ.get("VERITAS_TZ", "America/Denver")
-PILOT_TZ = ZoneInfo(PILOT_TZ_NAME) if PILOT_TZ_NAME else ZoneInfo("UTC")
-PILOT_START_AT = (os.environ.get("PILOT_START_AT") or "").strip()  # e.g., "2026-01-25 09:00"
-PILOT_END_AT = (os.environ.get("PILOT_END_AT") or "").strip()
-
 # Privacy / Terms (optional but used for acknowledgment gate)
 PRIVACY_URL = (os.environ.get("PRIVACY_URL") or "").strip()
 TERMS_URL = (os.environ.get("TERMS_URL") or "").strip()
@@ -1106,6 +1100,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
