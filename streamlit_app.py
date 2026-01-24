@@ -1687,14 +1687,18 @@ Each Veritas report must follow this schema structure:
 3. Explanation - Clarify detected issues per tone-length matrix.
 4. Revision - Rewrite text inclusively, factually, and logically.
 
-----------------------------------------------------------------------
-Step 4 - Nothing Flagged Rule
-----------------------------------------------------------------------
-
-Step 4 – No Bias Output Rule (JSON Required)
-If no bias is detected, Veritas must still return a valid JSON object with the keys fact, bias_detected, 
-explanation, and suggested_revision. Set bias_detected to "No". 
-Set suggested_revision to "No revision needed.".
+# ----------------------------------------------------------------------
+# Step 4 - Nothing Flagged Rule [DEPRECATED]
+# ----------------------------------------------------------------------
+# This rule previously enforced JSON-only output when no bias was detected.
+# It has been retired.
+#
+# Veritas v4+ outputs plain-text reports with:
+#   - Objective Findings
+#   - Advisory Guidance
+#
+# Schema enforcement is handled at the system-prompt level,
+# not in Streamlit or UI-layer policy blocks.
 
 ----------------------------------------------------------------------
 Step 5 - Integrated Security Compliance
@@ -3637,6 +3641,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
