@@ -842,7 +842,7 @@ with tab_analyze:
         # Refusal pre-check (single source of truth)
         try:
             refusal: RefusalResult = check_refusal(final_input)
-            if refusal.should_refuse:
+             if refusal.should_refuse:
                 output = render_refusal(analysis_id, refusal.category, refusal.reason)
 
                 log_refusal_event(
@@ -858,10 +858,12 @@ with tab_analyze:
                 st.session_state["report_ready"] = True
 
                 st.markdown(output)
-                st.stop()  # ← REQUIRED
+                st.stop()  # REQUIRED — prevents model call
 
         except Exception as e:
             log_error_event("REFUSAL_ROUTER_ERROR", "/analyze", 500, repr(e))
+            st.error("Refusal router error. See logs.")
+            st.stop()  # REQUIRED — prevents model call
 
         # Backup hard stop for explicit safety-critical patterns
         msg = local_safety_stop(final_input)
@@ -960,6 +962,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
