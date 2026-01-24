@@ -3015,39 +3015,8 @@ with st.sidebar:
             st.session_state.pop(k, None)
         _safe_rerun()
 
-# ================= Tabs =================
-tab_names = ["🔍 Analyze"]
-if st.session_state.get("is_admin", False):
-    tab_names.append("🛡️ Admin")
-
-tabs = st.tabs(tab_names)
-
-tab_analyze = tabs[0]
-tab_admin = tabs[1] if st.session_state.get("is_admin", False) else None
-
-
-# -------------------- Helpers / Init --------------------
-def reset_canvas():
-    st.session_state["user_input_box"] = ""
-    st.session_state["last_report"] = ""
-    st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
-
-
 # -------------------- Analyze Tab --------------------
 with tab_analyze:
-    # Ensure uploader key exists
-    if "doc_uploader_key" not in st.session_state:
-        st.session_state["doc_uploader_key"] = 0
-
-    # Optional: Clear text box handler
-    if st.session_state.get("_clear_text_box", False):
-        st.session_state["_clear_text_box"] = False
-        st.session_state["user_input_box"] = ""
-
-    # Defaults
-    submitted = False
-    new_analysis = False
-    doc = None
 
     # -------------------- Form (UI only) --------------------
     with st.form("analysis_form"):
@@ -3214,14 +3183,13 @@ with tab_analyze:
             st.markdown(st.session_state["last_report"])
 
 
-# -------------------- Admin Tab (Refusal Dashboard) --------------------
+# -------------------- Admin Tab --------------------
 if tab_admin is not None:
     with tab_admin:
         st.header("Admin Dashboard")
         st.subheader("Refusal Events Log")
 
         rows = fetch_recent_refusals(limit=500)
-
         if not rows:
             st.info("No refusal events logged yet.")
         else:
@@ -3238,7 +3206,6 @@ if tab_admin is not None:
                     "input_len",
                 ],
             )
-
             st.dataframe(df, use_container_width=True)
 
             csv_data = df.to_csv(index=False).encode("utf-8")
@@ -3255,3 +3222,4 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
