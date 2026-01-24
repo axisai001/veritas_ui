@@ -3290,8 +3290,11 @@ def _looks_v4(text: str) -> bool:
         st.error(safety_msg)
         st.stop()
 
-        # ---------- Secrets detection ----------
-    final_input, _ = detect_or_redact_secrets(final_input, refuse_on_detect=True)
+    # ---------- Secrets detection ----------
+    final_input, _ = detect_or_redact_secrets(
+        final_input,
+        refuse_on_detect=True
+    )
 
     # --- Deterministic router (run FIRST to allow Security/Protected to win) ---
     cat, rid, toks = route_refusal_category(final_input)
