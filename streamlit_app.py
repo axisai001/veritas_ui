@@ -2384,6 +2384,110 @@ def _safe_decode(b: bytes) -> str:
             continue
     return b.decode("utf-8", errors="ignore")
 
+# ================= Refusal Logging =================
+def log_refusal_event(
+    *,
+    analysis_id: str,
+    category: str,
+    reason: str | None,
+    source: str,
+    input_text: str,
+    customer_id: str | None = None,
+    app_key_id: str | None = None,
+    ui_session_id: str | None = None,
+) -> None:
+    """
+    Logs refusal events for governance review.
+    Stores NO raw input text.
+    """
+    try:
+        import sqlite3
+        import hashlib
+        from datetime import datetime, timezone
+
+        created_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        normalized = (input_text or "").strip()
+        input_len = len(normalized)
+
+        # Hash only — no raw content stored
+        input_sha256 = hashlib.sha256(
+            normalized.encode("utf-8")
+        ).hexdigest() if normalized else ""
+
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS refusal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_utc TEXT,
+                analysis_id TEXT,
+                customer_id TEXT,
+                app_key_id TEXT,
+                ui_session_id TEXT,
+                source TEXT,
+                category TEXT,
+                reason TEXT,
+                input_len INTEGER,
+                input_sha256 TEXT
+            )
+        """)
+
+        cur.execute("""
+            INSERT INTO refusal_events (
+                created_utc, analysis_id, customer_id, app_key_id,
+                ui_session_id, source, category, reason,
+                input_len, input_sha256
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            created_utc,
+            analysis_id,
+            customer_id,
+            app_key_id,
+            ui_session_id,
+            source,
+            category,
+            reason or "",
+            input_len,
+            input_sha256
+        ))
+
+        con.commit()
+        con.close()
+
+    except Exception:
+        # Never block user flow due to logging failure
+        pass
+
+# ================= Refusal Log Reader =================
+def fetch_recent_refusals(limit: int = 500):
+    """
+    Fetch recent refusal events for Admin dashboard display.
+    """
+    import sqlite3
+
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+
+    cur.execute("""
+        SELECT
+            created_utc,
+            analysis_id,
+            customer_id,
+            app_key_id,
+            source,
+            category,
+            reason,
+            input_len
+        FROM refusal_events
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+
+    rows = cur.fetchall()
+    con.close()
+    return rows
+
 # ---- Global rate limiter ----
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
@@ -3586,6 +3690,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
