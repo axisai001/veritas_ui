@@ -842,7 +842,7 @@ with tab_analyze:
             key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
         )
 
-        c1, c2 = st.columns([1, 1])
+        c1, c2 = st.columns([1, 1], gap="small")
         submitted = c1.form_submit_button("Engage Veritas")
         c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
@@ -1083,6 +1083,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
