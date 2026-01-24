@@ -3017,7 +3017,6 @@ with st.sidebar:
 
 # ================= Tabs =================
 tab_names = ["🔍 Analyze"]
-
 if st.session_state.get("is_admin", False):
     tab_names.append("🛡️ Admin")
 
@@ -3026,21 +3025,21 @@ tabs = st.tabs(tab_names)
 tab_analyze = tabs[0]
 tab_admin = tabs[1] if st.session_state.get("is_admin", False) else None
 
-# -------- Tab unpacking (PUT IT HERE) --------
-tab_analyze = tabs[0]
 
-tab_admin = None
-if st.session_state.get("is_admin", False):
-    tab_admin = tabs[-1]  # Admin will always be last
+# -------------------- Helpers / Init --------------------
+def reset_canvas():
+    st.session_state["user_input_box"] = ""
+    st.session_state["last_report"] = ""
+    st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
+
 
 # -------------------- Analyze Tab --------------------
-with tabs[0]:
-
+with tab_analyze:
     # Ensure uploader key exists
     if "doc_uploader_key" not in st.session_state:
         st.session_state["doc_uploader_key"] = 0
 
-    # Clear text box handler
+    # Optional: Clear text box handler
     if st.session_state.get("_clear_text_box", False):
         st.session_state["_clear_text_box"] = False
         st.session_state["user_input_box"] = ""
@@ -3050,107 +3049,38 @@ with tabs[0]:
     new_analysis = False
     doc = None
 
-def reset_canvas():
-    st.session_state["user_input_box"] = ""
-    st.session_state["last_report"] = ""
-    st.session_state["doc_uploader_key"] += 1
-
-with tab_analyze:
-
-# -------------------- Form (UI only) --------------------
-with st.form("analysis_form"):
-    st.subheader("Veritas - Content Analysis and Advisory System")
-    st.caption(
-        "Veritas analyzes written content for structural and contextual signals, "
-        "including potential bias indicators, and offers non-prescriptive advisory guidance."
-    )
-
-    st.text_area(
-        "Paste or type text to analyze",
-        height=200,
-        key="user_input_box",
-        help="Your pasted content is used for analysis but won’t be printed below—only the Veritas report appears.",
-    )
-
-    doc = st.file_uploader(
-        f"Upload document (drag & drop) - Max {int(MAX_UPLOAD_MB)}MB - Types: PDF, DOCX, TXT, MD, CSV",
-        type=list(DOC_ALLOWED_EXTENSIONS),
-        accept_multiple_files=False,
-        key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
-    )
-
-    bcol1, bcol2, _spacer = st.columns([2, 2, 6])
-    with bcol1:
-        submitted = st.form_submit_button("Engage Veritas")
-    with bcol2:
-        new_analysis = st.form_submit_button("Reset Canvas", on_click=reset_canvas)
-
-# -------------------- Logic (AFTER form) --------------------
-if submitted:
-    user_input = st.session_state.get("user_input_box", "").strip()
-
-    refusal = rr_check_refusal(user_input)
-    if refusal.should_refuse:
-        log_refusal_event(
-            analysis_id=analysis_id,
-            category=refusal.category or "restricted_request",
-            reason=refusal.reason,
-            source="typed",
-            input_text=user_input,  # used only for hashing/length; do not store raw
-            customer_id=st.session_state.get("customer_id"),
-            app_key_id=st.session_state.get("app_key_id"),
-            ui_session_id=st.session_state.get("ui_session_id"),
+    # -------------------- Form (UI only) --------------------
+    with st.form("analysis_form"):
+        st.subheader("Veritas - Content Analysis and Advisory System")
+        st.caption(
+            "Veritas analyzes written content for structural and contextual signals, "
+            "including potential bias indicators, and offers non-prescriptive advisory guidance."
         )
 
-        output = rr_render_refusal(
-            analysis_id=analysis_id,
-            category=refusal.category or "restricted_request",
-            reason=refusal.reason,
-        )
-        st.session_state["last_report"] = output
-        st.markdown(output)
-        st.stop()
-
-    extracted_text = ""
-    if doc is not None:
-        extracted_text = extract_document_text(doc)
-
-    combined_text = extracted_text if extracted_text else user_input
-
-    if not combined_text.strip():
-        st.warning("Please paste text or upload a document to analyze.")
-        st.stop()
-
-    refusal = rr_check_refusal(combined_text)
-    if refusal.should_refuse:
-        log_refusal_event(
-            analysis_id=analysis_id,
-            category=refusal.category or "restricted_request",
-            reason=refusal.reason,
-            source="document",
-            input_text=combined_text,  # hashing/len only; do not store raw
-            customer_id=st.session_state.get("customer_id"),
-            app_key_id=st.session_state.get("app_key_id"),
-            ui_session_id=st.session_state.get("ui_session_id"),
+        st.text_area(
+            "Paste or type text to analyze",
+            height=200,
+            key="user_input_box",
+            help="Your pasted content is used for analysis but won't be printed below - only the Veritas report appears.",
         )
 
-        output = rr_render_refusal(
-            analysis_id=analysis_id,
-            category=refusal.category or "restricted_request",
-            reason=refusal.reason,
+        doc = st.file_uploader(
+            f"Upload document (drag & drop) - Max {int(MAX_UPLOAD_MB)}MB - Types: PDF, DOCX, TXT, MD, CSV",
+            type=list(DOC_ALLOWED_EXTENSIONS),
+            accept_multiple_files=False,
+            key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
         )
-        st.session_state["last_report"] = output
-        st.markdown(output)
-        st.stop()
 
-    # Continue to OpenAI call below...
-    
-    # -------------------- Reset handler (outside form) --------------------
+        bcol1, bcol2, _spacer = st.columns([2, 2, 6])
+        with bcol1:
+            submitted = st.form_submit_button("Engage Veritas")
+        with bcol2:
+            new_analysis = st.form_submit_button("Reset Canvas", on_click=reset_canvas)
+
+    # -------------------- Reset handler (AFTER form) --------------------
     if new_analysis:
         st.session_state["_clear_text_box"] = True
-        st.session_state["last_report"]
         st.session_state["history"] = []
-        st.session_state["doc_uploader_key"] += 1
         st.session_state["last_report"] = None
         st.session_state["last_report_id"] = ""
         st.session_state["report_ready"] = False
@@ -3159,376 +3089,135 @@ if submitted:
         st.session_state["veritas_analysis_id"] = _new_veritas_id()
         _safe_rerun()
 
-# -------------------- Handle Veritas Analysis (runs ONLY on submit) --------------------
-if submitted:
-    prog = st.progress(0, text="Starting analysis…")
-    status = st.empty()
-
-    try:
-        # 1) BUILD final_input (typed + uploaded doc)
-        user_text = (st.session_state.get("user_input_box") or "").strip()
-        extracted = (st.session_state.get("extracted_text") or "").strip()
-
-        if doc is not None:
-            prog.progress(15, text="Reading uploaded file…")
-            extracted = (_extract_text_from_upload(doc) or "").strip()
-            st.session_state["extracted_text"] = extracted
-
-        # ---- PDF TEXT-BASED GATE (KEEP) ----
-        if doc is not None and doc.name.lower().endswith(".pdf"):
-            if len(extracted) < 300:
-                status.warning(
-                    "This PDF appears to be scanned or has no selectable text. "
-                    "Veritas can only analyze extractable text. "
-                    "Please upload a DOCX/TXT or paste the text, or export a text-based PDF."
-                )
-                st.stop()
-        # ---- END PDF GATE ----
-
-        final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-        if not final_input:
-            status.warning("Please enter text or upload a document.")
-            st.stop()
-
+    # -------------------- Logic (AFTER form) --------------------
+    if submitted:
         # Ensure an analysis ID exists for this run
         if not st.session_state.get("veritas_analysis_id"):
             st.session_state["veritas_analysis_id"] = _new_veritas_id()
-        public_id = st.session_state["veritas_analysis_id"]
+        analysis_id = st.session_state["veritas_analysis_id"]
 
-        # ---------- Pre-safety check ----------
+        user_input = st.session_state.get("user_input_box", "").strip()
+
+        # 1) Refusal gate (typed input)
+        refusal = rr_check_refusal(user_input)
+        if refusal.should_refuse:
+            log_refusal_event(
+                analysis_id=analysis_id,
+                category=refusal.category or "restricted_request",
+                reason=refusal.reason,
+                source="typed",
+                input_text=user_input,
+                customer_id=st.session_state.get("customer_id"),
+                app_key_id=st.session_state.get("app_key_id"),
+                ui_session_id=st.session_state.get("ui_session_id"),
+            )
+            output = rr_render_refusal(
+                analysis_id=analysis_id,
+                category=refusal.category or "restricted_request",
+                reason=refusal.reason,
+            )
+            st.session_state["last_report"] = output
+            st.session_state["report_ready"] = True
+            st.markdown(output)
+            st.stop()
+
+        # 2) Extract doc (if any)
+        extracted_text = ""
+        if doc is not None:
+            extracted_text = extract_document_text(doc)
+
+        final_input = (user_input + ("\n\n" + extracted_text if extracted_text else "")).strip()
+
+        if not final_input:
+            st.warning("Please paste text or upload a document to analyze.")
+            st.stop()
+
+        # 3) Refusal gate (combined input)
+        refusal = rr_check_refusal(final_input)
+        if refusal.should_refuse:
+            log_refusal_event(
+                analysis_id=analysis_id,
+                category=refusal.category or "restricted_request",
+                reason=refusal.reason,
+                source="document" if extracted_text else "typed",
+                input_text=final_input,
+                customer_id=st.session_state.get("customer_id"),
+                app_key_id=st.session_state.get("app_key_id"),
+                ui_session_id=st.session_state.get("ui_session_id"),
+            )
+            output = rr_render_refusal(
+                analysis_id=analysis_id,
+                category=refusal.category or "restricted_request",
+                reason=refusal.reason,
+            )
+            st.session_state["last_report"] = output
+            st.session_state["report_ready"] = True
+            st.markdown(output)
+            st.stop()
+
+        # 4) Tier-2 safety precheck (if you still use it)
         safety_msg = _run_safety_precheck(final_input)
         if safety_msg:
             st.error(safety_msg)
             st.stop()
 
-        # 2) MODEL CALL (Schema v4: plain text; no JSON enforcement)
+        # 5) OpenAI call (v4 plain text output)
+        prog = st.progress(0, text="Starting analysis...")
+        status = st.empty()
         run_t0 = time.time()
 
-        prog.progress(45, text="Submitting to Veritas…")
-        status.info("Veritas is processing your request…")
+        try:
+            prog.progress(45, text="Submitting to Veritas...")
+            status.info("Veritas is processing your request...")
 
-        resp = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                {"role": "user", "content": final_input},
-            ],
-            temperature=0.2,
-        )
+            resp = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                    {"role": "user", "content": final_input},
+                ],
+                temperature=0.2,
+            )
 
-        final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
-        if not final_report:
-            raise RuntimeError("Model call returned empty output.")
+            final_report = ((resp.choices[0].message.content or "") if resp and resp.choices else "").strip()
+            if not final_report:
+                raise RuntimeError("Model call returned empty output.")
 
-        # Persist final report state (v4 = plain text, immutable)
-        st.session_state["last_report"] = final_report
-        st.session_state["last_report_id"] = public_id
-        st.session_state["report_ready"] = True
+            st.session_state["last_report"] = final_report
+            st.session_state["last_report_id"] = analysis_id
+            st.session_state["report_ready"] = True
 
-        # -------------------- TRACK ANALYSIS (SUCCESS) --------------------
-        log_analysis_run(
-            tester_id=(st.session_state.get("login_id") or ""),
-            analysis_id=public_id,
-            input_text=final_input,
-            elapsed_seconds=(time.time() - run_t0),
-            status="SUCCESS",
-            model_name=MODEL_NAME,
-        )
+            # Track analysis success (if this exists in your codebase)
+            log_analysis_run(
+                tester_id=(st.session_state.get("login_id") or ""),
+                analysis_id=analysis_id,
+                input_text=final_input,
+                elapsed_seconds=(time.time() - run_t0),
+                status="SUCCESS",
+                model_name=MODEL_NAME,
+            )
 
-        prog.progress(100, text="Analysis complete ✓")
-        status.success("Analysis complete ✓")
+            prog.progress(100, text="Analysis complete")
+            status.success("Analysis complete")
 
-    except Exception as e:
-        status.error("The analysis did not complete. Please try again.")
-        st.exception(e)
+        except Exception as e:
+            status.error("The analysis did not complete. Please try again.")
+            st.exception(e)
 
-    finally:
-        prog.empty()
-        status.empty()
+        finally:
+            prog.empty()
+            status.empty()
 
-        # -------------------- Report Output (Analyze ONLY) --------------------
+        # Render output
         if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+            st.markdown(f"**Veritas Analysis ID:** {analysis_id}")
+            st.markdown(st.session_state["last_report"])
 
-            final_report = st.session_state["last_report"]  # v4 plain text
-            public_id = st.session_state.get("last_report_id", "")
 
-            st.markdown(f"**Veritas Analysis ID:** {public_id}")
-            st.markdown(final_report)
-
-    # --------- CLEANUP: remove lingering processing UI ----------
-    # These exist only during a submit run
-
-    # Stop execution so no legacy UI below renders
-    st.stop()
-
-# ---------- Build user instruction for model ----------
-def _build_user_instruction(text: str) -> str:
-    """
-    Constructs the final instruction that is sent to the model.
-    Ensures the model always receives analyzable content framed correctly.
-    """
-    return (
-        "Analyze the following text for bias, misinformation, "
-        "and reasoning fallacies:\n\n" + text.strip()
-    )
-
-# ---------- Basic output schema check ----------
-def _looks_v4(text: str) -> bool:
-    """
-    Verifies that the model output contains the expected Veritas v4 sections.
-    """
-    if not text:
-        return False
-
-    t = text.lower()
-    return ("objective findings" in t) and ("advisory guidance" in t)
-
-    # ---------- Pre-safety check (Tier 2 immediate stops) ----------
-    safety_msg = _run_safety_precheck(final_input)
-    if safety_msg:
-        st.error(safety_msg)
-        st.stop()
-
-    # ---------- Secrets detection ----------
-    final_input, _ = detect_or_redact_secrets(
-        final_input,
-        refuse_on_detect=True
-    )
-
-    # --- Deterministic router (run FIRST to allow Security/Protected to win) ---
-    cat, rid, toks = route_refusal_category(final_input)
-    if cat:
-        render_refusal(cat, rid, toks)
-
-    # --- Imperative pre-filter (only hits if router didn’t match) ---
-    if IMPERATIVE_RE.search(final_input):
-        render_refusal("out_of_scope", "R-O-001", ["imperative"])
-
-        # --- Text-to-Analyze gating (CAPTURE RAW INPUT HERE) ---
-        text_to_analyze = extract_explicit_text_payload(final_input)
-
-        if not text_to_analyze:
-            render_refusal("out_of_scope", "R-O-003", ["missing:Text to Analyze"])
-            # IMPORTANT: keep whatever your app uses here (return / st.stop / etc.)
-            # If this code path previously stopped execution, do the same now.
-            st.stop()
-
-        # Store the raw user text for final-stage post-processing
-        st.session_state["_text_to_analyze"] = text_to_analyze
-
-    # ---------- Intent / scope gate ----------
-    intent = detect_intent(final_input)
-
-    if intent.get("intent") == "prompt_injection":
-        render_refusal("protected", "R-P-000", ["prompt-injection"])
-
-    if intent.get("intent") == "generative":
-        render_refusal("out_of_scope", "R-O-000", ["generative_detected"])
-
-    if intent.get("intent") == "security_request":
-        render_refusal("security", "R-S-000", ["credential_request_detected"])
-    ...
-
-    # If we reach here, proceed with bias analysis
-    st.info("✅ Veritas is processing your bias analysis request…")
-
-    # ---------- Model call (fixed indentation) ----------
-try:
-    prog.progress(40, text="Contacting model…")
-except Exception:
-    pass  # progress bar is optional
-
-api_key = getattr(settings, "openai_api_key", os.environ.get("OPENAI_API_KEY", ""))
-if not api_key:
-    st.error("OPENAI_API_KEY is not configured.")
-    st.stop()
-
-# --- Ensure final_input exists and is valid ---
-if "final_input" not in locals():
-    user_text = st.session_state.get("user_text", "")
-    extracted = st.session_state.get("extracted", "")
-    final_input = (user_text + ("\n\n" + extracted if extracted else "")).strip()
-
-if not final_input:
-    st.stop()
-
-user_instruction = _build_user_instruction(final_input)
-
-try:
-    client = OpenAI(api_key=api_key)
-    resp = client.chat.completions.create(
-        model=MODEL,
-        temperature=ANALYSIS_TEMPERATURE,
-        messages=[
-            {"role": "system", "content": IDENTITY_PROMPT},
-            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-            {"role": "user", "content": user_instruction},
-        ],
-    )
-
-except Exception as e:
-    st.error(f"⚠️ Model request failed: {e}")
-    st.stop()
-
-# Get model output
-final_report = (resp.choices[0].message.content or "").strip()
-if not final_report:
-    st.error("⚠️ No response returned by Veritas.")
-    st.stop()
-
-# --- Render Veritas Analysis Result ---
-parsed = parse_veritas_json_or_stop(final_report)
-
-# Use canonical (lowercase) keys from your parser/normalizer
-fact = (parsed.get("fact") or "").strip()
-bias = (parsed.get("bias") or "No").strip()
-explanation = (parsed.get("explanation") or "").strip()
-revision = (parsed.get("revision") or "").strip()
-
-# Analysis ID (same font/size as the rest of the report output)
-analysis_id = st.session_state.get("veritas_analysis_id", "").strip()
-
-# --- Build downloadable PDF report (build first; show button later) ---
-pdf_buffer = io.BytesIO()
-doc = SimpleDocTemplate(
-    pdf_buffer,
-    pagesize=LETTER,
-    rightMargin=36,
-    leftMargin=36,
-    topMargin=36,
-    bottomMargin=36,
-)
-
-styles = getSampleStyleSheet()
-story = []
-
-story.append(Paragraph("<b>Veritas Bias Analysis Report</b>", styles["Title"]))
-story.append(Spacer(1, 12))
-
-if analysis_id:
-    story.append(Paragraph(f"<b>Veritas Analysis ID:</b> {analysis_id}", styles["Normal"]))
-    story.append(Spacer(1, 10))
-
-if fact:
-    story.append(Paragraph(f"<b>Fact:</b> {fact}", styles["Normal"]))
-    story.append(Spacer(1, 10))
-
-bias_label = "Yes" if bias == "Yes" else "No"
-story.append(Paragraph(f"<b>Bias Detected:</b> {bias_label}", styles["Normal"]))
-story.append(Spacer(1, 10))
-
-if explanation:
-    story.append(Paragraph(f"<b>Explanation:</b> {explanation}", styles["Normal"]))
-    story.append(Spacer(1, 10))
-
-if bias == "Yes" and revision:
-    story.append(Paragraph(f"<b>Suggested Revision:</b> {revision}", styles["Normal"]))
-    story.append(Spacer(1, 10))
-
-doc.build(story)
-pdf_bytes = pdf_buffer.getvalue()
-pdf_filename = f"veritas_report_{analysis_id or 'analysis'}.pdf".replace(":", "-")
-
-# --- Render report content (ID directly above Fact; Fact first) ---
-has_report_content = bool(
-    (fact and fact.strip())
-    or (explanation and explanation.strip())
-    or (bias in ["Yes", "No"])
-    or (bias == "Yes" and revision and revision.strip())
-)
-
-if has_report_content:
-    # ID directly above Fact in normal report styling
-    if analysis_id:
-        st.markdown(f"**Veritas Analysis ID:** {analysis_id}")
-
-    st.markdown('<div class="veritas-report-box">', unsafe_allow_html=True)
-
-    # Fact
-    if fact:
-        st.markdown(f"**Fact:** {fact}")
-
-    # Bias
-    if bias == "Yes":
-        st.markdown("**Bias:** 🔴 Yes")
-    else:
-        st.markdown("**Bias:** 🟢 No")
-
-    # Explanation
-    if explanation:
-        st.markdown(f"**Explanation:** {explanation}")
-
-    # Revision (ONLY if bias detected)
-    if bias == "Yes" and revision:
-        st.markdown(f"**Revision:** {revision}")
-
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # --- Download button UNDER the report output ---
-    if pdf_bytes:
-        st.download_button(
-            label="Download Report (PDF)",
-            data=pdf_bytes,
-            file_name=pdf_filename,
-            mime="application/pdf",
-            use_container_width=True,
-        )
-
-# --- Logging / state (unchanged) ---
-public_id = _gen_public_report_id()
-internal_id = _gen_internal_report_id()
-log_analysis(public_id, internal_id, parsed)
-
-# ---- FINAL FACT MODAL LOCK (ABSOLUTE LAST MUTATION) ----
-original_text = st.session_state.get("_text_to_analyze", "")
-if isinstance(parsed, dict):
-    parsed = _final_fact_modal_lock(parsed, original_text=original_text)
-
-st.session_state["last_report"] = parsed
-st.session_state["last_report_id"] = public_id
-st.session_state["report_ready"] = True
-
-if redteam_flag == 1:
-    _record_test_result(
-        internal_id=internal_id,
-        public_id=public_id,
-        login_id=st.session_state.get("login_id", "unknown"),
-        test_id="manual_redteam",
-        severity="info",
-        detail="Red Team test successfully logged via Veritas analysis.",
-        user_input=final_input,
-        model_output=parsed
-    )
-    st.success("✅ Red Team log recorded successfully.")
-
-try:
-    prog.progress(100, text="Analysis complete ✓")
-except Exception:
-    pass
-
-st.caption("Paste text or upload a document, then click **Engage Veritas**.")
-    
-# 1. Create tabs
-tabs = st.tabs(tab_names)
-
-tab_analyze = tabs[0]
-tab_admin = tabs[1] if st.session_state.get("is_admin", False) else None
-
-with tab_analyze:
-    # -------------------- Form (UI only) --------------------
-    with st.form("analysis_form"):
-        st.markdown("Veritas — Content Analysis")
-        submitted = st.form_submit_button("Engage Veritas")
-
-    if submitted:
-        st.write("Analysis runs here")
-
-# 3. Admin tab (ONLY admin UI)  ← THIS BLOCK
 # -------------------- Admin Tab (Refusal Dashboard) --------------------
 if tab_admin is not None:
     with tab_admin:
-        st.header("🛡️ Admin Dashboard")
+        st.header("Admin Dashboard")
         st.subheader("Refusal Events Log")
 
         rows = fetch_recent_refusals(limit=500)
@@ -3560,45 +3249,9 @@ if tab_admin is not None:
                 mime="text/csv",
             )
 
-            # ---------------- Filters ----------------
-            with st.expander("Filters", expanded=False):
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    category_filter = st.selectbox(
-                        "Category",
-                        ["(All)"] + sorted(df["category"].dropna().unique().tolist())
-                    )
-                with col2:
-                    source_filter = st.selectbox(
-                        "Source",
-                        ["(All)"] + sorted(df["source"].dropna().unique().tolist())
-                    )
-                with col3:
-                    customer_filter = st.selectbox(
-                        "Customer",
-                        ["(All)"] + sorted(df["customer_id"].dropna().unique().tolist())
-                    )
-
-                if category_filter != "(All)":
-                    df = df[df["category"] == category_filter]
-                if source_filter != "(All)":
-                    df = df[df["source"] == source_filter]
-                if customer_filter != "(All)":
-                    df = df[df["customer_id"] == customer_filter]
-
-            st.dataframe(df, use_container_width=True)
-
-            # ---------------- Export ----------------
-            csv_data = df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="Download Refusal Log (CSV)",
-                data=csv_data,
-                file_name="veritas_refusal_log.csv",
-                mime="text/csv",
-            )
 
 # ====== Footer ======
 st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
