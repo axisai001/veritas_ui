@@ -842,8 +842,13 @@ with tab_analyze:
         # Refusal pre-check (single source of truth)
         try:
             refusal: RefusalResult = check_refusal(final_input)
-             if refusal.should_refuse:
-                output = render_refusal(analysis_id, refusal.category, refusal.reason)
+            
+            if refusal.should_refuse:
+                output = render_refusal(
+                    analysis_id, 
+                    refusal.category, 
+                    refusal.reason
+                )
 
                 log_refusal_event(
                     analysis_id=analysis_id,
@@ -962,6 +967,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
