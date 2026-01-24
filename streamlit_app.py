@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # streamlit_app.py — Veritas (Streamlit)
 # Tabs: Analyze, 
 # Feedback, Support, Help, (Admin only if authenticated as admin)
@@ -3630,6 +3631,7 @@ st.markdown(
     "<div id='vFooter'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True
 )
+
 
 
 
