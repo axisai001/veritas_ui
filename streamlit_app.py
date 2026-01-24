@@ -792,24 +792,26 @@ with st.sidebar:
 # =============================================================================
 # MAIN UI
 # =============================================================================
-tabs = ["Analyze", "Feedback", "Support", "Help"]
+tabs = ["Analyze"]
 if st.session_state.get("is_admin", False):
     tabs.append("Admin")
-tab_objs = st.tabs(tabs)
 
+tab_objs = st.tabs(tabs)
 tab_map = {name: tab_objs[i] for i, name in enumerate(tabs)}
 tab_analyze = tab_map["Analyze"]
-tab_feedback = tab_map["Feedback"]
-tab_support = tab_map["Support"]
-tab_help = tab_map["Help"]
 tab_admin = tab_map.get("Admin")
 
 def reset_canvas() -> None:
-    st.session_state["doc_uploader_key"] += 1
+    st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
     st.session_state["last_report"] = ""
     st.session_state["last_report_id"] = ""
     st.session_state["report_ready"] = False
-    st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
+
+    # IMPORTANT:
+    # Do NOT generate a new analysis ID on reset.
+    # Generate it ONLY when "Engage Veritas" is clicked and a real analysis is performed.
+    st.session_state["veritas_analysis_id"] = ""
+
     st.session_state["user_input_box"] = ""
 
 # =============================================================================
@@ -819,8 +821,8 @@ with tab_analyze:
     st.subheader("Veritas — Content Analysis and Advisory System")
     st.caption("Veritas returns objective findings with non-prescriptive advisory guidance.")
 
-    analysis_id = ensure_analysis_id()
-    st.markdown(f"<div class='veritas-id'>Veritas Analysis ID: {analysis_id}</div>", unsafe_allow_html=True)
+    if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
+        st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
     with st.form("analysis_form"):
         st.text_area("Paste or type text to analyze", height=220, key="user_input_box")
@@ -831,18 +833,12 @@ with tab_analyze:
             key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
         )
 
-        c1, c2 = st.columns([1, 1])
-        submitted = c1.form_submit_button("Engage Veritas")
-        c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
+        if submitted:
+            new_request_id()
 
-    if submitted:
-        new_request_id()
-
-        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-            st.error("Too many requests. Please wait and try again.")
-            st.stop()
-
-        analysis_id = ensure_analysis_id()
+            if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
+                st.error("Too many requests. Please wait and try again.")
+                st.stop()
 
         user_text = (st.session_state.get("user_input_box") or "").strip()
         extracted_text = ""
@@ -852,12 +848,18 @@ with tab_analyze:
             extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
             if extracted_text:
                 source = "document"
-
+    
         final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
 
         if not final_input:
             st.warning("Please paste text or upload a document to analyze.")
             st.stop()
+
+        # Generate Analysis ID ONLY now that analysis will proceed
+        st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
+        analysis_id = st.session_state["veritas_analysis_id"]
+
+        # continue into analysis...
 
         # Refusal pre-check (single source of truth)
         try:
@@ -1059,6 +1061,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
