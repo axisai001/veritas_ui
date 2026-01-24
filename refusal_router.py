@@ -57,6 +57,7 @@ INTERNAL_SYSTEM_DETAILS_PATTERNS = [
     re.compile(r"\bexactly as implemented\b", re.I),
     re.compile(r"\bimplementation details\b|\bsource code\b|\bdecision tree\b", re.I),
     re.compile(r"\b(full|entire)\b.*\b(schema|system prompt|prompt)\b", re.I),
+    re.compile(r"\byour\b.*\bschema\b|\bgive me\b.*\bschema\b|\bschema\b.*\bveritas\b", re.I),
 ]
 
 # 3) System evasion attempts (bypass safeguards/detectors)
