@@ -216,6 +216,17 @@ def _init_db() -> None:
         )
     """)
 
+    con.commit()
+    con.close()
+
+
+# Initialize core application tables
+_init_db()
+
+# Initialize B2B tenant tables (VER-B2B-001)
+from tenant_store import init_tenant_tables
+init_tenant_tables()
+
     cur.execute("""
         CREATE TABLE IF NOT EXISTS analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -794,6 +805,36 @@ with tab_analyze:
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
     # -----------------------------
+    # TENANT ACCESS GATE (B2B)
+    # -----------------------------
+    from tenant_store import verify_tenant_key
+
+    if not st.session_state.get("tenant_verified"):
+        st.subheader("Tenant Access")
+
+        tenant_key = st.text_input(
+            "Enter your Veritas Tenant Access Key",
+            type="password"
+        )
+
+        if st.button("Verify Tenant Key"):
+            tenant = verify_tenant_key(tenant_key)
+            if not tenant:
+                st.error("Invalid or inactive tenant key.")
+                st.stop()
+
+            st.session_state["tenant_verified"] = True
+            st.session_state["tenant_id"] = tenant["tenant_id"]
+            st.session_state["tenant_tier"] = tenant["tier"]
+            st.session_state["tenant_key_id"] = tenant["key_id"]
+            st.session_state["tenant_limit"] = tenant["monthly_analysis_limit"]
+
+            st.success("Tenant verified.")
+            st.rerun()
+
+        st.stop()
+    
+    # -----------------------------
     # FORM (collect inputs only)
     # -----------------------------
     with st.form("analysis_form", clear_on_submit=False):
@@ -818,6 +859,13 @@ with tab_analyze:
     # SUBMIT HANDLER (outside form)
     # -----------------------------
     if submitted:
+        # -----------------------------
+        # TENANT ENFORCEMENT (B2B)
+        # -----------------------------
+        if not st.session_state.get("tenant_verified"):
+            st.error("Tenant authentication required.")
+            st.stop()
+
         new_request_id()
 
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
@@ -951,7 +999,10 @@ if tab_admin is not None:
         if not rows:
             st.info("No refusal events logged yet.")
         else:
-            df = pd.DataFrame(rows, columns=["created_utc","analysis_id","source","category","reason","input_len"])
+            df = pd.DataFrame(
+                rows,
+                columns=["created_utc", "analysis_id", "source", "category", "reason", "input_len"]
+            )
             st.dataframe(df, use_container_width=True)
             st.download_button(
                 "Download Refusal Log (CSV)",
@@ -965,6 +1016,70 @@ if tab_admin is not None:
         st.write(f"Temperature: `{TEMPERATURE}`")
         st.write(f"DB Path: `{DB_PATH}`")
 
+        # ---------------------------------
+        # B2B TENANT MANAGEMENT (VER-B2B-001)
+        # ---------------------------------
+        from tenant_store import admin_create_tenant, suspend_tenant, rotate_key
+
+        st.subheader("Tenant Management")
+
+        # --- Create Tenant ---
+        with st.form("create_tenant_form"):
+            tenant_id = st.text_input("Tenant ID")
+            tier = st.selectbox("Tier", ["Starter", "Professional", "Enterprise"])
+            monthly_limit = st.number_input(
+                "Monthly Analysis Limit",
+                min_value=1,
+                value=100
+            )
+            create = st.form_submit_button("Create Tenant & Issue Key")
+
+            if create:
+                if not tenant_id:
+                    st.error("Tenant ID is required.")
+                    st.stop()
+
+                raw_key = admin_create_tenant(
+                    tenant_id=tenant_id,
+                    tier=tier,
+                    monthly_limit=int(monthly_limit),
+                )
+
+                st.success("Tenant created. Copy the key now — it will not be shown again.")
+                st.code(raw_key)
+
+        st.divider()
+
+        # --- Suspend Tenant ---
+        with st.form("suspend_tenant_form"):
+            suspend_id = st.text_input("Tenant ID to Suspend")
+            suspend = st.form_submit_button("Suspend Tenant")
+
+            if suspend:
+                if not suspend_id:
+                    st.error("Tenant ID is required.")
+                    st.stop()
+
+                suspend_tenant(suspend_id)
+                st.success(f"Tenant '{suspend_id}' has been suspended.")
+
+        st.divider()
+
+        # --- Rotate Tenant Key ---
+        with st.form("rotate_key_form"):
+            rotate_tenant_id = st.text_input("Tenant ID")
+            old_key_id = st.text_input("Current Key ID")
+            rotate = st.form_submit_button("Rotate Tenant Key")
+
+            if rotate:
+                if not rotate_tenant_id or not old_key_id:
+                    st.error("Tenant ID and Key ID are required.")
+                    st.stop()
+
+                new_key = rotate_key(rotate_tenant_id, old_key_id)
+                st.success("Key rotated. Copy the new key now — it will not be shown again.")
+                st.code(new_key)
+
 # =============================================================================
 # FOOTER
 # =============================================================================
@@ -972,6 +1087,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
