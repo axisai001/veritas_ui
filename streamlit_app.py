@@ -1124,6 +1124,72 @@ if tab_admin is not None:
                 st.code(new_key)
 
         st.divider()
+        st.subheader("Tenant Reporting")
+
+        period = current_period_yyyymm()
+        st.caption(f"Usage period (UTC): {period}")
+
+        # -------------------------
+        # Tenant Snapshot (all tenants)
+        # -------------------------
+        rows = admin_usage_snapshot(period_yyyymm=period, limit=500)
+        if rows:
+            df = pd.DataFrame(
+                rows,
+                columns=["tenant_id", "tier", "monthly_limit", "status", "analysis_count"]
+            )
+            st.dataframe(df, use_container_width=True)
+            st.download_button(
+                "Download Tenant Usage Snapshot (CSV)",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"tenant_usage_snapshot_{period}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("No tenants found.")
+
+        st.divider()
+
+        # -------------------------
+        # Tenant Lookup (details)
+        # -------------------------
+        st.markdown("### Tenant Lookup")
+        lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
+
+        if st.button("Lookup Tenant", key="tenant_lookup_btn"):
+            t = admin_get_tenant(lookup_id.strip())
+            if not t:
+                st.error("No tenant found with that Tenant ID.")
+            else:
+                used = admin_get_usage(t["tenant_id"], period)
+
+                st.success("Tenant found.")
+                st.write({
+                    "tenant_id": t["tenant_id"],
+                    "tier": t["tier"],
+                    "monthly_limit": t["monthly_analysis_limit"],
+                    "status": t["status"],
+                    "usage_this_month": used,
+                    "created_utc": t["created_utc"],
+                    "updated_utc": t["updated_utc"],
+                })
+
+                keys = admin_list_tenant_keys(t["tenant_id"], limit=50)
+                if keys:
+                    kdf = pd.DataFrame(
+                        keys,
+                        columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"]
+                    )
+                    st.markdown("#### Tenant Keys")
+                    st.dataframe(kdf, use_container_width=True)
+                    st.download_button(
+                        "Download Tenant Keys (CSV)",
+                        data=kdf.to_csv(index=False).encode("utf-8"),
+                        file_name=f"tenant_keys_{t['tenant_id']}.csv",
+                        mime="text/csv",
+                    )
+                else:
+                    st.info("No keys found for this tenant.")
 
         # ---------------------------------
         # VERIFY TENANT (INTERNAL)
@@ -1196,6 +1262,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
