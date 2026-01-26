@@ -1024,7 +1024,7 @@ if tab_admin is not None:
         st.write(f"Temperature: `{TEMPERATURE}`")
         st.write(f"DB Path: `{DB_PATH}`")
 
-        # ---------------------------------
+                # ---------------------------------
         # B2B TENANT MANAGEMENT (VER-B2B-001)
         # ---------------------------------
         from tenant_store import admin_create_tenant, suspend_tenant, rotate_key
@@ -1048,7 +1048,7 @@ if tab_admin is not None:
                     st.stop()
 
                 raw_key = admin_create_tenant(
-                    tenant_id=tenant_id,
+                    tenant_id=tenant_id.strip(),
                     tier=tier,
                     monthly_limit=int(monthly_limit),
                 )
@@ -1068,8 +1068,8 @@ if tab_admin is not None:
                     st.error("Tenant ID is required.")
                     st.stop()
 
-                suspend_tenant(suspend_id)
-                st.success(f"Tenant '{suspend_id}' has been suspended.")
+                suspend_tenant(suspend_id.strip())
+                st.success(f"Tenant '{suspend_id.strip()}' has been suspended.")
 
         st.divider()
 
@@ -1084,9 +1084,75 @@ if tab_admin is not None:
                     st.error("Tenant ID and Key ID are required.")
                     st.stop()
 
-                new_key = rotate_key(rotate_tenant_id, old_key_id)
+                new_key = rotate_key(rotate_tenant_id.strip(), old_key_id.strip())
                 st.success("Key rotated. Copy the new key now — it will not be shown again.")
                 st.code(new_key)
+
+        st.divider()
+
+        # ---------------------------------
+        # VERIFY TENANT (INTERNAL)
+        # ---------------------------------
+        st.subheader("Verify Tenant (Internal)")
+
+        lookup_tenant_id = st.text_input("Enter Tenant ID to verify", key="verify_tenant_id")
+
+        if st.button("Verify Tenant"):
+            try:
+                tid = (lookup_tenant_id or "").strip()
+                if not tid:
+                    st.error("Tenant ID is required.")
+                    st.stop()
+
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+
+                cur.execute(
+                    """
+                    SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc
+                    FROM tenants
+                    WHERE tenant_id = ?
+                    """,
+                    (tid,),
+                )
+                tenant = cur.fetchone()
+
+                cur.execute(
+                    """
+                    SELECT key_id, status, created_utc
+                    FROM tenant_keys
+                    WHERE tenant_id = ?
+                    ORDER BY created_utc DESC
+                    LIMIT 20
+                    """,
+                    (tid,),
+                )
+                keys = cur.fetchall()
+
+                con.close()
+
+                if not tenant:
+                    st.error("No tenant found with that Tenant ID.")
+                else:
+                    st.success("Tenant exists.")
+                    st.write({
+                        "tenant_id": tenant[0],
+                        "tier": tenant[1],
+                        "monthly_analysis_limit": tenant[2],
+                        "status": tenant[3],
+                        "created_utc": tenant[4],
+                    })
+
+                    if not keys:
+                        st.info("No keys found for this tenant yet.")
+                    else:
+                        st.write("Associated keys (key_id, status, created_utc):")
+                        df_keys = pd.DataFrame(keys, columns=["key_id", "status", "created_utc"])
+                        st.dataframe(df_keys, use_container_width=True)
+
+            except Exception as e:
+                st.error("Verification failed.")
+                st.code(repr(e))
 
 # =============================================================================
 # FOOTER
@@ -1095,6 +1161,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
