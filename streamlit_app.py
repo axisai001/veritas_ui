@@ -1059,7 +1059,7 @@ if tab_admin is not None:
         st.write(f"Temperature: `{TEMPERATURE}`")
         st.write(f"DB Path: `{DB_PATH}`")
 
-                # ---------------------------------
+        # ---------------------------------
         # B2B TENANT MANAGEMENT (VER-B2B-001)
         # ---------------------------------
         from tenant_store import admin_create_tenant, suspend_tenant, rotate_key
@@ -1255,6 +1255,153 @@ if tab_admin is not None:
                 st.error("Verification failed.")
                 st.code(repr(e))
 
+        # =========================================================
+        # TENANT TEST GATEWAY (DEV / ADMIN ONLY)
+        # =========================================================
+        if os.environ.get("ENABLE_TENANT_TEST_GATE") == "1":
+
+            st.divider()
+            st.subheader("Tenant Test Gateway (Admin / Dev Only)")
+            st.caption("Simulates a customer request using a vx tenant key. Disabled in production.")
+
+            from tenant_store import verify_tenant_key, current_period_yyyymm, get_usage, increment_usage
+
+            test_key = st.text_input(
+                "Paste Tenant vx Key",
+                type="password",
+                key="tenant_test_key"
+            )
+
+            if st.button("Verify Tenant Key", key="tenant_test_verify"):
+                tenant = verify_tenant_key(test_key.strip())
+                if not tenant:
+                    st.error("Invalid or inactive tenant key.")
+                else:
+                    st.session_state["test_tenant_ctx"] = tenant
+                    st.success("Tenant resolved successfully.")
+
+            tenant_ctx = st.session_state.get("test_tenant_ctx")
+
+            if tenant_ctx:
+                st.markdown("### Resolved Tenant Context")
+                st.json({
+                    "tenant_id": tenant_ctx["tenant_id"],
+                    "tier": tenant_ctx["tier"],
+                    "monthly_limit": tenant_ctx["monthly_analysis_limit"],
+                    "key_id": tenant_ctx["key_id"],
+                })
+
+                period = current_period_yyyymm()
+                used = get_usage(tenant_ctx["tenant_id"], period)
+
+                st.markdown("### Usage Status")
+                st.write(f"Period: {period}")
+                st.write(f"Used: {used} / {tenant_ctx['monthly_analysis_limit']}")
+
+                if st.button("Run Test Analysis as Tenant", key="tenant_test_run"):
+                    if used >= tenant_ctx["monthly_analysis_limit"]:
+                        st.error("Tenant monthly limit reached. Test blocked.")
+                    else:
+                        # Minimal test input (no refusal triggers)
+                        test_input = "This is a neutral policy statement for tenant gateway testing."
+
+                        try:
+                            client = OpenAI()
+                            resp = client.chat.completions.create(
+                                model=MODEL_NAME,
+                                messages=[
+                                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                                    {"role": "user", "content": test_input},
+                                ],
+                                temperature=TEMPERATURE,
+                            )
+
+                            output = resp.choices[0].message.content if resp.choices else ""
+                            if not output:
+                                raise RuntimeError("Empty model response")
+
+                            increment_usage(tenant_ctx["tenant_id"], period)
+                            st.success("Test analysis completed and usage recorded.")
+                            st.text_area("Model Output (Test)", output, height=200)
+
+                        except Exception as e:
+                            st.error("Test analysis failed.")
+                            st.exception(e)
+
+# =========================================================
+# TENANT TEST GATEWAY (DEV / ADMIN ONLY)
+# =========================================================
+if os.environ.get("ENABLE_TENANT_TEST_GATE") == "1":
+
+    st.divider()
+    st.subheader("Tenant Test Gateway (Admin / Dev Only)")
+    st.caption("Simulates a customer request using a vx tenant key. Disabled in production.")
+
+    from tenant_store import verify_tenant_key, current_period_yyyymm, get_usage, increment_usage
+
+    test_key = st.text_input(
+        "Paste Tenant vx Key",
+        type="password",
+        key="tenant_test_key"
+    )
+
+    if st.button("Verify Tenant Key", key="tenant_test_verify"):
+        tenant = verify_tenant_key(test_key.strip())
+        if not tenant:
+            st.error("Invalid or inactive tenant key.")
+        else:
+            st.session_state["test_tenant_ctx"] = tenant
+            st.success("Tenant resolved successfully.")
+
+    tenant_ctx = st.session_state.get("test_tenant_ctx")
+
+    if tenant_ctx:
+        st.markdown("### Resolved Tenant Context")
+        st.json({
+            "tenant_id": tenant_ctx["tenant_id"],
+            "tier": tenant_ctx["tier"],
+            "monthly_limit": tenant_ctx["monthly_analysis_limit"],
+            "key_id": tenant_ctx["key_id"],
+        })
+
+        period = current_period_yyyymm()
+        used = get_usage(tenant_ctx["tenant_id"], period)
+
+        st.markdown("### Usage Status")
+        st.write(f"Period: {period}")
+        st.write(f"Used: {used} / {tenant_ctx['monthly_analysis_limit']}")
+
+        if st.button("Run Test Analysis as Tenant", key="tenant_test_run"):
+            if used >= tenant_ctx["monthly_analysis_limit"]:
+                st.error("Tenant monthly limit reached. Test blocked.")
+            else:
+                # Minimal test input (no refusal triggers)
+                test_input = "This is a neutral policy statement for tenant gateway testing."
+
+                try:
+                    client = OpenAI()
+                    resp = client.chat.completions.create(
+                        model=MODEL_NAME,
+                        messages=[
+                            {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                            {"role": "user", "content": test_input},
+                        ],
+                        temperature=TEMPERATURE,
+                    )
+
+                    output = resp.choices[0].message.content if resp.choices else ""
+                    if not output:
+                        raise RuntimeError("Empty model response")
+
+                    increment_usage(tenant_ctx["tenant_id"], period)
+                    st.success("Test analysis completed and usage recorded.")
+                    st.text_area("Model Output (Test)", output, height=200)
+
+                except Exception as e:
+                    st.error("Test analysis failed.")
+                    st.exception(e)
+
+
 # =============================================================================
 # FOOTER
 # =============================================================================
@@ -1262,6 +1409,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
