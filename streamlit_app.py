@@ -878,6 +878,25 @@ with tab_analyze:
     if submitted:
         new_request_id()
 
+        # -----------------------------
+        # TENANT USAGE ENFORCEMENT (B2B)
+        # -----------------------------
+        tenant_id = st.session_state.get("tenant_id")
+        monthly_limit = int(st.session_state.get("tenant_limit") or 0)
+
+        if not tenant_id or monthly_limit <= 0:
+            st.error("Tenant context missing. Please re-verify your tenant key.")
+            st.session_state["tenant_verified"] = False
+            st.stop()
+
+        period = current_period_yyyymm()
+        used = get_usage(tenant_id, period)
+
+        if used >= monthly_limit:
+            st.error(f"Monthly analysis limit reached ({used}/{monthly_limit}).")
+            st.stop()
+
+
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
             st.error("Too many requests. Please wait and try again.")
             st.stop()
@@ -976,6 +995,10 @@ with tab_analyze:
                 elapsed_seconds=(time.time() - t0),
                 model_name=MODEL_NAME,
             )
+            
+            # Step 5 — bill usage ONLY after successful analysis
+            increment_usage(tenant_id, period)
+            
             prog.progress(100, text="Analysis complete")
 
         except Exception as e:
@@ -1167,6 +1190,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
