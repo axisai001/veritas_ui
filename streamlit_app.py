@@ -217,81 +217,80 @@ def _init_db() -> None:
     """)
 
     def _init_db() -> None:
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS auth_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp_utc TEXT,
-            event_type TEXT,
-            login_id TEXT,
-            session_id TEXT,
-            request_id TEXT,
-            credential_label TEXT,
-            success INTEGER,
-            hashed_attempt_prefix TEXT
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS auth_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT,
+                event_type TEXT,
+                login_id TEXT,
+                session_id TEXT,
+                request_id TEXT,
+                credential_label TEXT,
+                success INTEGER,
+                hashed_attempt_prefix TEXT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS analyses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp_utc TEXT,
-            analysis_id TEXT,
-            session_id TEXT,
-            login_id TEXT,
-            model TEXT,
-            elapsed_seconds REAL,
-            input_chars INTEGER,
-            input_preview TEXT,
-            input_sha256 TEXT
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS analyses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT,
+                analysis_id TEXT,
+                session_id TEXT,
+                login_id TEXT,
+                model TEXT,
+                elapsed_seconds REAL,
+                input_chars INTEGER,
+                input_preview TEXT,
+                input_sha256 TEXT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS errors (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp_utc TEXT,
-            request_id TEXT,
-            route TEXT,
-            kind TEXT,
-            http_status INTEGER,
-            detail TEXT,
-            session_id TEXT,
-            login_id TEXT
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT,
+                request_id TEXT,
+                route TEXT,
+                kind TEXT,
+                http_status INTEGER,
+                detail TEXT,
+                session_id TEXT,
+                login_id TEXT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS ack_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            timestamp_utc TEXT,
-            ack_key TEXT,
-            session_id TEXT,
-            login_id TEXT,
-            acknowledged INTEGER,
-            privacy_url TEXT,
-            terms_url TEXT
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ack_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp_utc TEXT,
+                ack_key TEXT,
+                session_id TEXT,
+                login_id TEXT,
+                acknowledged INTEGER,
+                privacy_url TEXT,
+                terms_url TEXT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS refusal_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_utc TEXT,
-            analysis_id TEXT,
-            source TEXT,
-            category TEXT,
-            reason TEXT,
-            input_len INTEGER,
-            input_sha256 TEXT
-        )
-    """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS refusal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_utc TEXT,
+                analysis_id TEXT,
+                source TEXT,
+                category TEXT,
+                reason TEXT,
+                input_len INTEGER,
+                input_sha256 TEXT
+            )
+        """)
 
-    con.commit()
-    con.close()
-
+        con.commit()
+        con.close()
 
 # Initialize core application tables
 _init_db()
@@ -1102,6 +1101,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
