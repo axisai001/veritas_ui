@@ -220,3 +220,92 @@ def increment_usage(tenant_id: str, period_yyyymm: str) -> None:
     )
     con.commit()
     con.close()
+
+def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc
+        FROM tenants
+        WHERE tenant_id=?
+        """,
+        (tenant_id,),
+    )
+    row = cur.fetchone()
+    con.close()
+    if not row:
+        return None
+    return {
+        "tenant_id": row[0],
+        "tier": row[1],
+        "monthly_analysis_limit": int(row[2]),
+        "status": row[3],
+        "created_utc": row[4],
+        "updated_utc": row[5],
+    }
+
+def admin_list_tenants(limit: int = 500) -> list:
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc
+        FROM tenants
+        ORDER BY created_utc DESC
+        LIMIT ?
+        """,
+        (int(limit),),
+    )
+    rows = cur.fetchall()
+    con.close()
+    return rows
+
+def admin_list_tenant_keys(tenant_id: str, limit: int = 50) -> list:
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        SELECT key_id, status, created_utc, revoked_utc, rotated_from_key_id
+        FROM tenant_keys
+        WHERE tenant_id=?
+        ORDER BY created_utc DESC
+        LIMIT ?
+        """,
+        (tenant_id, int(limit)),
+    )
+    rows = cur.fetchall()
+    con.close()
+    return rows
+
+def admin_get_usage(tenant_id: str, period_yyyymm: str) -> int:
+    # Uses your existing get_usage() (which also ensures the row exists)
+    return int(get_usage(tenant_id, period_yyyymm))
+
+def admin_usage_snapshot(period_yyyymm: str, limit: int = 500) -> list:
+    """
+    Returns per-tenant usage for a given month.
+    Includes tenants even if usage row doesn't exist yet by LEFT JOIN.
+    """
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        SELECT
+            t.tenant_id,
+            t.tier,
+            t.monthly_analysis_limit,
+            t.status,
+            COALESCE(u.analysis_count, 0) as analysis_count
+        FROM tenants t
+        LEFT JOIN tenant_usage u
+          ON u.tenant_id = t.tenant_id
+         AND u.period_yyyymm = ?
+        ORDER BY t.created_utc DESC
+        LIMIT ?
+        """,
+        (period_yyyymm, int(limit)),
+    )
+    rows = cur.fetchall()
+    con.close()
+    return rows
