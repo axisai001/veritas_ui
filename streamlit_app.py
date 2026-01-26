@@ -842,69 +842,34 @@ with tab_analyze:
     if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
+    # Ensure submitted is always defined (prevents NameError)
+    submitted = False
+
     # -----------------------------
-    # TENANT ACCESS GATE (B2B)
+    # FORM (collect inputs only)
     # -----------------------------
-    from tenant_store import verify_tenant_key
-
-    is_admin = st.session_state.get("is_admin", False)
-    tenant_ok = st.session_state.get("tenant_verified", False)
-
-    # Non-admins must verify a tenant key to use Analyze
-    if (not is_admin) and (not tenant_ok):
-        st.subheader("Tenant Access")
-
-        tenant_key = st.text_input(
-            "Enter your Veritas Tenant Access Key",
-            type="password"
+    with st.form("analysis_form", clear_on_submit=False):
+        user_text = st.text_area(
+            "Paste or type text to analyze",
+            height=220,
+            key="user_input_box",
         )
 
-        if st.button("Verify Tenant Key"):
-            tenant = verify_tenant_key(tenant_key)
-            if not tenant:
-                st.error("Invalid or inactive tenant key.")
-            else:
-                st.session_state["tenant_verified"] = True
-                st.session_state["tenant_id"] = tenant["tenant_id"]
-                st.session_state["tenant_tier"] = tenant["tier"]
-                st.session_state["tenant_key_id"] = tenant["key_id"]
-                st.session_state["tenant_limit"] = tenant["monthly_analysis_limit"]
-                st.success("Tenant verified.")
-                st.rerun()
+        doc = st.file_uploader(
+            f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
+            type=list(DOC_ALLOWED_EXTENSIONS),
+            accept_multiple_files=False,
+            key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
+        )
 
-    else:
-        # -----------------------------
-        # FORM (collect inputs only)
-        # -----------------------------
-        with st.form("analysis_form", clear_on_submit=False):
-            user_text = st.text_area(
-                "Paste or type text to analyze",
-                height=220,
-                key="user_input_box",
-            )
-
-            doc = st.file_uploader(
-                f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
-                type=list(DOC_ALLOWED_EXTENSIONS),
-                accept_multiple_files=False,
-                key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
-            )
-
-            c1, c2 = st.columns([1, 1], gap="small")
-            submitted = c1.form_submit_button("Engage Veritas")
-            c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
+        c1, c2 = st.columns([1, 1], gap="small")
+        submitted = c1.form_submit_button("Engage Veritas")
+        c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
     # -----------------------------
     # SUBMIT HANDLER (outside form)
     # -----------------------------
     if submitted:
-        # -----------------------------
-        # TENANT ENFORCEMENT (B2B)
-        # -----------------------------
-        if not st.session_state.get("tenant_verified"):
-            st.error("Tenant authentication required.")
-            st.stop()
-
         new_request_id()
 
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
@@ -936,12 +901,6 @@ with tab_analyze:
             log_error_event("REFUSAL_ROUTER_ERROR", "/analyze", 500, repr(e))
             st.error("Refusal router error. See logs.")
             st.stop()
-
-        # TEMP DEBUG (remove after confirmed)
-        st.info(
-                f"Refusal debug → should_refuse={refusal.should_refuse}, "
-                f"category={refusal.category}, matched_rule={getattr(refusal, 'matched_rule', '')}"
-        )
 
         if refusal.should_refuse:
             output = render_refusal(refusal.category, refusal.reason)
@@ -1136,6 +1095,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
