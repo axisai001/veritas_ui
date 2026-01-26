@@ -1008,6 +1008,16 @@ if tab_admin is not None:
     with tab_admin:
         st.header("Admin Dashboard")
 
+        st.info("Admin tab loaded.")
+
+        try:
+            # B2B tenant store import (VER-B2B-001)
+            from tenant_store import admin_create_tenant, suspend_tenant, rotate_key
+        except Exception as e:
+            st.error("Tenant management module failed to load.")
+            st.code(repr(e))
+            st.stop()
+
         st.subheader("Refusal Telemetry")
         rows = fetch_recent_refusals(limit=500)
         if not rows:
@@ -1101,6 +1111,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
