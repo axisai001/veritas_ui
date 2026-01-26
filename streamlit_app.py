@@ -481,18 +481,42 @@ def log_refusal_event(analysis_id: str, category: str, reason: str, source: str,
         pass
 
 def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-    cur.execute(
-        """SELECT created_utc, analysis_id, source, category, reason, input_len
-           FROM refusal_events
-           ORDER BY id DESC
-           LIMIT ?""",
-        (limit,),
-    )
-    rows = cur.fetchall()
-    con.close()
-    return rows
+    try:
+        con = sqlite3.connect(DB_PATH, timeout=30)
+        cur = con.cursor()
+
+        # Ensure the table exists (prevents OperationalError on fresh/mismatched DB)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS refusal_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_utc TEXT,
+                analysis_id TEXT,
+                source TEXT,
+                category TEXT,
+                reason TEXT,
+                input_len INTEGER,
+                input_sha256 TEXT
+            )
+        """)
+
+        cur.execute(
+            """SELECT created_utc, analysis_id, source, category, reason, input_len
+               FROM refusal_events
+               ORDER BY id DESC
+               LIMIT ?""",
+            (limit,),
+        )
+        rows = cur.fetchall()
+        con.close()
+        return rows
+
+    except sqlite3.OperationalError:
+        # Fail-safe: don't crash the whole app if DB is locked/unavailable
+        try:
+            con.close()
+        except Exception:
+            pass
+        return []
 
 # =============================================================================
 # RATE LIMIT + LOCKOUT
@@ -1112,6 +1136,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
