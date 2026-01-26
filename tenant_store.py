@@ -1,15 +1,28 @@
-# tenant_store.py — B2B Tenant Key Store (VER-B2B-001)
+# tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
 
 from datetime import datetime, timezone
 from typing import Dict, Optional
+from pathlib import Path
+import os
 import sqlite3
 import uuid
 
-# Assumes these already exist above:
-# DB_PATH
-# generate_api_key()
-# hash_api_key()
-# _now()  -> returns UTC iso string
+# -------------------------------------------------
+# Database path (single source of truth)
+# -------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# Allows override via environment / Streamlit secrets
+DB_PATH = os.environ.get("DB_PATH") or str(DATA_DIR / "veritas.db")
+
+# -------------------------------------------------
+# Assumes these exist below in this file:
+# - generate_api_key()
+# - hash_api_key()
+# - _now()  -> returns UTC ISO string
+# -------------------------------------------------
 
 
 def init_tenant_tables() -> None:
