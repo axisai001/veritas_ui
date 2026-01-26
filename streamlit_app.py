@@ -216,16 +216,23 @@ def _init_db() -> None:
         )
     """)
 
-    con.commit()
-    con.close()
+    def _init_db() -> None:
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
 
-
-# Initialize core application tables
-_init_db()
-
-# Initialize B2B tenant tables (VER-B2B-001)
-from tenant_store import init_tenant_tables
-init_tenant_tables()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS auth_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            event_type TEXT,
+            login_id TEXT,
+            session_id TEXT,
+            request_id TEXT,
+            credential_label TEXT,
+            success INTEGER,
+            hashed_attempt_prefix TEXT
+        )
+    """)
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS analyses (
@@ -284,6 +291,14 @@ init_tenant_tables()
 
     con.commit()
     con.close()
+
+
+# Initialize core application tables
+_init_db()
+
+# Initialize B2B tenant tables (VER-B2B-001)
+from tenant_store import init_tenant_tables
+init_tenant_tables()
 
 def _prune_table(table: str, ts_col: str, ttl_days: int) -> None:
     try:
@@ -1087,6 +1102,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
