@@ -36,6 +36,8 @@ import pandas as pd
 import streamlit as st
 from openai import OpenAI
 
+from tenant_store import current_period_yyyymm, get_usage, increment_usage
+
 # Refusal Router (required companion file)
 from refusal_router import check_refusal, render_refusal, RefusalResult
 
@@ -1165,6 +1167,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
