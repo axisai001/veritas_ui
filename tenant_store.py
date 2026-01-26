@@ -6,6 +6,8 @@ from pathlib import Path
 import os
 import sqlite3
 import uuid
+import secrets
+import hashlib
 
 # -------------------------------------------------
 # Database path (single source of truth)
@@ -14,15 +16,23 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-# Allows override via environment / Streamlit secrets
 DB_PATH = os.environ.get("DB_PATH") or str(DATA_DIR / "veritas.db")
 
 # -------------------------------------------------
-# Assumes these exist below in this file:
-# - generate_api_key()
-# - hash_api_key()
-# - _now()  -> returns UTC ISO string
+# Tenant key security
 # -------------------------------------------------
+TENANT_KEY_SALT = (os.environ.get("TENANT_KEY_SALT") or "").strip()
+if not TENANT_KEY_SALT:
+    raise RuntimeError("TENANT_KEY_SALT must be set in Streamlit secrets or environment")
+
+def generate_api_key() -> str:
+    return f"vx_{secrets.token_urlsafe(32)}"
+
+def hash_api_key(raw_key: str) -> str:
+    return hashlib.sha256((TENANT_KEY_SALT + raw_key).encode("utf-8")).hexdigest()
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def init_tenant_tables() -> None:
