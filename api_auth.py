@@ -9,7 +9,7 @@ from typing import Optional, Dict
 
 from tenant_store import (
     verify_tenant_key,
-    current_period_yyyymm,
+    current_period_yyyy(),
     get_usage,
 )
 
@@ -37,7 +37,7 @@ class TenantContext:
     tier: str
     monthly_analysis_limit: int
     key_id: str
-    period_yyyymm: str
+    period_yyyy: str
     used_this_period: int
 
 
@@ -74,7 +74,7 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
         # Defensive: treat as forbidden misconfig
         raise Forbidden("Tenant entitlement misconfigured")
 
-    period = current_period_yyyymm()
+    period = current_period_yyyy()
     used = int(get_usage(tenant_id, period))
 
     if used >= monthly_limit:
@@ -85,6 +85,6 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
         tier=tier,
         monthly_analysis_limit=monthly_limit,
         key_id=key_id,
-        period_yyyymm=period,
+        period_yyyy=period,
         used_this_period=used,
     )
