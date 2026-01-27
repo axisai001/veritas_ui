@@ -53,6 +53,10 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
     if not raw:
         raise Unauthorized("Missing API key")
 
+    # Enforce vx_ prefix (defense-in-depth)
+    if not raw.startswith("vx_"):
+        raise Unauthorized("Invalid API key format")
+
     tenant: Optional[Dict] = verify_tenant_key(raw)
     if not tenant:
         # verify_tenant_key returns None for:
