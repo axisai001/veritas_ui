@@ -36,9 +36,6 @@ import pandas as pd
 import streamlit as st
 from openai import OpenAI
 
-from tenant_store import init_tenant_tables
-init_tenant_tables()
-
 # Tenant / B2B imports
 from tenant_store import (
     current_period_yyyy, get_usage, increment_usage,
@@ -93,7 +90,7 @@ DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
 DB_PATH = str(DATA_DIR / "veritas.db")
 
 # Ensure ALL modules (tenant_store, admin tools, etc.) use the SAME DB
-os.environ.setdefault("DB_PATH", DB_PATH)
+os.environ["DB_PATH"] = DB_PATH  # force single source of truth
 
 ANALYSES_CSV = str(DATA_DIR / "analyses.csv")
 ERRORS_CSV = str(DATA_DIR / "errors.csv")
@@ -1338,6 +1335,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
