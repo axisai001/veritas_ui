@@ -840,23 +840,20 @@ with tab_analyze:
     st.subheader("Veritas — Content Analysis and Advisory System")
     st.caption("Veritas returns objective findings with non-prescriptive advisory guidance.")
 
-    # Show the Analysis ID only AFTER a report exists
+    # Show Analysis ID only after a report exists
     if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
     # -----------------------------
-    # TENANT ACCESS GATE (B2B) — REQUIRED
+    # TENANT ACCESS GATE (B2B)
     # -----------------------------
     tenant_ok = st.session_state.get("tenant_verified", False)
 
     if not tenant_ok:
         st.info("Enter your tenant access key to unlock analysis.")
-        with st.form("tenant_access_form", clear_on_submit=False):
-            tenant_key = st.text_input(
-                "Tenant Key (vx_...)", 
-                type="password", 
-                key="tenant_access_key_input"
-            )
+
+        with st.form("tenant_access_form"):
+            tenant_key = st.text_input("Tenant Key (vx_...)", type="password")
             verify_btn = st.form_submit_button("Verify Key")
 
         if verify_btn:
@@ -873,126 +870,71 @@ with tab_analyze:
                 _safe_rerun()
 
     else:
-        # ⬇⬇⬇ EVERYTHING BELOW THIS LINE STAYS EXACTLY AS-IS ⬇⬇⬇
-        # - analysis_form
-        # - submit handler
-        # - report display
-
-            # Read ONLY annual_analysis_limit (tenant_store now returns this)
-            st.session_state["tenant_limit"] = int(t.get("annual_analysis_limit") or 0)
-            st.session_state["tenant_key_id"] = t.get("key_id", "")
-
-            st.success("Tenant verified. You may now run analyses.")
-            _safe_rerun()
-
-        st.stop()
-
-    submitted = False
-
-    # -----------------------------
-    # FORM (collect inputs only)
-    # -----------------------------
-    with st.form("analysis_form", clear_on_submit=False):
-        user_text = st.text_area(
-            "Paste or type text to analyze",
-            height=220,
-            key="user_input_box",
-        )
-
-        doc = st.file_uploader(
-            f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
-            type=list(DOC_ALLOWED_EXTENSIONS),
-            accept_multiple_files=False,
-            key=f"doc_uploader_{st.session_state['doc_uploader_key']}",
-        )
-
-        c1, c2 = st.columns([1, 1], gap="small")
-        submitted = c1.form_submit_button("Engage Veritas")
-        c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
-
-    # -----------------------------
-    # SUBMIT HANDLER (outside form)
-    # -----------------------------
-    if submitted:
-        new_request_id()
-
         # -----------------------------
-        # TENANT USAGE ENFORCEMENT (ANNUAL)
+        # ANALYSIS FORM
         # -----------------------------
-        tenant_id = st.session_state.get("tenant_id")
-        annual_limit = int(st.session_state.get("tenant_limit") or 0)
+        submitted = False
 
-        if not tenant_id or annual_limit <= 0:
-            st.error("Tenant context missing. Please re-verify your tenant key.")
-            st.session_state["tenant_verified"] = False
-            st.stop()
-
-        period = current_period_yyyy()  # expects YYYY
-        used = get_usage(tenant_id, period)
-
-        if used >= annual_limit:
-            st.error(f"Annual analysis limit reached ({used}/{annual_limit}) for {period}.")
-            st.stop()
-
-        if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
-            st.error("Too many requests. Please wait and try again.")
-            st.stop()
-
-        extracted_text = ""
-        source = "typed"
-
-        if doc is not None:
-            extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
-            if extracted_text:
-                source = "document"
-
-        final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
-
-        if not final_input:
-            st.warning("Please paste text or upload a document to analyze.")
-            st.stop()
-
-        # Generate Analysis ID ONLY now that analysis will proceed
-        st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
-        analysis_id = st.session_state["veritas_analysis_id"]
-
-        # Refusal pre-check (single source of truth)
-        try:
-            refusal: RefusalResult = check_refusal(final_input)
-        except Exception as e:
-            log_error_event("REFUSAL_ROUTER_ERROR", "/analyze", 500, repr(e))
-            st.error("Refusal router error. See logs.")
-            st.stop()
-
-        if refusal.should_refuse:
-            output = render_refusal(refusal.category, refusal.reason)
-
-            log_refusal_event(
-                analysis_id=analysis_id,
-                category=str(getattr(refusal.category, "value", refusal.category)),
-                reason=refusal.reason,
-                source=source,
-                input_text=final_input,
+        with st.form("analysis_form"):
+            user_text = st.text_area(
+                "Paste or type text to analyze",
+                height=220,
+                key="user_input_box",
             )
 
-            st.session_state["last_report"] = output
-            st.session_state["last_report_id"] = analysis_id
-            st.session_state["report_ready"] = True
+            doc = st.file_uploader(
+                f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
+                type=list(DOC_ALLOWED_EXTENSIONS),
+                accept_multiple_files=False,
+            )
 
-            st.markdown(output)
-            st.stop()  # HARD STOP — model never runs
+            c1, c2 = st.columns([1, 1])
+            submitted = c1.form_submit_button("Engage Veritas")
+            c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
-        msg = local_safety_stop(final_input)
-        if msg:
-            st.error(msg)
-            st.stop()
+        # -----------------------------
+        # SUBMIT HANDLER
+        # -----------------------------
+        if submitted:
+            new_request_id()
 
-        client = OpenAI()
-        prog = st.progress(0, text="Starting analysis...")
-        t0 = time.time()
+            tenant_id = st.session_state.get("tenant_id")
+            annual_limit = int(st.session_state.get("tenant_limit") or 0)
 
-        try:
-            prog.progress(35, text="Submitting to Veritas...")
+            if not tenant_id or annual_limit <= 0:
+                st.error("Tenant context missing. Please re-verify your tenant key.")
+                st.session_state["tenant_verified"] = False
+                st.stop()
+
+            period = current_period_yyyy()
+            used = get_usage(tenant_id, period)
+
+            if used >= annual_limit:
+                st.error(f"Annual analysis limit reached ({used}/{annual_limit}) for {period}.")
+                st.stop()
+
+            extracted_text = ""
+            if doc is not None:
+                extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
+
+            final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
+
+            if not final_input:
+                st.warning("Please paste text or upload a document to analyze.")
+                st.stop()
+
+            st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
+            analysis_id = st.session_state["veritas_analysis_id"]
+
+            refusal = check_refusal(final_input)
+            if refusal.should_refuse:
+                output = render_refusal(refusal.category, refusal.reason)
+                st.session_state["last_report"] = output
+                st.session_state["report_ready"] = True
+                st.markdown(output)
+                st.stop()
+
+            client = OpenAI()
             resp = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
@@ -1002,50 +944,14 @@ with tab_analyze:
                 temperature=TEMPERATURE,
             )
 
-            report = (resp.choices[0].message.content or "").strip() if resp and resp.choices else ""
-            if not report:
-                raise RuntimeError("Empty response from model.")
-
-            # Enforce two-section format; re-ask once if needed.
-            if ("Objective Findings" not in report) or ("Advisory Guidance" not in report):
-                resp2 = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                        {"role": "user", "content": final_input},
-                        {"role": "user", "content": "Reformat to the required two-section output exactly."},
-                    ],
-                    temperature=TEMPERATURE,
-                )
-                report2 = (resp2.choices[0].message.content or "").strip() if resp2 and resp2.choices else ""
-                report = report2 or report
-
+            report = resp.choices[0].message.content.strip()
             st.session_state["last_report"] = report
-            st.session_state["last_report_id"] = analysis_id
             st.session_state["report_ready"] = True
 
-            log_analysis_run(
-                analysis_id=analysis_id,
-                input_text=final_input,
-                elapsed_seconds=(time.time() - t0),
-                model_name=MODEL_NAME,
-            )
-
-            # Bill usage ONLY after successful analysis
             increment_usage(tenant_id, period)
 
-            prog.progress(100, text="Analysis complete")
-
-        except Exception as e:
-            log_error_event("ANALYZE_ERROR", "/analyze", 500, repr(e))
-            st.error("The analysis did not complete. Please try again.")
-            st.exception(e)
-        finally:
-            prog.empty()
-
-    # DISPLAY LAST REPORT
-    if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-        st.markdown(st.session_state["last_report"])
+        if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+            st.markdown(st.session_state["last_report"])
 
 # =============================================================================
 # ADMIN TAB
@@ -1284,6 +1190,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
