@@ -5,11 +5,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Dict
+from typing import Optional
 
 from tenant_store import (
-    verify_tenant_key,
-    current_period_yyyy(),
+    verify_tenant_key_detailed,
+    current_period_yyyy,
     get_usage,
 )
 
@@ -42,48 +42,40 @@ class TenantContext:
 
 
 def authenticate_request(api_key: Optional[str]) -> TenantContext:
-    """
-    Fail-closed:
-      - Missing/invalid key -> Unauthorized (401)
-      - Inactive tenant/key -> Forbidden (403) (handled by verify_tenant_key -> None)
-      - Over quota -> TooManyRequests (429)
-    Returns TenantContext on success.
-    """
     raw = (api_key or "").strip()
-    if not raw:
-        raise Unauthorized("Missing API key")
 
-    # Enforce vx_ prefix (defense-in-depth)
-    if not raw.startswith("vx_"):
-        raise Unauthorized("Invalid API key format")
+    tenant, reason = verify_tenant_key_detailed(raw)
 
-    tenant: Optional[Dict] = verify_tenant_key(raw)
+    if reason in ("missing", "bad_format", "not_found"):
+        raise Unauthorized("Missing or invalid API key")
+
+    if reason == "inactive":
+        raise Forbidden("Tenant or API key is inactive")
+
+    # reason == "ok" must have tenant
     if not tenant:
-        # verify_tenant_key returns None for:
-        # - unknown key hash
-        # - suspended tenant
-        # - revoked key
-        raise Unauthorized("Invalid or inactive API key")
+        # defensive fail-closed
+        raise Unauthorized("Invalid API key")
 
     tenant_id = tenant["tenant_id"]
     tier = tenant["tier"]
-    monthly_limit = int(tenant["annual_analysis_limit"])
-    key_id = tenant["key_id"]
+    annual_limit = int(tenant.get("annual_analysis_limit") or 0)
+    key_id = tenant.get("key_id") or ""
 
-    if monthly_limit <= 0:
-        # Defensive: treat as forbidden misconfig
+    if annual_limit <= 0:
+        # entitlement misconfig is not the client's fault; treat as Forbidden
         raise Forbidden("Tenant entitlement misconfigured")
 
     period = current_period_yyyy()
     used = int(get_usage(tenant_id, period))
 
-    if used >= monthly_limit:
-        raise TooManyRequests(f"Over quota ({used}/{monthly_limit})")
+    if used >= annual_limit:
+        raise TooManyRequests(f"Over quota ({used}/{annual_limit})")
 
     return TenantContext(
         tenant_id=tenant_id,
         tier=tier,
-        annual_analysis_limit=monthly_limit,
+        annual_analysis_limit=annual_limit,
         key_id=key_id,
         period_yyyy=period,
         used_this_period=used,
