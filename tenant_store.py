@@ -1,7 +1,10 @@
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
+# Updated: YEARLY metering (period_yyyy) instead of monthly (period_yyyymm)
+
+from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 from pathlib import Path
 import os
 import sqlite3
@@ -29,15 +32,21 @@ def generate_api_key() -> str:
     return f"vx_{secrets.token_urlsafe(32)}"
 
 def hash_api_key(raw_key: str) -> str:
-    return hashlib.sha256((TENANT_KEY_SALT + raw_key).encode("utf-8")).hexdigest()
+    return hashlib.sha256((TENANT_KEY_SALT + raw_key).encode("utf-8", errors="ignore")).hexdigest()
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+# =============================================================================
+# DB SCHEMA
+# =============================================================================
 def init_tenant_tables() -> None:
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
+    cur.execute("PRAGMA foreign_keys = ON;")
 
     # -----------------------------
     # TENANTS (canonical registry)
@@ -70,16 +79,16 @@ def init_tenant_tables() -> None:
     """)
 
     # -----------------------------
-    # TENANT USAGE (monthly metering)
+    # TENANT USAGE (YEARLY metering)
     # -----------------------------
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tenant_usage (
             tenant_id TEXT NOT NULL,
-            period_yyyymm TEXT NOT NULL,
+            period_yyyy TEXT NOT NULL,
             analysis_count INTEGER NOT NULL DEFAULT 0,
             created_utc TEXT NOT NULL,
             updated_utc TEXT NOT NULL,
-            PRIMARY KEY (tenant_id, period_yyyymm),
+            PRIMARY KEY (tenant_id, period_yyyy),
             FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
         )
     """)
@@ -87,25 +96,41 @@ def init_tenant_tables() -> None:
     con.commit()
     con.close()
 
-
+# =============================================================================
+# TENANT MANAGEMENT (Admin)
+# =============================================================================
 def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
+    """
+    Creates a tenant + issues a new vx_ key (returned ONCE).
+    Note: monthly_analysis_limit is treated as the entitlement number; if you want annual naming later,
+    do that via a migration ticket to rename the column.
+    """
+    tenant_id = (tenant_id or "").strip()
+    if not tenant_id:
+        raise ValueError("tenant_id required")
+
     raw_key = generate_api_key()
     key_hash = hash_api_key(raw_key)
     key_id = f"tk_{uuid.uuid4().hex[:12]}"
 
     ts = _now()
 
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
+    cur.execute("PRAGMA foreign_keys = ON;")
 
+    # Insert tenant (will raise IntegrityError if tenant_id already exists)
     cur.execute(
-        """INSERT INTO tenants VALUES (?,?,?,?,?,?)""",
-        (tenant_id, tier, int(monthly_limit), "active", ts, ts)
+        """INSERT INTO tenants (tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc)
+           VALUES (?,?,?,?,?,?)""",
+        (tenant_id, tier, int(monthly_limit), "active", ts, ts),
     )
 
+    # Insert initial key
     cur.execute(
-        """INSERT INTO tenant_keys VALUES (?,?,?,?,?,?,?)""",
-        (key_id, tenant_id, key_hash, "active", ts, None, None)
+        """INSERT INTO tenant_keys (key_id, tenant_id, key_hash, status, created_utc, revoked_utc, rotated_from_key_id)
+           VALUES (?,?,?,?,?,?,?)""",
+        (key_id, tenant_id, key_hash, "active", ts, None, None),
     )
 
     con.commit()
@@ -113,20 +138,30 @@ def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
 
     return raw_key  # DISPLAY ONCE ONLY
 
-
 def verify_tenant_key(raw_key: str) -> Optional[Dict]:
+    raw_key = (raw_key or "").strip()
+    if not raw_key:
+        return None
+    if not raw_key.startswith("vx_"):
+        return None
+
     key_hash = hash_api_key(raw_key)
 
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
 
     cur.execute("""
         SELECT
-            t.tenant_id, t.tier, t.monthly_analysis_limit, t.status,
-            k.key_id, k.status
+            t.tenant_id,
+            t.tier,
+            t.monthly_analysis_limit,
+            t.status,
+            k.key_id,
+            k.status
         FROM tenant_keys k
         JOIN tenants t ON t.tenant_id = k.tenant_id
         WHERE k.key_hash = ?
+        LIMIT 1
     """, (key_hash,))
 
     row = cur.fetchone()
@@ -144,91 +179,95 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "monthly_analysis_limit": row[2],
+        "monthly_analysis_limit": int(row[2]),
         "key_id": row[4],
     }
 
-
 def suspend_tenant(tenant_id: str) -> None:
+    tenant_id = (tenant_id or "").strip()
     ts = _now()
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute(
         "UPDATE tenants SET status='suspended', updated_utc=? WHERE tenant_id=?",
-        (ts, tenant_id)
+        (ts, tenant_id),
     )
     con.commit()
     con.close()
 
-
 def rotate_key(tenant_id: str, old_key_id: str) -> str:
+    tenant_id = (tenant_id or "").strip()
+    old_key_id = (old_key_id or "").strip()
+    if not tenant_id or not old_key_id:
+        raise ValueError("tenant_id and old_key_id required")
+
     raw_key = generate_api_key()
     key_hash = hash_api_key(raw_key)
     new_key_id = f"tk_{uuid.uuid4().hex[:12]}"
     ts = _now()
 
-    con = sqlite3.connect(DB_PATH)
+    con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
+    cur.execute("PRAGMA foreign_keys = ON;")
 
+    # Revoke old key (audit trail preserved)
     cur.execute(
-        "UPDATE tenant_keys SET status='revoked', revoked_utc=? WHERE key_id=?",
-        (ts, old_key_id)
+        "UPDATE tenant_keys SET status='revoked', revoked_utc=? WHERE key_id=? AND tenant_id=?",
+        (ts, old_key_id, tenant_id),
     )
 
+    # Insert new active key linked to old key id
     cur.execute(
-        """INSERT INTO tenant_keys VALUES (?,?,?,?,?,?,?)""",
-        (new_key_id, tenant_id, key_hash, "active", ts, None, old_key_id)
+        """INSERT INTO tenant_keys (key_id, tenant_id, key_hash, status, created_utc, revoked_utc, rotated_from_key_id)
+           VALUES (?,?,?,?,?,?,?)""",
+        (new_key_id, tenant_id, key_hash, "active", ts, None, old_key_id),
     )
 
     con.commit()
     con.close()
 
-    return raw_key
-
+    return raw_key  # DISPLAY ONCE ONLY
 
 # =============================================================================
-# TENANT USAGE (MONTHLY METERING) — Step 3
+# TENANT USAGE (YEARLY METERING)
 # =============================================================================
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+def current_period_yyyy() -> str:
+    # e.g., "2026"
+    return datetime.now(timezone.utc).strftime("%Y")
 
-def current_period_yyyymm() -> str:
-    # e.g., "202601"
-    return datetime.now(timezone.utc).strftime("%Y%m")
-
-def ensure_usage_row(tenant_id: str, period_yyyymm: str) -> None:
+def ensure_usage_row(tenant_id: str, period_yyyy: str) -> None:
     ts = _utc_now_iso()
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute(
         """
-        INSERT INTO tenant_usage (tenant_id, period_yyyymm, analysis_count, created_utc, updated_utc)
+        INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc)
         VALUES (?, ?, 0, ?, ?)
-        ON CONFLICT(tenant_id, period_yyyymm) DO NOTHING
+        ON CONFLICT(tenant_id, period_yyyy) DO NOTHING
         """,
-        (tenant_id, period_yyyymm, ts, ts),
+        (tenant_id, period_yyyy, ts, ts),
     )
     con.commit()
     con.close()
 
-def get_usage(tenant_id: str, period_yyyymm: str) -> int:
-    ensure_usage_row(tenant_id, period_yyyymm)
+def get_usage(tenant_id: str, period_yyyy: str) -> int:
+    ensure_usage_row(tenant_id, period_yyyy)
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute(
         """
         SELECT analysis_count
         FROM tenant_usage
-        WHERE tenant_id=? AND period_yyyymm=?
+        WHERE tenant_id=? AND period_yyyy=?
         """,
-        (tenant_id, period_yyyymm),
+        (tenant_id, period_yyyy),
     )
     row = cur.fetchone()
     con.close()
     return int(row[0]) if row else 0
 
-def increment_usage(tenant_id: str, period_yyyymm: str) -> None:
-    ensure_usage_row(tenant_id, period_yyyymm)
+def increment_usage(tenant_id: str, period_yyyy: str) -> None:
+    ensure_usage_row(tenant_id, period_yyyy)
     ts = _utc_now_iso()
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
@@ -237,14 +276,18 @@ def increment_usage(tenant_id: str, period_yyyymm: str) -> None:
         UPDATE tenant_usage
         SET analysis_count = analysis_count + 1,
             updated_utc = ?
-        WHERE tenant_id=? AND period_yyyymm=?
+        WHERE tenant_id=? AND period_yyyy=?
         """,
-        (ts, tenant_id, period_yyyymm),
+        (ts, tenant_id, period_yyyy),
     )
     con.commit()
     con.close()
 
+# =============================================================================
+# ADMIN REPORTING HELPERS
+# =============================================================================
 def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
+    tenant_id = (tenant_id or "").strip()
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute(
@@ -268,7 +311,7 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
         "updated_utc": row[5],
     }
 
-def admin_list_tenants(limit: int = 500) -> list:
+def admin_list_tenants(limit: int = 500) -> List[Tuple]:
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute(
@@ -284,7 +327,8 @@ def admin_list_tenants(limit: int = 500) -> list:
     con.close()
     return rows
 
-def admin_list_tenant_keys(tenant_id: str, limit: int = 50) -> list:
+def admin_list_tenant_keys(tenant_id: str, limit: int = 50) -> List[Tuple]:
+    tenant_id = (tenant_id or "").strip()
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute(
@@ -301,13 +345,12 @@ def admin_list_tenant_keys(tenant_id: str, limit: int = 50) -> list:
     con.close()
     return rows
 
-def admin_get_usage(tenant_id: str, period_yyyymm: str) -> int:
-    # Uses your existing get_usage() (which also ensures the row exists)
-    return int(get_usage(tenant_id, period_yyyymm))
+def admin_get_usage(tenant_id: str, period_yyyy: str) -> int:
+    return int(get_usage(tenant_id, period_yyyy))
 
-def admin_usage_snapshot(period_yyyymm: str, limit: int = 500) -> list:
+def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     """
-    Returns per-tenant usage for a given month.
+    Returns per-tenant usage for a given year.
     Includes tenants even if usage row doesn't exist yet by LEFT JOIN.
     """
     con = sqlite3.connect(DB_PATH, timeout=30)
@@ -323,12 +366,13 @@ def admin_usage_snapshot(period_yyyymm: str, limit: int = 500) -> list:
         FROM tenants t
         LEFT JOIN tenant_usage u
           ON u.tenant_id = t.tenant_id
-         AND u.period_yyyymm = ?
+         AND u.period_yyyy = ?
         ORDER BY t.created_utc DESC
         LIMIT ?
         """,
-        (period_yyyymm, int(limit)),
+        (period_yyyy, int(limit)),
     )
     rows = cur.fetchall()
     con.close()
     return rows
+
