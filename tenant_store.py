@@ -55,7 +55,7 @@ def init_tenant_tables() -> None:
         CREATE TABLE IF NOT EXISTS tenants (
             tenant_id TEXT PRIMARY KEY,
             tier TEXT NOT NULL,
-            annual_analysis_limit INTEGER NOT NULL,
+            monthly_analysis_limit INTEGER NOT NULL,
             status TEXT NOT NULL,
             created_utc TEXT NOT NULL,
             updated_utc TEXT NOT NULL
@@ -77,6 +77,53 @@ def init_tenant_tables() -> None:
             FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
         )
     """)
+
+    # -------------------------------------------------
+    # MIGRATION: monthly tenant_usage -> yearly tenant_usage
+    # -------------------------------------------------
+    def _table_exists(name: str) -> bool:
+        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (name,))
+        return cur.fetchone() is not None
+
+    def _columns(name: str) -> set[str]:
+        cur.execute(f"PRAGMA table_info({name})")
+        return {r[1] for r in cur.fetchall()}
+
+    if _table_exists("tenant_usage"):
+        cols = _columns("tenant_usage")
+        # Old schema had period_yyyymm; new schema uses period_yyyy
+        if "period_yyyymm" in cols and "period_yyyy" not in cols:
+            # Rename old table
+            cur.execute("ALTER TABLE tenant_usage RENAME TO tenant_usage_old")
+
+            # Create new yearly table
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS tenant_usage (
+                    tenant_id TEXT NOT NULL,
+                    period_yyyy TEXT NOT NULL,
+                    analysis_count INTEGER NOT NULL DEFAULT 0,
+                    created_utc TEXT NOT NULL,
+                    updated_utc TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, period_yyyy),
+                    FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
+                )
+            """)
+
+            # Roll up monthly -> yearly (take YYYY from YYYYMM)
+            cur.execute("""
+                INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc)
+                SELECT
+                    tenant_id,
+                    SUBSTR(period_yyyymm, 1, 4) AS period_yyyy,
+                    SUM(COALESCE(analysis_count, 0)) AS analysis_count,
+                    MIN(created_utc) AS created_utc,
+                    MAX(updated_utc) AS updated_utc
+                FROM tenant_usage_old
+                GROUP BY tenant_id, SUBSTR(period_yyyymm, 1, 4)
+            """)
+
+            # Drop old
+            cur.execute("DROP TABLE tenant_usage_old")
 
     # -----------------------------
     # TENANT USAGE (YEARLY metering)
