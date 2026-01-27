@@ -1,4 +1,3 @@
-```python
 # streamlit_app.py — Veritas (Streamlit) — v4 Governance Baseline
 # Output schema: plain text only
 # Required sections: Objective Findings + Advisory Guidance (always present)
@@ -1150,22 +1149,27 @@ if tab_admin is not None:
             t = admin_get_tenant((lookup_id or "").strip())
             if not t:
                 st.error("No tenant found with that Tenant ID.")
-            else:
-                used = admin_get_usage(t["tenant_id"], period)
+                st.stop()
 
-                # Read ONLY annual_analysis_limit (tenant_store now returns this)
-                limit_val = int(t.get("annual_analysis_limit") or 0)
+            tenant_id_val = t.get("tenant_id")
+            if not tenant_id_val:
+                st.error("Tenant record missing tenant_id. Check tenant_store.admin_get_tenant() return shape.")
+                st.stop()
 
-                st.success("Tenant found.")
-                st.write({
-                    "tenant_id": t["tenant_id"],
-                    "tier": t["tier"],
-                    "annual_limit": limit_val,
-                    "status": t["status"],
-                    "usage_this_year": used,
-                    "created_utc": t.get("created_utc"),
-                    "updated_utc": t.get("updated_utc"),
-                })
+            used = admin_get_usage(tenant_id_val, period)
+
+            limit_val = int(t.get("annual_analysis_limit") or 0)
+
+            st.success("Tenant found.")
+            st.write({
+                "tenant_id": tenant_id_val,
+                "tier": t.get("tier"),
+                "annual_limit": limit_val,
+                "status": t.get("status"),
+                "usage_this_year": used,
+                "created_utc": t.get("created_utc"),
+                "updated_utc": t.get("updated_utc"),
+            })
 
                 keys = admin_list_tenant_keys(t["tenant_id"], limit=50)
                 if keys:
@@ -1261,6 +1265,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
