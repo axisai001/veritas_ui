@@ -1,5 +1,7 @@
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
-# Metering: YEARLY usage (period_yyyy). Entitlement column remains: monthly_analysis_limit (canonical).
+# Metering: YEARLY usage (period_yyyy).
+# Storage: entitlement column remains monthly_analysis_limit (legacy DB name).
+# Canonical API key exposed to app: annual_analysis_limit.
 
 from __future__ import annotations
 
@@ -55,6 +57,19 @@ def _columns(cur: sqlite3.Cursor, name: str) -> Set[str]:
     return {r[1] for r in cur.fetchall()}
 
 
+def _entitlement(limit_val: int) -> Dict[str, int]:
+    """
+    Canonical entitlement is annual_analysis_limit (because metering is yearly).
+    DB storage uses monthly_analysis_limit as a legacy column name.
+    We return BOTH keys for compatibility during migration.
+    """
+    v = int(limit_val or 0)
+    return {
+        "annual_analysis_limit": v,
+        "monthly_analysis_limit": v,  # legacy / compat
+    }
+
+
 # =============================================================================
 # DB SCHEMA + MIGRATIONS
 # =============================================================================
@@ -85,8 +100,6 @@ def init_tenant_tables() -> None:
             try:
                 cur.execute("ALTER TABLE tenants RENAME COLUMN annual_analysis_limit TO monthly_analysis_limit")
             except Exception:
-                # If your SQLite is too old for RENAME COLUMN, you must delete the DB or do a rebuild migration.
-                # We fail closed with a clear message rather than silently corrupting data.
                 con.close()
                 raise RuntimeError(
                     "DB migration needed: tenants has annual_analysis_limit but no monthly_analysis_limit, "
@@ -171,7 +184,8 @@ def init_tenant_tables() -> None:
 def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
     """
     Creates a tenant + issues a new vx_ key (returned ONCE).
-    Entitlement column is monthly_analysis_limit (canonical), regardless of metering period length.
+    DB column is monthly_analysis_limit (legacy name).
+    Semantically, this limit is treated as ANNUAL because metering is period_yyyy.
     """
     tenant_id = (tenant_id or "").strip()
     if not tenant_id:
@@ -245,10 +259,11 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     if tenant_status != "active" or key_status != "active":
         return None
 
+    ent = _entitlement(int(row[2]))
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "monthly_analysis_limit": int(row[2]),
+        **ent,
         "key_id": row[4],
     }
 
@@ -376,10 +391,12 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
     con.close()
     if not row:
         return None
+
+    ent = _entitlement(int(row[2]))
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "monthly_analysis_limit": int(row[2]),
+        **ent,
         "status": row[3],
         "created_utc": row[4],
         "updated_utc": row[5],
@@ -430,6 +447,8 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     """
     Returns per-tenant usage for a given year.
     Includes tenants even if usage row doesn't exist yet by LEFT JOIN.
+
+    NOTE: We alias monthly_analysis_limit to annual_analysis_limit for app-facing consistency.
     """
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
@@ -438,7 +457,7 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
         SELECT
             t.tenant_id,
             t.tier,
-            t.monthly_analysis_limit,
+            t.monthly_analysis_limit AS annual_analysis_limit,
             t.status,
             COALESCE(u.analysis_count, 0) AS analysis_count
         FROM tenants t
@@ -453,3 +472,4 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     rows = cur.fetchall()
     con.close()
     return rows
+
