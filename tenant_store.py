@@ -1,3 +1,4 @@
+```python
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
 # Metering: YEARLY usage (period_yyyy).
 # Storage: entitlement column remains monthly_analysis_limit (legacy DB name).
@@ -93,7 +94,6 @@ def init_tenant_tables() -> None:
     """)
 
     # MIGRATION: If someone previously created annual_analysis_limit column, rename to monthly_analysis_limit.
-    # SQLite supports RENAME COLUMN in modern versions; if this fails, fallback is to rebuild table (not done here).
     if _table_exists(cur, "tenants"):
         cols = _columns(cur, "tenants")
         if "annual_analysis_limit" in cols and "monthly_analysis_limit" not in cols:
@@ -223,56 +223,14 @@ def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
 
 
 def verify_tenant_key(raw_key: str) -> Optional[Dict]:
-    raw_key = (raw_key or "").strip()
-    if not raw_key or not raw_key.startswith("vx_"):
-        return None
-
-    key_hash = hash_api_key(raw_key)
-
-    con = sqlite3.connect(DB_PATH, timeout=30)
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        SELECT
-            t.tenant_id,
-            t.tier,
-            t.monthly_analysis_limit,
-            t.status,
-            k.key_id,
-            k.status
-        FROM tenant_keys k
-        JOIN tenants t ON t.tenant_id = k.tenant_id
-        WHERE k.key_hash = ?
-        LIMIT 1
-        """,
-        (key_hash,),
-    )
-
-    row = cur.fetchone()
-    con.close()
-    if not row:
-        return None
-
-    tenant_status = row[3]
-    key_status = row[5]
-    if tenant_status != "active" or key_status != "active":
-        return None
-
-    ent = _entitlement(int(row[2]))
-    return {
-        "tenant_id": row[0],
-        "tier": row[1],
-        **ent,
-        "key_id": row[4],
-    }
+    """
+    Back-compat: returns tenant context or None (no reason).
+    Prefer verify_tenant_key_detailed for API middleware decisions.
+    """
+    tenant, reason = verify_tenant_key_detailed(raw_key)
+    return tenant if reason == "ok" else None
 
 
-# =============================================================================
-# NEW: Detailed verifier for middleware (VER-B2B-003 support)
-# - DO NOT replace verify_tenant_key()
-# - This enables correct 401 vs 403 mapping (inactive vs not-found)
-# =============================================================================
 def verify_tenant_key_detailed(raw_key: str) -> Tuple[Optional[Dict], str]:
     """
     Returns (tenant_dict_or_none, reason)
@@ -293,27 +251,27 @@ def verify_tenant_key_detailed(raw_key: str) -> Tuple[Optional[Dict], str]:
     key_hash = hash_api_key(raw_key)
 
     con = sqlite3.connect(DB_PATH, timeout=30)
-    cur = con.cursor()
-
-    cur.execute(
-        """
-        SELECT
-            t.tenant_id,
-            t.tier,
-            t.monthly_analysis_limit,
-            t.status AS tenant_status,
-            k.key_id,
-            k.status AS key_status
-        FROM tenant_keys k
-        JOIN tenants t ON t.tenant_id = k.tenant_id
-        WHERE k.key_hash = ?
-        LIMIT 1
-        """,
-        (key_hash,),
-    )
-
-    row = cur.fetchone()
-    con.close()
+    try:
+        cur = con.cursor()
+        cur.execute(
+            """
+            SELECT
+                t.tenant_id,
+                t.tier,
+                t.monthly_analysis_limit,
+                t.status AS tenant_status,
+                k.key_id,
+                k.status AS key_status
+            FROM tenant_keys k
+            JOIN tenants t ON t.tenant_id = k.tenant_id
+            WHERE k.key_hash = ?
+            LIMIT 1
+            """,
+            (key_hash,),
+        )
+        row = cur.fetchone()
+    finally:
+        con.close()
 
     if not row:
         return None, "not_found"
@@ -536,4 +494,4 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     rows = cur.fetchall()
     con.close()
     return rows
-
+```
