@@ -846,8 +846,13 @@ with tab_analyze:
 
     # -----------------------------
     # TENANT ACCESS GATE (B2B)
+    # - Non-admins: must verify tenant key
+    # - Admins: bypass tenant key prompt (internal UI use)
     # -----------------------------
-    tenant_ok = st.session_state.get("tenant_verified", False)
+    if st.session_state.get("is_admin", False):
+        tenant_ok = True
+    else:
+        tenant_ok = st.session_state.get("tenant_verified", False)
 
     if not tenant_ok:
         st.info("Enter your tenant access key to unlock analysis.")
@@ -898,20 +903,26 @@ with tab_analyze:
         if submitted:
             new_request_id()
 
-            tenant_id = st.session_state.get("tenant_id")
-            annual_limit = int(st.session_state.get("tenant_limit") or 0)
+            # Enforce tenant metering ONLY for non-admins
+            if not st.session_state.get("is_admin", False):
+                tenant_id = st.session_state.get("tenant_id")
+                annual_limit = int(st.session_state.get("tenant_limit") or 0)
 
-            if not tenant_id or annual_limit <= 0:
-                st.error("Tenant context missing. Please re-verify your tenant key.")
-                st.session_state["tenant_verified"] = False
-                st.stop()
+                if not tenant_id or annual_limit <= 0:
+                    st.error("Tenant context missing. Please re-verify your tenant key.")
+                    st.session_state["tenant_verified"] = False
+                    st.stop()
 
-            period = current_period_yyyy()
-            used = get_usage(tenant_id, period)
+                period = current_period_yyyy()
+                used = get_usage(tenant_id, period)
 
-            if used >= annual_limit:
-                st.error(f"Annual analysis limit reached ({used}/{annual_limit}) for {period}.")
-                st.stop()
+                if used >= annual_limit:
+                    st.error(f"Annual analysis limit reached ({used}/{annual_limit}) for {period}.")
+                    st.stop()
+            else:
+                # Admin run: no tenant metering
+                tenant_id = None
+                period = current_period_yyyy()
 
             extracted_text = ""
             if doc is not None:
@@ -948,7 +959,9 @@ with tab_analyze:
             st.session_state["last_report"] = report
             st.session_state["report_ready"] = True
 
-            increment_usage(tenant_id, period)
+            # Increment usage ONLY for non-admins
+            if tenant_id:
+                increment_usage(tenant_id, period)
 
         if st.session_state.get("report_ready") and st.session_state.get("last_report"):
             st.markdown(st.session_state["last_report"])
@@ -1190,6 +1203,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
