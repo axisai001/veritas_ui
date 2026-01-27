@@ -811,9 +811,13 @@ with st.sidebar:
 # =============================================================================
 # MAIN UI
 # =============================================================================
-tabs = ["Analyze"]
+tabs = ["Admin"]
 if st.session_state.get("is_admin", False):
-    tabs.append("Admin")
+    tabs.insert(0, "Analyze")  # optional internal test console
+else:
+    # if non-admins should not use Streamlit at all
+    st.error("This console is restricted to administrators.")
+    st.stop()
 
 tab_objs = st.tabs(tabs)
 tab_map = {name: tab_objs[i] for i, name in enumerate(tabs)}
@@ -843,10 +847,16 @@ with tab_analyze:
     # -----------------------------
     # TENANT ACCESS GATE (B2B) — REQUIRED
     # -----------------------------
-    if not st.session_state.get("tenant_verified", False):
+    tenant_ok = st.session_state.get("tenant_verified", False)
+
+    if not tenant_ok:
         st.info("Enter your tenant access key to unlock analysis.")
         with st.form("tenant_access_form", clear_on_submit=False):
-            tenant_key = st.text_input("Tenant Key (vx_...)", type="password", key="tenant_access_key_input")
+            tenant_key = st.text_input(
+                "Tenant Key (vx_...)", 
+                type="password", 
+                key="tenant_access_key_input"
+            )
             verify_btn = st.form_submit_button("Verify Key")
 
         if verify_btn:
@@ -854,10 +864,19 @@ with tab_analyze:
             if not t:
                 st.error("Invalid or inactive tenant key.")
                 st.session_state["tenant_verified"] = False
-                st.stop()
+            else:
+                st.session_state["tenant_verified"] = True
+                st.session_state["tenant_id"] = t["tenant_id"]
+                st.session_state["tenant_limit"] = int(t.get("annual_analysis_limit") or 0)
+                st.session_state["tenant_key_id"] = t.get("key_id", "")
+                st.success("Tenant verified. You may now run analyses.")
+                _safe_rerun()
 
-            st.session_state["tenant_verified"] = True
-            st.session_state["tenant_id"] = t["tenant_id"]
+    else:
+        # ⬇⬇⬇ EVERYTHING BELOW THIS LINE STAYS EXACTLY AS-IS ⬇⬇⬇
+        # - analysis_form
+        # - submit handler
+        # - report display
 
             # Read ONLY annual_analysis_limit (tenant_store now returns this)
             st.session_state["tenant_limit"] = int(t.get("annual_analysis_limit") or 0)
@@ -1265,6 +1284,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
