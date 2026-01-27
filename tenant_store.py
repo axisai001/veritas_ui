@@ -1,5 +1,5 @@
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
-# Updated: YEARLY metering (period_yyyy) instead of monthly (period_yyyymm)
+# Updated: YEARLY metering (period_yyyy) instead of monthly (period_yyyy)
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def init_tenant_tables() -> None:
         CREATE TABLE IF NOT EXISTS tenants (
             tenant_id TEXT PRIMARY KEY,
             tier TEXT NOT NULL,
-            monthly_analysis_limit INTEGER NOT NULL,
+            annual_analysis_limit INTEGER NOT NULL,
             status TEXT NOT NULL,
             created_utc TEXT NOT NULL,
             updated_utc TEXT NOT NULL
@@ -102,7 +102,7 @@ def init_tenant_tables() -> None:
 def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
     """
     Creates a tenant + issues a new vx_ key (returned ONCE).
-    Note: monthly_analysis_limit is treated as the entitlement number; if you want annual naming later,
+    Note: annual_analysis_limit is treated as the entitlement number; if you want annual naming later,
     do that via a migration ticket to rename the column.
     """
     tenant_id = (tenant_id or "").strip()
@@ -121,7 +121,7 @@ def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
 
     # Insert tenant (will raise IntegrityError if tenant_id already exists)
     cur.execute(
-        """INSERT INTO tenants (tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc)
+        """INSERT INTO tenants (tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc)
            VALUES (?,?,?,?,?,?)""",
         (tenant_id, tier, int(monthly_limit), "active", ts, ts),
     )
@@ -154,7 +154,7 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
         SELECT
             t.tenant_id,
             t.tier,
-            t.monthly_analysis_limit,
+            t.annual_analysis_limit,
             t.status,
             k.key_id,
             k.status
@@ -179,7 +179,7 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "monthly_analysis_limit": int(row[2]),
+        "annual_analysis_limit": int(row[2]),
         "key_id": row[4],
     }
 
@@ -292,7 +292,7 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
     cur = con.cursor()
     cur.execute(
         """
-        SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc
+        SELECT tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc
         FROM tenants
         WHERE tenant_id=?
         """,
@@ -305,7 +305,7 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "monthly_analysis_limit": int(row[2]),
+        "annual_analysis_limit": int(row[2]),
         "status": row[3],
         "created_utc": row[4],
         "updated_utc": row[5],
@@ -316,7 +316,7 @@ def admin_list_tenants(limit: int = 500) -> List[Tuple]:
     cur = con.cursor()
     cur.execute(
         """
-        SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc
+        SELECT tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc
         FROM tenants
         ORDER BY created_utc DESC
         LIMIT ?
@@ -360,7 +360,7 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
         SELECT
             t.tenant_id,
             t.tier,
-            t.monthly_analysis_limit,
+            t.annual_analysis_limit,
             t.status,
             COALESCE(u.analysis_count, 0) as analysis_count
         FROM tenants t
