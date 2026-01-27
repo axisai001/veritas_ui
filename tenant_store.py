@@ -268,6 +268,70 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     }
 
 
+# =============================================================================
+# NEW: Detailed verifier for middleware (VER-B2B-003 support)
+# - DO NOT replace verify_tenant_key()
+# - This enables correct 401 vs 403 mapping (inactive vs not-found)
+# =============================================================================
+def verify_tenant_key_detailed(raw_key: str) -> Tuple[Optional[Dict], str]:
+    """
+    Returns (tenant_dict_or_none, reason)
+
+    reason values:
+      - "missing"      -> no key provided
+      - "bad_format"   -> not vx_
+      - "not_found"    -> key hash not found
+      - "inactive"     -> tenant suspended OR key revoked
+      - "ok"           -> active + returns tenant context
+    """
+    raw_key = (raw_key or "").strip()
+    if not raw_key:
+        return None, "missing"
+    if not raw_key.startswith("vx_"):
+        return None, "bad_format"
+
+    key_hash = hash_api_key(raw_key)
+
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+
+    cur.execute(
+        """
+        SELECT
+            t.tenant_id,
+            t.tier,
+            t.monthly_analysis_limit,
+            t.status AS tenant_status,
+            k.key_id,
+            k.status AS key_status
+        FROM tenant_keys k
+        JOIN tenants t ON t.tenant_id = k.tenant_id
+        WHERE k.key_hash = ?
+        LIMIT 1
+        """,
+        (key_hash,),
+    )
+
+    row = cur.fetchone()
+    con.close()
+
+    if not row:
+        return None, "not_found"
+
+    tenant_status = row[3]
+    key_status = row[5]
+    if tenant_status != "active" or key_status != "active":
+        return None, "inactive"
+
+    ent = _entitlement(int(row[2]))
+    return {
+        "tenant_id": row[0],
+        "tier": row[1],
+        **ent,
+        "key_id": row[4],
+    }, "ok"
+
+
 def suspend_tenant(tenant_id: str) -> None:
     tenant_id = (tenant_id or "").strip()
     ts = _now()
