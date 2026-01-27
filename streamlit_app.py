@@ -1171,22 +1171,22 @@ if tab_admin is not None:
                 "updated_utc": t.get("updated_utc"),
             })
 
-                keys = admin_list_tenant_keys(t["tenant_id"], limit=50)
-                if keys:
-                    kdf = pd.DataFrame(
-                        keys,
-                        columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"]
-                    )
-                    st.markdown("#### Tenant Keys")
-                    st.dataframe(kdf, use_container_width=True)
-                    st.download_button(
-                        "Download Tenant Keys (CSV)",
-                        data=kdf.to_csv(index=False).encode("utf-8"),
-                        file_name=f"tenant_keys_{t['tenant_id']}.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    st.info("No keys found for this tenant.")
+            keys = admin_list_tenant_keys(t["tenant_id"], limit=50)
+            if keys:
+                kdf = pd.DataFrame(
+                    keys,
+                    columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"]
+                )
+                st.markdown("#### Tenant Keys")
+                st.dataframe(kdf, use_container_width=True)
+                st.download_button(
+                    "Download Tenant Keys (CSV)",
+                    data=kdf.to_csv(index=False).encode("utf-8"),
+                    file_name=f"tenant_keys_{t['tenant_id']}.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.info("No keys found for this tenant.")
 
         # TENANT TEST GATEWAY (DEV / ADMIN ONLY)
         if os.environ.get("ENABLE_TENANT_TEST_GATE") == "1":
@@ -1265,6 +1265,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
