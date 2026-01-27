@@ -35,7 +35,7 @@ class TooManyRequests(Exception):
 class TenantContext:
     tenant_id: str
     tier: str
-    monthly_analysis_limit: int
+    annual_analysis_limit: int
     key_id: str
     period_yyyy: str
     used_this_period: int
@@ -67,7 +67,7 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
 
     tenant_id = tenant["tenant_id"]
     tier = tenant["tier"]
-    monthly_limit = int(tenant["monthly_analysis_limit"])
+    monthly_limit = int(tenant["annual_analysis_limit"])
     key_id = tenant["key_id"]
 
     if monthly_limit <= 0:
@@ -83,7 +83,7 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
     return TenantContext(
         tenant_id=tenant_id,
         tier=tier,
-        monthly_analysis_limit=monthly_limit,
+        annual_analysis_limit=monthly_limit,
         key_id=key_id,
         period_yyyy=period,
         used_this_period=used,
