@@ -38,7 +38,7 @@ from openai import OpenAI
 
 # Tenant / B2B imports
 from tenant_store import (
-    current_period_yyyymm, get_usage, increment_usage,
+    current_period_yyyy, get_usage, increment_usage,
     admin_create_tenant, suspend_tenant, rotate_key,
     admin_get_tenant, admin_list_tenants, admin_list_tenant_keys,
     admin_get_usage, admin_usage_snapshot
@@ -895,7 +895,7 @@ with tab_analyze:
             st.session_state["tenant_verified"] = False
             st.stop()
 
-        period = current_period_yyyymm()
+        period = current_period_yyyy()
         used = get_usage(tenant_id, period)
 
         if used >= monthly_limit:
@@ -1126,13 +1126,13 @@ if tab_admin is not None:
         st.divider()
         st.subheader("Tenant Reporting")
 
-        period = current_period_yyyymm()
+        period = current_period_yyyy()
         st.caption(f"Usage period (UTC): {period}")
 
         # -------------------------
         # Tenant Snapshot (all tenants)
         # -------------------------
-        rows = admin_usage_snapshot(period_yyyymm=period, limit=500)
+        rows = admin_usage_snapshot(period_yyyy=period, limit=500)
         if rows:
             df = pd.DataFrame(
                 rows,
@@ -1167,7 +1167,7 @@ if tab_admin is not None:
                 st.write({
                     "tenant_id": t["tenant_id"],
                     "tier": t["tier"],
-                    "monthly_limit": t["monthly_analysis_limit"],
+                    "monthly_limit": t["annual_analysis_limit"],
                     "status": t["status"],
                     "usage_this_month": used,
                     "created_utc": t["created_utc"],
@@ -1210,7 +1210,7 @@ if tab_admin is not None:
 
                 cur.execute(
                     """
-                    SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc
+                    SELECT tenant_id, tier, annual_analysis_limit, status, created_utc
                     FROM tenants
                     WHERE tenant_id = ?
                     """,
@@ -1239,7 +1239,7 @@ if tab_admin is not None:
                     st.write({
                         "tenant_id": tenant[0],
                         "tier": tenant[1],
-                        "monthly_analysis_limit": tenant[2],
+                        "annual_analysis_limit": tenant[2],
                         "status": tenant[3],
                         "created_utc": tenant[4],
                     })
@@ -1264,7 +1264,7 @@ if tab_admin is not None:
             st.subheader("Tenant Test Gateway (Admin / Dev Only)")
             st.caption("Simulates a customer request using a vx tenant key. Disabled in production.")
 
-            from tenant_store import verify_tenant_key, current_period_yyyymm, get_usage, increment_usage
+            from tenant_store import verify_tenant_key, current_period_yyyy, get_usage, increment_usage
 
             test_key = st.text_input(
                 "Paste Tenant vx Key",
@@ -1287,19 +1287,19 @@ if tab_admin is not None:
                 st.json({
                     "tenant_id": tenant_ctx["tenant_id"],
                     "tier": tenant_ctx["tier"],
-                    "monthly_limit": tenant_ctx["monthly_analysis_limit"],
+                    "monthly_limit": tenant_ctx["annual_analysis_limit"],
                     "key_id": tenant_ctx["key_id"],
                 })
 
-                period = current_period_yyyymm()
+                period = current_period_yyyy()
                 used = get_usage(tenant_ctx["tenant_id"], period)
 
                 st.markdown("### Usage Status")
                 st.write(f"Period: {period}")
-                st.write(f"Used: {used} / {tenant_ctx['monthly_analysis_limit']}")
+                st.write(f"Used: {used} / {tenant_ctx['annual_analysis_limit']}")
 
                 if st.button("Run Test Analysis as Tenant", key="tg_run_btn"):
-                    if used >= tenant_ctx["monthly_analysis_limit"]:
+                    if used >= tenant_ctx["annual_analysis_limit"]:
                         st.error("Tenant monthly limit reached. Test blocked.")
                     else:
                         # Minimal test input (no refusal triggers)
@@ -1335,6 +1335,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
