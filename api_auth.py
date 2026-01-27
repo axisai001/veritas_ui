@@ -44,17 +44,24 @@ class TenantContext:
 def authenticate_request(api_key: Optional[str]) -> TenantContext:
     raw = (api_key or "").strip()
 
+    # Explicit missing-key check (don’t rely on tenant_store behavior)
+    if not raw:
+        raise Unauthorized("Missing API key")
+
     tenant, reason = verify_tenant_key_detailed(raw)
 
-    if reason in ("missing", "bad_format", "not_found"):
+    if reason in ("bad_format", "not_found", "missing"):
         raise Unauthorized("Missing or invalid API key")
 
     if reason == "inactive":
         raise Forbidden("Tenant or API key is inactive")
 
-    # reason == "ok" must have tenant
+    if reason != "ok":
+        # Future-proof: any unknown reason -> fail-closed
+        raise Unauthorized("Invalid API key")
+
     if not tenant:
-        # defensive fail-closed
+        # Defensive fail-closed
         raise Unauthorized("Invalid API key")
 
     tenant_id = tenant["tenant_id"]
@@ -63,7 +70,7 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
     key_id = tenant.get("key_id") or ""
 
     if annual_limit <= 0:
-        # entitlement misconfig is not the client's fault; treat as Forbidden
+        # Entitlement misconfig is internal -> treat as Forbidden
         raise Forbidden("Tenant entitlement misconfigured")
 
     period = current_period_yyyy()
