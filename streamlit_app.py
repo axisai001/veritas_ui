@@ -1171,7 +1171,7 @@ if tab_admin is not None:
                 "updated_utc": t.get("updated_utc"),
             })
 
-            keys = admin_list_tenant_keys(t["tenant_id"], limit=50)
+            keys = admin_list_tenant_keys(tenant_id_val, limit=50)
             if keys:
                 kdf = pd.DataFrame(
                     keys,
@@ -1182,7 +1182,7 @@ if tab_admin is not None:
                 st.download_button(
                     "Download Tenant Keys (CSV)",
                     data=kdf.to_csv(index=False).encode("utf-8"),
-                    file_name=f"tenant_keys_{t['tenant_id']}.csv",
+                    file_name=f"tenant_keys_{tenant_id_val}.csv",
                     mime="text/csv",
                 )
             else:
@@ -1265,6 +1265,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
