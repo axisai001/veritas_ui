@@ -28,7 +28,6 @@ import sqlite3
 import unicodedata
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from zoneinfo import ZoneInfo
 from collections import deque
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -36,19 +35,8 @@ import pandas as pd
 import streamlit as st
 from openai import OpenAI
 
-# Tenant / B2B imports
-from tenant_store import (
-    current_period_yyyy, get_usage, increment_usage,
-    admin_create_tenant, suspend_tenant, rotate_key,
-    admin_get_tenant, admin_list_tenants, admin_list_tenant_keys,
-    admin_get_usage, admin_usage_snapshot
-)
-
 # Refusal Router (required companion file)
 from refusal_router import check_refusal, render_refusal, RefusalResult
-
-import refusal_router as rr
-st.sidebar.write("refusal_router loaded from:", rr.__file__)
 
 # =============================================================================
 # CONFIG
@@ -90,6 +78,7 @@ DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
 DB_PATH = str(DATA_DIR / "veritas.db")
 
 # Ensure ALL modules (tenant_store, admin tools, etc.) use the SAME DB
+# IMPORTANT: must be set BEFORE importing tenant_store.
 os.environ["DB_PATH"] = DB_PATH  # force single source of truth
 
 ANALYSES_CSV = str(DATA_DIR / "analyses.csv")
@@ -109,6 +98,24 @@ LOCKOUT_DURATION_SEC = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800"))
 
 # TTL pruning
 TTL_DAYS_DEFAULT = int(os.environ.get("LOG_TTL_DAYS", "365"))
+
+# =============================================================================
+# TENANT / B2B IMPORTS (AFTER DB_PATH IS FORCED)
+# =============================================================================
+from tenant_store import (
+    init_tenant_tables,
+    verify_tenant_key,
+    current_period_yyyy,
+    get_usage,
+    increment_usage,
+    admin_create_tenant,
+    suspend_tenant,
+    rotate_key,
+    admin_get_tenant,
+    admin_list_tenant_keys,
+    admin_get_usage,
+    admin_usage_snapshot,
+)
 
 # =============================================================================
 # VERITAS v4 SYSTEM PROMPT (STRICT)
@@ -228,87 +235,68 @@ def _init_db() -> None:
         )
     """)
 
-    def _init_db() -> None:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS analyses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            analysis_id TEXT,
+            session_id TEXT,
+            login_id TEXT,
+            model TEXT,
+            elapsed_seconds REAL,
+            input_chars INTEGER,
+            input_preview TEXT,
+            input_sha256 TEXT
+        )
+    """)
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS auth_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc TEXT,
-                event_type TEXT,
-                login_id TEXT,
-                session_id TEXT,
-                request_id TEXT,
-                credential_label TEXT,
-                success INTEGER,
-                hashed_attempt_prefix TEXT
-            )
-        """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            request_id TEXT,
+            route TEXT,
+            kind TEXT,
+            http_status INTEGER,
+            detail TEXT,
+            session_id TEXT,
+            login_id TEXT
+        )
+    """)
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS analyses (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc TEXT,
-                analysis_id TEXT,
-                session_id TEXT,
-                login_id TEXT,
-                model TEXT,
-                elapsed_seconds REAL,
-                input_chars INTEGER,
-                input_preview TEXT,
-                input_sha256 TEXT
-            )
-        """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ack_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            ack_key TEXT,
+            session_id TEXT,
+            login_id TEXT,
+            acknowledged INTEGER,
+            privacy_url TEXT,
+            terms_url TEXT
+        )
+    """)
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS errors (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc TEXT,
-                request_id TEXT,
-                route TEXT,
-                kind TEXT,
-                http_status INTEGER,
-                detail TEXT,
-                session_id TEXT,
-                login_id TEXT
-            )
-        """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS refusal_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_utc TEXT,
+            analysis_id TEXT,
+            source TEXT,
+            category TEXT,
+            reason TEXT,
+            input_len INTEGER,
+            input_sha256 TEXT
+        )
+    """)
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS ack_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp_utc TEXT,
-                ack_key TEXT,
-                session_id TEXT,
-                login_id TEXT,
-                acknowledged INTEGER,
-                privacy_url TEXT,
-                terms_url TEXT
-            )
-        """)
+    con.commit()
+    con.close()
 
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS refusal_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_utc TEXT,
-                analysis_id TEXT,
-                source TEXT,
-                category TEXT,
-                reason TEXT,
-                input_len INTEGER,
-                input_sha256 TEXT
-            )
-        """)
-
-        con.commit()
-        con.close()
-
-# Initialize core application tables
+# Initialize core application tables ONCE
 _init_db()
 
-# Initialize B2B tenant tables (VER-B2B-001)
-from tenant_store import init_tenant_tables
+# Initialize B2B tenant tables ONCE (VER-B2B-001)
 init_tenant_tables()
 
 def _prune_table(table: str, ts_col: str, ttl_days: int) -> None:
@@ -351,8 +339,6 @@ def _prune_csv(path: str, ttl_days: int) -> None:
             w.writerows(kept)
     except Exception:
         pass
-
-_init_db()
 
 _init_csv(AUTH_CSV, ["timestamp_utc","event_type","login_id","session_id","request_id","credential_label","success","hashed_attempt_prefix"])
 _init_csv(ANALYSES_CSV, ["timestamp_utc","analysis_id","session_id","login_id","model","elapsed_seconds","input_chars","input_preview","input_sha256"])
@@ -497,7 +483,6 @@ def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
         con = sqlite3.connect(DB_PATH, timeout=30)
         cur = con.cursor()
 
-        # Ensure the table exists (prevents OperationalError on fresh/mismatched DB)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS refusal_events (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -521,9 +506,7 @@ def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
         rows = cur.fetchall()
         con.close()
         return rows
-
     except sqlite3.OperationalError:
-        # Fail-safe: don't crash the whole app if DB is locked/unavailable
         try:
             con.close()
         except Exception:
@@ -638,14 +621,12 @@ def extract_document_text(uploaded_file) -> str:
         except Exception:
             return ""
 
-    # TXT / MD / CSV
     if filename.endswith((".txt", ".md", ".csv")):
         try:
             return file_bytes.decode("utf-8", errors="ignore").strip()
         except Exception:
             return ""
 
-    # DOCX
     if filename.endswith(".docx"):
         try:
             import docx
@@ -655,7 +636,6 @@ def extract_document_text(uploaded_file) -> str:
         except Exception:
             return ""
 
-    # PDF
     if filename.endswith(".pdf"):
         try:
             from pypdf import PdfReader
@@ -674,13 +654,11 @@ def local_safety_stop(user_text: str) -> Optional[str]:
     t = (user_text or "").strip().lower()
     if not t:
         return None
-    # explicit self-harm intent
     if re.search(r"\b(i\s*(want|plan|intend|am\s*going)\s*to\s*(kill|harm|hurt)\s*(myself|me))\b", t):
         return (
             "If you are in immediate danger or thinking about harming yourself, call or text 988 in the U.S., "
             "or contact your local emergency number. Analysis has been stopped for safety."
         )
-    # credible violence planning
     if re.search(r"\b(i\s*(plan|intend|will|want)\s*to\s*(attack|shoot|bomb|kill|harm))\b", t):
         return "This text indicates potential real-world harm planning. Analysis has been stopped."
     return None
@@ -698,6 +676,12 @@ st.session_state.setdefault("doc_uploader_key", 0)
 st.session_state.setdefault("last_report", "")
 st.session_state.setdefault("last_report_id", "")
 st.session_state.setdefault("report_ready", False)
+
+# Tenant session defaults (B2B)
+st.session_state.setdefault("tenant_verified", False)
+st.session_state.setdefault("tenant_id", "")
+st.session_state.setdefault("tenant_limit", 0)  # annual entitlement
+st.session_state.setdefault("tenant_key_id", "")
 
 # =============================================================================
 # AUTH UI
@@ -810,9 +794,15 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    if st.session_state.get("is_admin", False):
+        try:
+            import refusal_router as rr
+            st.caption(f"refusal_router: {rr.__file__}")
+        except Exception:
+            pass
+
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
-        # preserve session id for continuity, clear the rest
         sid = st.session_state.get("sid")
         st.session_state.clear()
         st.session_state["sid"] = sid
@@ -836,11 +826,7 @@ def reset_canvas() -> None:
     st.session_state["last_report_id"] = ""
     st.session_state["report_ready"] = False
 
-    # IMPORTANT:
-    # Do NOT generate a new analysis ID on reset.
-    # Generate it ONLY when "Engage Veritas" is clicked and a real analysis is performed.
     st.session_state["veritas_analysis_id"] = ""
-
     st.session_state["user_input_box"] = ""
 
 # =============================================================================
@@ -854,7 +840,36 @@ with tab_analyze:
     if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
-    # Ensure submitted is always defined (prevents NameError)
+    # -----------------------------
+    # TENANT ACCESS GATE (B2B) — REQUIRED
+    # -----------------------------
+    if not st.session_state.get("tenant_verified", False):
+        st.info("Enter your tenant access key to unlock analysis.")
+        with st.form("tenant_access_form", clear_on_submit=False):
+            tenant_key = st.text_input("Tenant Key (vx_...)", type="password", key="tenant_access_key_input")
+            verify_btn = st.form_submit_button("Verify Key")
+
+        if verify_btn:
+            t = verify_tenant_key((tenant_key or "").strip())
+            if not t:
+                st.error("Invalid or inactive tenant key.")
+                st.session_state["tenant_verified"] = False
+                st.stop()
+
+            st.session_state["tenant_verified"] = True
+            st.session_state["tenant_id"] = t["tenant_id"]
+
+            # Tolerate either key name during migration
+            st.session_state["tenant_limit"] = int(
+                t.get("annual_analysis_limit") or t.get("monthly_analysis_limit") or 0
+            )
+            st.session_state["tenant_key_id"] = t.get("key_id", "")
+
+            st.success("Tenant verified. You may now run analyses.")
+            _safe_rerun()
+
+        st.stop()
+
     submitted = False
 
     # -----------------------------
@@ -885,23 +900,22 @@ with tab_analyze:
         new_request_id()
 
         # -----------------------------
-        # TENANT USAGE ENFORCEMENT (B2B)
+        # TENANT USAGE ENFORCEMENT (ANNUAL)
         # -----------------------------
         tenant_id = st.session_state.get("tenant_id")
-        monthly_limit = int(st.session_state.get("tenant_limit") or 0)
+        annual_limit = int(st.session_state.get("tenant_limit") or 0)
 
-        if not tenant_id or monthly_limit <= 0:
+        if not tenant_id or annual_limit <= 0:
             st.error("Tenant context missing. Please re-verify your tenant key.")
             st.session_state["tenant_verified"] = False
             st.stop()
 
-        period = current_period_yyyy()
+        period = current_period_yyyy()  # expects YYYY
         used = get_usage(tenant_id, period)
 
-        if used >= monthly_limit:
-            st.error(f"Monthly analysis limit reached ({used}/{monthly_limit}).")
+        if used >= annual_limit:
+            st.error(f"Annual analysis limit reached ({used}/{annual_limit}) for {period}.")
             st.stop()
-
 
         if not rate_limiter("chat", RATE_LIMIT_CHAT, RATE_LIMIT_WINDOW_SEC):
             st.error("Too many requests. Please wait and try again.")
@@ -951,8 +965,6 @@ with tab_analyze:
             st.markdown(output)
             st.stop()  # HARD STOP — model never runs
 
-
-        # Backup hard stop for explicit safety-critical patterns
         msg = local_safety_stop(final_input)
         if msg:
             st.error(msg)
@@ -1001,10 +1013,10 @@ with tab_analyze:
                 elapsed_seconds=(time.time() - t0),
                 model_name=MODEL_NAME,
             )
-            
-            # Step 5 — bill usage ONLY after successful analysis
+
+            # Bill usage ONLY after successful analysis
             increment_usage(tenant_id, period)
-            
+
             prog.progress(100, text="Analysis complete")
 
         except Exception as e:
@@ -1014,9 +1026,7 @@ with tab_analyze:
         finally:
             prog.empty()
 
-    # -----------------------------
-    # DISPLAY LAST REPORT (always)
-    # -----------------------------
+    # DISPLAY LAST REPORT
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         st.markdown(st.session_state["last_report"])
 
@@ -1026,16 +1036,6 @@ with tab_analyze:
 if tab_admin is not None:
     with tab_admin:
         st.header("Admin Dashboard")
-
-        st.info("Admin tab loaded.")
-
-        try:
-            # B2B tenant store import (VER-B2B-001)
-            from tenant_store import admin_create_tenant, suspend_tenant, rotate_key
-        except Exception as e:
-            st.error("Tenant management module failed to load.")
-            st.code(repr(e))
-            st.stop()
 
         st.subheader("Refusal Telemetry")
         rows = fetch_recent_refusals(limit=500)
@@ -1059,19 +1059,14 @@ if tab_admin is not None:
         st.write(f"Temperature: `{TEMPERATURE}`")
         st.write(f"DB Path: `{DB_PATH}`")
 
-        # ---------------------------------
-        # B2B TENANT MANAGEMENT (VER-B2B-001)
-        # ---------------------------------
-        from tenant_store import admin_create_tenant, suspend_tenant, rotate_key
-
         st.subheader("Tenant Management")
 
         # --- Create Tenant ---
         with st.form("create_tenant_form"):
             tenant_id = st.text_input("Tenant ID")
             tier = st.selectbox("Tier", ["Starter", "Professional", "Enterprise"])
-            monthly_limit = st.number_input(
-                "Monthly Analysis Limit",
+            annual_limit = st.number_input(
+                "Annual Analysis Limit",
                 min_value=1,
                 value=100
             )
@@ -1085,7 +1080,7 @@ if tab_admin is not None:
                 raw_key = admin_create_tenant(
                     tenant_id=tenant_id.strip(),
                     tier=tier,
-                    monthly_limit=int(monthly_limit),
+                    monthly_limit=int(annual_limit),  # function param name may remain monthly_limit
                 )
 
                 st.success("Tenant created. Copy the key now — it will not be shown again.")
@@ -1129,14 +1124,12 @@ if tab_admin is not None:
         period = current_period_yyyy()
         st.caption(f"Usage period (UTC): {period}")
 
-        # -------------------------
         # Tenant Snapshot (all tenants)
-        # -------------------------
         rows = admin_usage_snapshot(period_yyyy=period, limit=500)
         if rows:
             df = pd.DataFrame(
                 rows,
-                columns=["tenant_id", "tier", "monthly_limit", "status", "analysis_count"]
+                columns=["tenant_id", "tier", "annual_limit", "status", "analysis_count"]
             )
             st.dataframe(df, use_container_width=True)
             st.download_button(
@@ -1150,28 +1143,28 @@ if tab_admin is not None:
 
         st.divider()
 
-        # -------------------------
         # Tenant Lookup (details)
-        # -------------------------
         st.markdown("### Tenant Lookup")
         lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
 
         if st.button("Lookup Tenant", key="tenant_lookup_btn"):
-            t = admin_get_tenant(lookup_id.strip())
+            t = admin_get_tenant((lookup_id or "").strip())
             if not t:
                 st.error("No tenant found with that Tenant ID.")
             else:
                 used = admin_get_usage(t["tenant_id"], period)
 
+                limit_val = t.get("annual_analysis_limit", t.get("monthly_analysis_limit", 0))
+
                 st.success("Tenant found.")
                 st.write({
                     "tenant_id": t["tenant_id"],
                     "tier": t["tier"],
-                    "monthly_limit": t["annual_analysis_limit"],
+                    "annual_limit": limit_val,
                     "status": t["status"],
-                    "usage_this_month": used,
-                    "created_utc": t["created_utc"],
-                    "updated_utc": t["updated_utc"],
+                    "usage_this_year": used,
+                    "created_utc": t.get("created_utc"),
+                    "updated_utc": t.get("updated_utc"),
                 })
 
                 keys = admin_list_tenant_keys(t["tenant_id"], limit=50)
@@ -1191,80 +1184,11 @@ if tab_admin is not None:
                 else:
                     st.info("No keys found for this tenant.")
 
-        # ---------------------------------
-        # VERIFY TENANT (INTERNAL)
-        # ---------------------------------
-        st.subheader("Verify Tenant (Internal)")
-
-        lookup_tenant_id = st.text_input("Enter Tenant ID to verify", key="verify_tenant_id")
-
-        if st.button("Verify Tenant"):
-            try:
-                tid = (lookup_tenant_id or "").strip()
-                if not tid:
-                    st.error("Tenant ID is required.")
-                    st.stop()
-
-                con = sqlite3.connect(DB_PATH, timeout=30)
-                cur = con.cursor()
-
-                cur.execute(
-                    """
-                    SELECT tenant_id, tier, annual_analysis_limit, status, created_utc
-                    FROM tenants
-                    WHERE tenant_id = ?
-                    """,
-                    (tid,),
-                )
-                tenant = cur.fetchone()
-
-                cur.execute(
-                    """
-                    SELECT key_id, status, created_utc
-                    FROM tenant_keys
-                    WHERE tenant_id = ?
-                    ORDER BY created_utc DESC
-                    LIMIT 20
-                    """,
-                    (tid,),
-                )
-                keys = cur.fetchall()
-
-                con.close()
-
-                if not tenant:
-                    st.error("No tenant found with that Tenant ID.")
-                else:
-                    st.success("Tenant exists.")
-                    st.write({
-                        "tenant_id": tenant[0],
-                        "tier": tenant[1],
-                        "annual_analysis_limit": tenant[2],
-                        "status": tenant[3],
-                        "created_utc": tenant[4],
-                    })
-
-                    if not keys:
-                        st.info("No keys found for this tenant yet.")
-                    else:
-                        st.write("Associated keys (key_id, status, created_utc):")
-                        df_keys = pd.DataFrame(keys, columns=["key_id", "status", "created_utc"])
-                        st.dataframe(df_keys, use_container_width=True)
-
-            except Exception as e:
-                st.error("Verification failed.")
-                st.code(repr(e))
-
-        # =========================================================
         # TENANT TEST GATEWAY (DEV / ADMIN ONLY)
-        # =========================================================
         if os.environ.get("ENABLE_TENANT_TEST_GATE") == "1":
-
             st.divider()
             st.subheader("Tenant Test Gateway (Admin / Dev Only)")
             st.caption("Simulates a customer request using a vx tenant key. Disabled in production.")
-
-            from tenant_store import verify_tenant_key, current_period_yyyy, get_usage, increment_usage
 
             test_key = st.text_input(
                 "Paste Tenant vx Key",
@@ -1273,7 +1197,7 @@ if tab_admin is not None:
             )
 
             if st.button("Verify Tenant Key", key="tg_verify_btn"):
-                tenant = verify_tenant_key(test_key.strip())
+                tenant = verify_tenant_key((test_key or "").strip())
                 if not tenant:
                     st.error("Invalid or inactive tenant key.")
                 else:
@@ -1283,12 +1207,14 @@ if tab_admin is not None:
             tenant_ctx = st.session_state.get("test_tenant_ctx")
 
             if tenant_ctx:
+                limit_val = tenant_ctx.get("annual_analysis_limit", tenant_ctx.get("monthly_analysis_limit", 0))
+
                 st.markdown("### Resolved Tenant Context")
                 st.json({
                     "tenant_id": tenant_ctx["tenant_id"],
                     "tier": tenant_ctx["tier"],
-                    "monthly_limit": tenant_ctx["annual_analysis_limit"],
-                    "key_id": tenant_ctx["key_id"],
+                    "annual_limit": limit_val,
+                    "key_id": tenant_ctx.get("key_id", ""),
                 })
 
                 period = current_period_yyyy()
@@ -1296,13 +1222,12 @@ if tab_admin is not None:
 
                 st.markdown("### Usage Status")
                 st.write(f"Period: {period}")
-                st.write(f"Used: {used} / {tenant_ctx['annual_analysis_limit']}")
+                st.write(f"Used: {used} / {limit_val}")
 
                 if st.button("Run Test Analysis as Tenant", key="tg_run_btn"):
-                    if used >= tenant_ctx["annual_analysis_limit"]:
-                        st.error("Tenant monthly limit reached. Test blocked.")
+                    if used >= int(limit_val or 0):
+                        st.error("Tenant annual limit reached. Test blocked.")
                     else:
-                        # Minimal test input (no refusal triggers)
                         test_input = "This is a neutral policy statement for tenant gateway testing."
 
                         try:
@@ -1335,10 +1260,6 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
-
-
-
-
 
 
 
