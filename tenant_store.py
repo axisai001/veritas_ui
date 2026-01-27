@@ -1,5 +1,5 @@
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
-# Updated: YEARLY metering (period_yyyy) instead of monthly (period_yyyy)
+# Updated: YEARLY metering (period_yyyy) instead of monthly (period_yyyymm)
 
 from __future__ import annotations
 
@@ -28,39 +28,76 @@ TENANT_KEY_SALT = (os.environ.get("TENANT_KEY_SALT") or "").strip()
 if not TENANT_KEY_SALT:
     raise RuntimeError("TENANT_KEY_SALT must be set in Streamlit secrets or environment")
 
+
 def generate_api_key() -> str:
     return f"vx_{secrets.token_urlsafe(32)}"
+
 
 def hash_api_key(raw_key: str) -> str:
     return hashlib.sha256((TENANT_KEY_SALT + raw_key).encode("utf-8", errors="ignore")).hexdigest()
 
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+
 # =============================================================================
-# DB SCHEMA
+# DB SCHEMA + MIGRATIONS
 # =============================================================================
 def init_tenant_tables() -> None:
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
 
+    def _table_exists(name: str) -> bool:
+        cur.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+            (name,),
+        )
+        return cur.fetchone() is not None
+
+    def _columns(name: str) -> set[str]:
+        cur.execute(f"PRAGMA table_info({name})")
+        return {r[1] for r in cur.fetchall()}
+
     # -----------------------------
     # TENANTS (canonical registry)
     # -----------------------------
+    # Create initial schema using annual_analysis_limit as canonical.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tenants (
             tenant_id TEXT PRIMARY KEY,
             tier TEXT NOT NULL,
-            monthly_analysis_limit INTEGER NOT NULL,
+            annual_analysis_limit INTEGER NOT NULL,
             status TEXT NOT NULL,
             created_utc TEXT NOT NULL,
             updated_utc TEXT NOT NULL
         )
     """)
+
+    # MIGRATION: if older tenants table used monthly_analysis_limit, add annual_analysis_limit + backfill
+    if _table_exists("tenants"):
+        cols = _columns("tenants")
+
+        # If legacy column exists, migrate to annual_analysis_limit
+        if "monthly_analysis_limit" in cols and "annual_analysis_limit" not in cols:
+            cur.execute("ALTER TABLE tenants ADD COLUMN annual_analysis_limit INTEGER")
+            # Backfill: treat the existing value as the entitlement number (now annual)
+            cur.execute("UPDATE tenants SET annual_analysis_limit = monthly_analysis_limit WHERE annual_analysis_limit IS NULL")
+
+        # If both exist, keep annual as canonical; ensure annual not NULL
+        if "monthly_analysis_limit" in cols and "annual_analysis_limit" in cols:
+            cur.execute(
+                """
+                UPDATE tenants
+                SET annual_analysis_limit = COALESCE(annual_analysis_limit, monthly_analysis_limit)
+                WHERE annual_analysis_limit IS NULL
+                """
+            )
 
     # -----------------------------
     # TENANT KEYS (hashed, rotatable)
@@ -79,19 +116,10 @@ def init_tenant_tables() -> None:
     """)
 
     # -------------------------------------------------
-    # MIGRATION: monthly tenant_usage -> yearly tenant_usage
+    # MIGRATION: monthly tenant_usage(period_yyyymm) -> yearly tenant_usage(period_yyyy)
     # -------------------------------------------------
-    def _table_exists(name: str) -> bool:
-        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (name,))
-        return cur.fetchone() is not None
-
-    def _columns(name: str) -> set[str]:
-        cur.execute(f"PRAGMA table_info({name})")
-        return {r[1] for r in cur.fetchall()}
-
     if _table_exists("tenant_usage"):
         cols = _columns("tenant_usage")
-        # Old schema had period_yyyymm; new schema uses period_yyyy
         if "period_yyyymm" in cols and "period_yyyy" not in cols:
             # Rename old table
             cur.execute("ALTER TABLE tenant_usage RENAME TO tenant_usage_old")
@@ -122,7 +150,6 @@ def init_tenant_tables() -> None:
                 GROUP BY tenant_id, SUBSTR(period_yyyymm, 1, 4)
             """)
 
-            # Drop old
             cur.execute("DROP TABLE tenant_usage_old")
 
     # -----------------------------
@@ -143,14 +170,14 @@ def init_tenant_tables() -> None:
     con.commit()
     con.close()
 
+
 # =============================================================================
 # TENANT MANAGEMENT (Admin)
 # =============================================================================
-def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
+def admin_create_tenant(tenant_id: str, tier: str, annual_limit: int) -> str:
     """
     Creates a tenant + issues a new vx_ key (returned ONCE).
-    Note: annual_analysis_limit is treated as the entitlement number; if you want annual naming later,
-    do that via a migration ticket to rename the column.
+    annual_analysis_limit is the canonical entitlement field.
     """
     tenant_id = (tenant_id or "").strip()
     if not tenant_id:
@@ -166,17 +193,19 @@ def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
     cur = con.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
 
-    # Insert tenant (will raise IntegrityError if tenant_id already exists)
     cur.execute(
-        """INSERT INTO tenants (tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc)
-           VALUES (?,?,?,?,?,?)""",
-        (tenant_id, tier, int(monthly_limit), "active", ts, ts),
+        """
+        INSERT INTO tenants (tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc)
+        VALUES (?,?,?,?,?,?)
+        """,
+        (tenant_id, tier, int(annual_limit), "active", ts, ts),
     )
 
-    # Insert initial key
     cur.execute(
-        """INSERT INTO tenant_keys (key_id, tenant_id, key_hash, status, created_utc, revoked_utc, rotated_from_key_id)
-           VALUES (?,?,?,?,?,?,?)""",
+        """
+        INSERT INTO tenant_keys (key_id, tenant_id, key_hash, status, created_utc, revoked_utc, rotated_from_key_id)
+        VALUES (?,?,?,?,?,?,?)
+        """,
         (key_id, tenant_id, key_hash, "active", ts, None, None),
     )
 
@@ -185,11 +214,10 @@ def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
 
     return raw_key  # DISPLAY ONCE ONLY
 
+
 def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     raw_key = (raw_key or "").strip()
-    if not raw_key:
-        return None
-    if not raw_key.startswith("vx_"):
+    if not raw_key or not raw_key.startswith("vx_"):
         return None
 
     key_hash = hash_api_key(raw_key)
@@ -197,7 +225,8 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         SELECT
             t.tenant_id,
             t.tier,
@@ -209,7 +238,9 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
         JOIN tenants t ON t.tenant_id = k.tenant_id
         WHERE k.key_hash = ?
         LIMIT 1
-    """, (key_hash,))
+        """,
+        (key_hash,),
+    )
 
     row = cur.fetchone()
     con.close()
@@ -219,7 +250,6 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
 
     tenant_status = row[3]
     key_status = row[5]
-
     if tenant_status != "active" or key_status != "active":
         return None
 
@@ -229,6 +259,7 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
         "annual_analysis_limit": int(row[2]),
         "key_id": row[4],
     }
+
 
 def suspend_tenant(tenant_id: str) -> None:
     tenant_id = (tenant_id or "").strip()
@@ -241,6 +272,7 @@ def suspend_tenant(tenant_id: str) -> None:
     )
     con.commit()
     con.close()
+
 
 def rotate_key(tenant_id: str, old_key_id: str) -> str:
     tenant_id = (tenant_id or "").strip()
@@ -257,16 +289,20 @@ def rotate_key(tenant_id: str, old_key_id: str) -> str:
     cur = con.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
 
-    # Revoke old key (audit trail preserved)
     cur.execute(
-        "UPDATE tenant_keys SET status='revoked', revoked_utc=? WHERE key_id=? AND tenant_id=?",
+        """
+        UPDATE tenant_keys
+        SET status='revoked', revoked_utc=?
+        WHERE key_id=? AND tenant_id=?
+        """,
         (ts, old_key_id, tenant_id),
     )
 
-    # Insert new active key linked to old key id
     cur.execute(
-        """INSERT INTO tenant_keys (key_id, tenant_id, key_hash, status, created_utc, revoked_utc, rotated_from_key_id)
-           VALUES (?,?,?,?,?,?,?)""",
+        """
+        INSERT INTO tenant_keys (key_id, tenant_id, key_hash, status, created_utc, revoked_utc, rotated_from_key_id)
+        VALUES (?,?,?,?,?,?,?)
+        """,
         (new_key_id, tenant_id, key_hash, "active", ts, None, old_key_id),
     )
 
@@ -275,12 +311,14 @@ def rotate_key(tenant_id: str, old_key_id: str) -> str:
 
     return raw_key  # DISPLAY ONCE ONLY
 
+
 # =============================================================================
 # TENANT USAGE (YEARLY METERING)
 # =============================================================================
 def current_period_yyyy() -> str:
     # e.g., "2026"
     return datetime.now(timezone.utc).strftime("%Y")
+
 
 def ensure_usage_row(tenant_id: str, period_yyyy: str) -> None:
     ts = _utc_now_iso()
@@ -296,6 +334,7 @@ def ensure_usage_row(tenant_id: str, period_yyyy: str) -> None:
     )
     con.commit()
     con.close()
+
 
 def get_usage(tenant_id: str, period_yyyy: str) -> int:
     ensure_usage_row(tenant_id, period_yyyy)
@@ -313,6 +352,7 @@ def get_usage(tenant_id: str, period_yyyy: str) -> int:
     con.close()
     return int(row[0]) if row else 0
 
+
 def increment_usage(tenant_id: str, period_yyyy: str) -> None:
     ensure_usage_row(tenant_id, period_yyyy)
     ts = _utc_now_iso()
@@ -329,6 +369,7 @@ def increment_usage(tenant_id: str, period_yyyy: str) -> None:
     )
     con.commit()
     con.close()
+
 
 # =============================================================================
 # ADMIN REPORTING HELPERS
@@ -358,6 +399,7 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
         "updated_utc": row[5],
     }
 
+
 def admin_list_tenants(limit: int = 500) -> List[Tuple]:
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
@@ -373,6 +415,7 @@ def admin_list_tenants(limit: int = 500) -> List[Tuple]:
     rows = cur.fetchall()
     con.close()
     return rows
+
 
 def admin_list_tenant_keys(tenant_id: str, limit: int = 50) -> List[Tuple]:
     tenant_id = (tenant_id or "").strip()
@@ -392,8 +435,10 @@ def admin_list_tenant_keys(tenant_id: str, limit: int = 50) -> List[Tuple]:
     con.close()
     return rows
 
+
 def admin_get_usage(tenant_id: str, period_yyyy: str) -> int:
     return int(get_usage(tenant_id, period_yyyy))
+
 
 def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     """
@@ -409,7 +454,7 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
             t.tier,
             t.annual_analysis_limit,
             t.status,
-            COALESCE(u.analysis_count, 0) as analysis_count
+            COALESCE(u.analysis_count, 0) AS analysis_count
         FROM tenants t
         LEFT JOIN tenant_usage u
           ON u.tenant_id = t.tenant_id
@@ -422,4 +467,3 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     rows = cur.fetchall()
     con.close()
     return rows
-
