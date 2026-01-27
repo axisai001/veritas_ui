@@ -1,10 +1,10 @@
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
-# Updated: YEARLY metering (period_yyyy) instead of monthly (period_yyyymm)
+# Metering: YEARLY usage (period_yyyy). Entitlement column remains: monthly_analysis_limit (canonical).
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, Optional, List, Tuple, Set
 from pathlib import Path
 import os
 import sqlite3
@@ -45,6 +45,16 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _table_exists(cur: sqlite3.Cursor, name: str) -> bool:
+    cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (name,))
+    return cur.fetchone() is not None
+
+
+def _columns(cur: sqlite3.Cursor, name: str) -> Set[str]:
+    cur.execute(f"PRAGMA table_info({name})")
+    return {r[1] for r in cur.fetchall()}
+
+
 # =============================================================================
 # DB SCHEMA + MIGRATIONS
 # =============================================================================
@@ -53,51 +63,35 @@ def init_tenant_tables() -> None:
     cur = con.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
 
-    def _table_exists(name: str) -> bool:
-        cur.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
-            (name,),
-        )
-        return cur.fetchone() is not None
-
-    def _columns(name: str) -> set[str]:
-        cur.execute(f"PRAGMA table_info({name})")
-        return {r[1] for r in cur.fetchall()}
-
     # -----------------------------
     # TENANTS (canonical registry)
     # -----------------------------
-    # Create initial schema using annual_analysis_limit as canonical.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS tenants (
             tenant_id TEXT PRIMARY KEY,
             tier TEXT NOT NULL,
-            annual_analysis_limit INTEGER NOT NULL,
+            monthly_analysis_limit INTEGER NOT NULL,
             status TEXT NOT NULL,
             created_utc TEXT NOT NULL,
             updated_utc TEXT NOT NULL
         )
     """)
 
-    # MIGRATION: if older tenants table used monthly_analysis_limit, add annual_analysis_limit + backfill
-    if _table_exists("tenants"):
-        cols = _columns("tenants")
-
-        # If legacy column exists, migrate to annual_analysis_limit
-        if "monthly_analysis_limit" in cols and "annual_analysis_limit" not in cols:
-            cur.execute("ALTER TABLE tenants ADD COLUMN annual_analysis_limit INTEGER")
-            # Backfill: treat the existing value as the entitlement number (now annual)
-            cur.execute("UPDATE tenants SET annual_analysis_limit = monthly_analysis_limit WHERE annual_analysis_limit IS NULL")
-
-        # If both exist, keep annual as canonical; ensure annual not NULL
-        if "monthly_analysis_limit" in cols and "annual_analysis_limit" in cols:
-            cur.execute(
-                """
-                UPDATE tenants
-                SET annual_analysis_limit = COALESCE(annual_analysis_limit, monthly_analysis_limit)
-                WHERE annual_analysis_limit IS NULL
-                """
-            )
+    # MIGRATION: If someone previously created annual_analysis_limit column, rename to monthly_analysis_limit.
+    # SQLite supports RENAME COLUMN in modern versions; if this fails, fallback is to rebuild table (not done here).
+    if _table_exists(cur, "tenants"):
+        cols = _columns(cur, "tenants")
+        if "annual_analysis_limit" in cols and "monthly_analysis_limit" not in cols:
+            try:
+                cur.execute("ALTER TABLE tenants RENAME COLUMN annual_analysis_limit TO monthly_analysis_limit")
+            except Exception:
+                # If your SQLite is too old for RENAME COLUMN, you must delete the DB or do a rebuild migration.
+                # We fail closed with a clear message rather than silently corrupting data.
+                con.close()
+                raise RuntimeError(
+                    "DB migration needed: tenants has annual_analysis_limit but no monthly_analysis_limit, "
+                    "and SQLite cannot RENAME COLUMN. Delete veritas.db or run a rebuild migration."
+                )
 
     # -----------------------------
     # TENANT KEYS (hashed, rotatable)
@@ -116,15 +110,15 @@ def init_tenant_tables() -> None:
     """)
 
     # -------------------------------------------------
-    # MIGRATION: monthly tenant_usage(period_yyyymm) -> yearly tenant_usage(period_yyyy)
+    # MIGRATION: monthly tenant_usage -> yearly tenant_usage
+    # Old schema: tenant_usage(tenant_id, period_yyyymm, analysis_count, created_utc, updated_utc)
+    # New schema: tenant_usage(tenant_id, period_yyyy,  analysis_count, created_utc, updated_utc)
     # -------------------------------------------------
-    if _table_exists("tenant_usage"):
-        cols = _columns("tenant_usage")
+    if _table_exists(cur, "tenant_usage"):
+        cols = _columns(cur, "tenant_usage")
         if "period_yyyymm" in cols and "period_yyyy" not in cols:
-            # Rename old table
             cur.execute("ALTER TABLE tenant_usage RENAME TO tenant_usage_old")
 
-            # Create new yearly table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS tenant_usage (
                     tenant_id TEXT NOT NULL,
@@ -137,7 +131,7 @@ def init_tenant_tables() -> None:
                 )
             """)
 
-            # Roll up monthly -> yearly (take YYYY from YYYYMM)
+            # Roll up YYYYMM -> YYYY
             cur.execute("""
                 INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc)
                 SELECT
@@ -174,10 +168,10 @@ def init_tenant_tables() -> None:
 # =============================================================================
 # TENANT MANAGEMENT (Admin)
 # =============================================================================
-def admin_create_tenant(tenant_id: str, tier: str, annual_limit: int) -> str:
+def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
     """
     Creates a tenant + issues a new vx_ key (returned ONCE).
-    annual_analysis_limit is the canonical entitlement field.
+    Entitlement column is monthly_analysis_limit (canonical), regardless of metering period length.
     """
     tenant_id = (tenant_id or "").strip()
     if not tenant_id:
@@ -195,10 +189,10 @@ def admin_create_tenant(tenant_id: str, tier: str, annual_limit: int) -> str:
 
     cur.execute(
         """
-        INSERT INTO tenants (tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc)
+        INSERT INTO tenants (tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc)
         VALUES (?,?,?,?,?,?)
         """,
-        (tenant_id, tier, int(annual_limit), "active", ts, ts),
+        (tenant_id, tier, int(monthly_limit), "active", ts, ts),
     )
 
     cur.execute(
@@ -211,7 +205,6 @@ def admin_create_tenant(tenant_id: str, tier: str, annual_limit: int) -> str:
 
     con.commit()
     con.close()
-
     return raw_key  # DISPLAY ONCE ONLY
 
 
@@ -230,7 +223,7 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
         SELECT
             t.tenant_id,
             t.tier,
-            t.annual_analysis_limit,
+            t.monthly_analysis_limit,
             t.status,
             k.key_id,
             k.status
@@ -244,7 +237,6 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
 
     row = cur.fetchone()
     con.close()
-
     if not row:
         return None
 
@@ -256,7 +248,7 @@ def verify_tenant_key(raw_key: str) -> Optional[Dict]:
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "annual_analysis_limit": int(row[2]),
+        "monthly_analysis_limit": int(row[2]),
         "key_id": row[4],
     }
 
@@ -290,11 +282,7 @@ def rotate_key(tenant_id: str, old_key_id: str) -> str:
     cur.execute("PRAGMA foreign_keys = ON;")
 
     cur.execute(
-        """
-        UPDATE tenant_keys
-        SET status='revoked', revoked_utc=?
-        WHERE key_id=? AND tenant_id=?
-        """,
+        "UPDATE tenant_keys SET status='revoked', revoked_utc=? WHERE key_id=? AND tenant_id=?",
         (ts, old_key_id, tenant_id),
     )
 
@@ -308,7 +296,6 @@ def rotate_key(tenant_id: str, old_key_id: str) -> str:
 
     con.commit()
     con.close()
-
     return raw_key  # DISPLAY ONCE ONLY
 
 
@@ -316,7 +303,6 @@ def rotate_key(tenant_id: str, old_key_id: str) -> str:
 # TENANT USAGE (YEARLY METERING)
 # =============================================================================
 def current_period_yyyy() -> str:
-    # e.g., "2026"
     return datetime.now(timezone.utc).strftime("%Y")
 
 
@@ -380,7 +366,7 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
     cur = con.cursor()
     cur.execute(
         """
-        SELECT tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc
+        SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc
         FROM tenants
         WHERE tenant_id=?
         """,
@@ -393,7 +379,7 @@ def admin_get_tenant(tenant_id: str) -> Optional[Dict]:
     return {
         "tenant_id": row[0],
         "tier": row[1],
-        "annual_analysis_limit": int(row[2]),
+        "monthly_analysis_limit": int(row[2]),
         "status": row[3],
         "created_utc": row[4],
         "updated_utc": row[5],
@@ -405,7 +391,7 @@ def admin_list_tenants(limit: int = 500) -> List[Tuple]:
     cur = con.cursor()
     cur.execute(
         """
-        SELECT tenant_id, tier, annual_analysis_limit, status, created_utc, updated_utc
+        SELECT tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc
         FROM tenants
         ORDER BY created_utc DESC
         LIMIT ?
@@ -452,7 +438,7 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
         SELECT
             t.tenant_id,
             t.tier,
-            t.annual_analysis_limit,
+            t.monthly_analysis_limit,
             t.status,
             COALESCE(u.analysis_count, 0) AS analysis_count
         FROM tenants t
