@@ -1,3 +1,4 @@
+```python
 # streamlit_app.py — Veritas (Streamlit) — v4 Governance Baseline
 # Output schema: plain text only
 # Required sections: Objective Findings + Advisory Guidance (always present)
@@ -680,7 +681,7 @@ st.session_state.setdefault("report_ready", False)
 # Tenant session defaults (B2B)
 st.session_state.setdefault("tenant_verified", False)
 st.session_state.setdefault("tenant_id", "")
-st.session_state.setdefault("tenant_limit", 0)  # annual entitlement (canonical key: monthly_analysis_limit)
+st.session_state.setdefault("tenant_limit", 0)  # annual entitlement (canonical key: annual_analysis_limit)
 st.session_state.setdefault("tenant_key_id", "")
 
 # =============================================================================
@@ -859,7 +860,8 @@ with tab_analyze:
             st.session_state["tenant_verified"] = True
             st.session_state["tenant_id"] = t["tenant_id"]
 
-            st.session_state["tenant_limit"] = int(t.get("monthly_analysis_limit") or 0)
+            # Read ONLY annual_analysis_limit (tenant_store now returns this)
+            st.session_state["tenant_limit"] = int(t.get("annual_analysis_limit") or 0)
             st.session_state["tenant_key_id"] = t.get("key_id", "")
 
             st.success("Tenant verified. You may now run analyses.")
@@ -1151,7 +1153,8 @@ if tab_admin is not None:
             else:
                 used = admin_get_usage(t["tenant_id"], period)
 
-                limit_val = int(t.get("monthly_analysis_limit") or 0)
+                # Read ONLY annual_analysis_limit (tenant_store now returns this)
+                limit_val = int(t.get("annual_analysis_limit") or 0)
 
                 st.success("Tenant found.")
                 st.write({
@@ -1204,7 +1207,8 @@ if tab_admin is not None:
             tenant_ctx = st.session_state.get("test_tenant_ctx")
 
             if tenant_ctx:
-                limit_val = int(tenant_ctx.get("monthly_analysis_limit") or 0)
+                # Read ONLY annual_analysis_limit (tenant_store now returns this)
+                limit_val = int(tenant_ctx.get("annual_analysis_limit") or 0)
 
                 st.markdown("### Resolved Tenant Context")
                 st.json({
@@ -1257,13 +1261,6 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
-
-
-
-
-
-
-
 
 
 
