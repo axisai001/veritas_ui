@@ -1,4 +1,3 @@
-```python
 # tenant_store.py — B2B Tenant Key Store (VER-B2B-001 / VER-B2B-002)
 # Metering: YEARLY usage (period_yyyy).
 # Storage: entitlement column remains monthly_analysis_limit (legacy DB name).
@@ -201,6 +200,12 @@ def admin_create_tenant(tenant_id: str, tier: str, monthly_limit: int) -> str:
     cur = con.cursor()
     cur.execute("PRAGMA foreign_keys = ON;")
 
+    # Fail loud & clear if tenant_id already exists (common testing gotcha).
+    cur.execute("SELECT 1 FROM tenants WHERE tenant_id=? LIMIT 1", (tenant_id,))
+    if cur.fetchone():
+        con.close()
+        raise sqlite3.IntegrityError("UNIQUE constraint failed: tenants.tenant_id")
+
     cur.execute(
         """
         INSERT INTO tenants (tenant_id, tier, monthly_analysis_limit, status, created_utc, updated_utc)
@@ -377,6 +382,10 @@ def get_usage(tenant_id: str, period_yyyy: str) -> int:
 
 
 def increment_usage(tenant_id: str, period_yyyy: str) -> None:
+    """
+    Consume 1 analysis for (tenant_id, year).
+    NOTE: This does not re-check quota. Quota is enforced BEFORE calling this.
+    """
     ensure_usage_row(tenant_id, period_yyyy)
     ts = _utc_now_iso()
     con = sqlite3.connect(DB_PATH, timeout=30)
@@ -469,8 +478,6 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     """
     Returns per-tenant usage for a given year.
     Includes tenants even if usage row doesn't exist yet by LEFT JOIN.
-
-    NOTE: We alias monthly_analysis_limit to annual_analysis_limit for app-facing consistency.
     """
     con = sqlite3.connect(DB_PATH, timeout=30)
     cur = con.cursor()
@@ -494,4 +501,10 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
     rows = cur.fetchall()
     con.close()
     return rows
-```
+
+
+# =============================================================================
+# Compatibility aliases (so older tests/scripts don't break)
+# =============================================================================
+def list_tenants(limit: int = 500) -> List[Tuple]:
+    return admin_list_tenants(limit=limit)
