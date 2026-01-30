@@ -55,6 +55,26 @@ APP_TITLE = (os.environ.get("APP_TITLE") or "Veritas").strip()
 MODEL_NAME = (os.getenv("OPENAI_MODEL", "").strip() or "gpt-4.1-mini")
 TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
 
+# --- ENFORCED OpenAI key wiring (Secrets-first fallback + env) ---
+def _get_openai_api_key() -> str:
+    # Prefer env (typical for containers), fallback to Streamlit secrets
+    api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
+    if not api_key:
+        try:
+            api_key = (st.secrets.get("OPENAI_API_KEY") or "").strip()
+        except Exception:
+            api_key = ""
+    return api_key
+
+def get_openai_client() -> OpenAI:
+    api_key = _get_openai_api_key()
+    if not api_key:
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured. Set it in Streamlit Secrets "
+            "(OPENAI_API_KEY) or as an environment variable."
+        )
+    return OpenAI(api_key=api_key)
+
 # Auth (set via Streamlit secrets or environment variables)
 APP_PASSWORD = (os.environ.get("APP_PASSWORD") or "").strip()
 ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
@@ -945,7 +965,7 @@ with tab_analyze:
                 st.markdown(output)
                 st.stop()
 
-            client = OpenAI()
+            client = get_openai_client()
             resp = client.chat.completions.create(
                 model=MODEL_NAME,
                 messages=[
@@ -1174,7 +1194,7 @@ if tab_admin is not None:
                         test_input = "This is a neutral policy statement for tenant gateway testing."
 
                         try:
-                            client = OpenAI()
+                            client = get_openai_client()
                             resp = client.chat.completions.create(
                                 model=MODEL_NAME,
                                 messages=[
@@ -1203,9 +1223,6 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
-
-
-
 
 
 
