@@ -1,5 +1,6 @@
-# api_auth.py — B2B API Authentication (VER-B2B-003)
+# api_auth.py — B2B API Authentication (VER-B2B-003 / VER-B2B-005)
 # Fail-closed authentication & entitlement checks.
+# Adds 95% usage threshold warning metadata (does NOT block analysis).
 # No Streamlit dependency.
 
 from __future__ import annotations
@@ -13,6 +14,9 @@ from tenant_store import (
     get_usage,
 )
 
+# -----------------------------
+# Exceptions (framework-agnostic)
+# -----------------------------
 class Unauthorized(Exception):
     """401"""
     pass
@@ -25,6 +29,10 @@ class TooManyRequests(Exception):
     """429"""
     pass
 
+
+# -----------------------------
+# Tenant context (returned on success)
+# -----------------------------
 @dataclass(frozen=True)
 class TenantContext:
     tenant_id: str
@@ -33,6 +41,15 @@ class TenantContext:
     key_id: str
     period_yyyy: str
     used_this_period: int
+
+    # --- VER-B2B-005: warning metadata ---
+    remaining_this_period: int
+    usage_ratio: float                 # 0.0–1.0
+    usage_percent: int                 # 0–100 (rounded down)
+    warning_threshold_percent: int     # default 95
+    warning_triggered: bool
+    warning_message: Optional[str]
+
 
 def authenticate_request(api_key: Optional[str]) -> TenantContext:
     raw = (api_key or "").strip()
@@ -61,8 +78,22 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
     period = current_period_yyyy()
     used = int(get_usage(tenant_id, period))
 
+    # Hard-stop (existing behavior)
     if used >= annual_limit:
         raise TooManyRequests(f"Over quota ({used}/{annual_limit})")
+
+    # --- VER-B2B-005: compute warning metadata ---
+    # (NOTE: Your current metering is period_yyyy, but messaging can still say "monthly" if desired.)
+    remaining = max(annual_limit - used, 0)
+    ratio = (used / annual_limit) if annual_limit > 0 else 1.0
+    percent = int(ratio * 100)  # floor
+
+    threshold_percent = 95
+    warning_triggered = (percent >= threshold_percent)
+
+    warning_message = None
+    if warning_triggered:
+        warning_message = f"You have used {percent}% of your monthly analysis quota."
 
     return TenantContext(
         tenant_id=tenant_id,
@@ -71,4 +102,10 @@ def authenticate_request(api_key: Optional[str]) -> TenantContext:
         key_id=key_id,
         period_yyyy=period,
         used_this_period=used,
+        remaining_this_period=remaining,
+        usage_ratio=float(ratio),
+        usage_percent=percent,
+        warning_threshold_percent=threshold_percent,
+        warning_triggered=warning_triggered,
+        warning_message=warning_message,
     )
