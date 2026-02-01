@@ -174,12 +174,20 @@ def init_tenant_tables() -> None:
     """)
 
     # -----------------------------
-    # MIGRATION: add one-time warning flag (warned_95)
+    # TENANT WARNINGS (VER-B2B-005)
+    # One-time warning flags per period
     # -----------------------------
-    if _table_exists(cur, "tenant_usage"):
-        cols = _columns(cur, "tenant_usage")
-        if "warned_95" not in cols:
-            cur.execute("ALTER TABLE tenant_usage ADD COLUMN warned_95 INTEGER NOT NULL DEFAULT 0")
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_warnings (
+            tenant_id TEXT NOT NULL,
+            period_yyyy TEXT NOT NULL,
+            warned_95 INTEGER NOT NULL DEFAULT 0,
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL,
+            PRIMARY KEY (tenant_id, period_yyyy),
+            FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
+        )
+    """)
 
     con.commit()
     con.close()
@@ -362,8 +370,8 @@ def ensure_usage_row(tenant_id: str, period_yyyy: str) -> None:
     cur = con.cursor()
     cur.execute(
         """
-        INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc, warned_95)
-        VALUES (?, ?, 0, ?, ?, 0)
+        INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc)
+        VALUES (?, ?, 0, ?, ?)
         ON CONFLICT(tenant_id, period_yyyy) DO NOTHING
         """,
         (tenant_id, period_yyyy, ts, ts),
@@ -389,33 +397,6 @@ def get_usage(tenant_id: str, period_yyyy: str) -> int:
     return int(row[0]) if row else 0
 
 
-def try_set_95_warning_once(tenant_id: str, period_yyyy: str) -> bool:
-    """
-    Returns True only the first time we set warned_95=1 for (tenant_id, period_yyyy).
-    Subsequent calls return False (warning already sent).
-    """
-    ensure_usage_row(tenant_id, period_yyyy)
-    ts = _utc_now_iso()
-
-    con = sqlite3.connect(DB_PATH, timeout=30)
-    cur = con.cursor()
-    cur.execute(
-        """
-        UPDATE tenant_usage
-        SET warned_95 = 1,
-            updated_utc = ?
-        WHERE tenant_id = ?
-          AND period_yyyy = ?
-          AND warned_95 = 0
-        """,
-        (ts, tenant_id, period_yyyy),
-    )
-    changed = (cur.rowcount == 1)
-    con.commit()
-    con.close()
-    return changed
-
-
 def increment_usage(tenant_id: str, period_yyyy: str) -> None:
     """
     Consume 1 analysis for (tenant_id, year).
@@ -430,6 +411,55 @@ def increment_usage(tenant_id: str, period_yyyy: str) -> None:
         UPDATE tenant_usage
         SET analysis_count = analysis_count + 1,
             updated_utc = ?
+        WHERE tenant_id=? AND period_yyyy=?
+        """,
+        (ts, tenant_id, period_yyyy),
+    )
+    con.commit()
+    con.close()
+
+
+# =============================================================================
+# VER-B2B-005 — 95% WARNING (FIRE ONCE PER TENANT/PERIOD)
+# =============================================================================
+def _ensure_warning_row(tenant_id: str, period_yyyy: str) -> None:
+    ts = _utc_now_iso()
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        INSERT INTO tenant_warnings (tenant_id, period_yyyy, warned_95, created_utc, updated_utc)
+        VALUES (?, ?, 0, ?, ?)
+        ON CONFLICT(tenant_id, period_yyyy) DO NOTHING
+        """,
+        (tenant_id, period_yyyy, ts, ts),
+    )
+    con.commit()
+    con.close()
+
+
+def has_warned_95(tenant_id: str, period_yyyy: str) -> bool:
+    _ensure_warning_row(tenant_id, period_yyyy)
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        "SELECT warned_95 FROM tenant_warnings WHERE tenant_id=? AND period_yyyy=?",
+        (tenant_id, period_yyyy),
+    )
+    row = cur.fetchone()
+    con.close()
+    return bool(row and int(row[0]) == 1)
+
+
+def mark_warned_95(tenant_id: str, period_yyyy: str) -> None:
+    _ensure_warning_row(tenant_id, period_yyyy)
+    ts = _utc_now_iso()
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        UPDATE tenant_warnings
+        SET warned_95=1, updated_utc=?
         WHERE tenant_id=? AND period_yyyy=?
         """,
         (ts, tenant_id, period_yyyy),
@@ -543,4 +573,3 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
 # =============================================================================
 def list_tenants(limit: int = 500) -> List[Tuple]:
     return admin_list_tenants(limit=limit)
-
