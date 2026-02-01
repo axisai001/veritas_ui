@@ -15,6 +15,14 @@
 #   streamlit, openai, pandas, python-docx, pypdf
 
 import os
+
+# VER-B2B-007 — Internal Console Isolation Guardrail (fail-closed)
+if os.getenv("APP_MODE") != "internal_console":
+    raise RuntimeError(
+        "Internal console disabled in this environment. "
+        "Set APP_MODE=internal_console to run Streamlit UI."
+    )
+
 import io
 import re
 import csv
@@ -1223,6 +1231,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
