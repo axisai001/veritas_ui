@@ -173,6 +173,14 @@ def init_tenant_tables() -> None:
         )
     """)
 
+    # -----------------------------
+    # MIGRATION: add one-time warning flag (warned_95)
+    # -----------------------------
+    if _table_exists(cur, "tenant_usage"):
+        cols = _columns(cur, "tenant_usage")
+        if "warned_95" not in cols:
+            cur.execute("ALTER TABLE tenant_usage ADD COLUMN warned_95 INTEGER NOT NULL DEFAULT 0")
+
     con.commit()
     con.close()
 
@@ -354,8 +362,8 @@ def ensure_usage_row(tenant_id: str, period_yyyy: str) -> None:
     cur = con.cursor()
     cur.execute(
         """
-        INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc)
-        VALUES (?, ?, 0, ?, ?)
+        INSERT INTO tenant_usage (tenant_id, period_yyyy, analysis_count, created_utc, updated_utc, warned_95)
+        VALUES (?, ?, 0, ?, ?, 0)
         ON CONFLICT(tenant_id, period_yyyy) DO NOTHING
         """,
         (tenant_id, period_yyyy, ts, ts),
@@ -379,6 +387,33 @@ def get_usage(tenant_id: str, period_yyyy: str) -> int:
     row = cur.fetchone()
     con.close()
     return int(row[0]) if row else 0
+
+
+def try_set_95_warning_once(tenant_id: str, period_yyyy: str) -> bool:
+    """
+    Returns True only the first time we set warned_95=1 for (tenant_id, period_yyyy).
+    Subsequent calls return False (warning already sent).
+    """
+    ensure_usage_row(tenant_id, period_yyyy)
+    ts = _utc_now_iso()
+
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        UPDATE tenant_usage
+        SET warned_95 = 1,
+            updated_utc = ?
+        WHERE tenant_id = ?
+          AND period_yyyy = ?
+          AND warned_95 = 0
+        """,
+        (ts, tenant_id, period_yyyy),
+    )
+    changed = (cur.rowcount == 1)
+    con.commit()
+    con.close()
+    return changed
 
 
 def increment_usage(tenant_id: str, period_yyyy: str) -> None:
@@ -508,3 +543,4 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
 # =============================================================================
 def list_tenants(limit: int = 500) -> List[Tuple]:
     return admin_list_tenants(limit=limit)
+
