@@ -7,7 +7,7 @@ from fastapi import FastAPI, Depends
 
 from api_fastapi_adapter import require_tenant
 from api_auth import TenantContext
-from tenant_store import increment_usage  # meters quota
+from tenant_store import increment_usage, try_set_95_warning_once  # meters quota + warning flag
 
 WARNING_THRESHOLD = 0.95  # VER-B2B-005
 
@@ -36,8 +36,10 @@ def analyze(payload: dict, tenant: TenantContext = Depends(require_tenant)):
 
     warning_msg = None
     if limit > 0 and ratio >= WARNING_THRESHOLD:
-        pct = int(round(ratio * 100))
-        warning_msg = f"You have used {pct}% of your monthly analysis quota."
+        # Fire warning only once per tenant+period
+        if try_set_95_warning_once(tenant.tenant_id, tenant.period_yyyy):
+            pct = int(round(ratio * 100))
+            warning_msg = f"You have used {pct}% of your monthly analysis quota."
 
     # Consume quota (metering)
     increment_usage(tenant.tenant_id, tenant.period_yyyy)
