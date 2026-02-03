@@ -13,6 +13,7 @@ import sqlite3
 import uuid
 import secrets
 import hashlib
+import time  # <-- ADDED (VER-B2B-008)
 
 # -------------------------------------------------
 # Database path (single source of truth)
@@ -186,6 +187,43 @@ def init_tenant_tables() -> None:
             updated_utc TEXT NOT NULL,
             PRIMARY KEY (tenant_id, period_yyyy),
             FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
+        )
+    """)
+
+    # =============================================================================
+    # VER-B2B-008 — Per-tenant rate limiting (server-side, shared, audited)
+    # =============================================================================
+
+    # Shared counter by (tenant_id, rule, window_start_epoch)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_rate_counters (
+            tenant_id TEXT NOT NULL,
+            rule TEXT NOT NULL,
+            window_start_epoch INTEGER NOT NULL,
+            count INTEGER NOT NULL DEFAULT 0,
+            created_utc TEXT NOT NULL,
+            updated_utc TEXT NOT NULL,
+            PRIMARY KEY (tenant_id, rule, window_start_epoch),
+            FOREIGN KEY (tenant_id) REFERENCES tenants (tenant_id)
+        )
+    """)
+
+    # Audit log (append-only)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS tenant_rate_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_utc TEXT NOT NULL,
+            tenant_id TEXT NOT NULL,
+            rule TEXT NOT NULL,
+            allowed INTEGER NOT NULL,
+            limit_val INTEGER NOT NULL,
+            window_sec INTEGER NOT NULL,
+            window_start_epoch INTEGER NOT NULL,
+            count_before INTEGER NOT NULL,
+            count_after INTEGER NOT NULL,
+            key_id TEXT,
+            route TEXT,
+            ip TEXT
         )
     """)
 
@@ -573,3 +611,201 @@ def admin_usage_snapshot(period_yyyy: str, limit: int = 500) -> List[Tuple]:
 # =============================================================================
 def list_tenants(limit: int = 500) -> List[Tuple]:
     return admin_list_tenants(limit=limit)
+
+
+# =============================================================================
+# VER-B2B-008 — Per-tenant rate limiting (shared across processes, audited)
+# =============================================================================
+def _window_start_epoch(now_epoch: int, window_sec: int) -> int:
+    # Fixed window start (e.g., every 60s bucket, every 1s bucket)
+    if window_sec <= 0:
+        return now_epoch
+    return now_epoch - (now_epoch % window_sec)
+
+
+def rate_limit_check(
+    tenant_id: str,
+    rule: str,
+    limit_val: int,
+    window_sec: int,
+    *,
+    key_id: str = "",
+    route: str = "",
+    ip: str = "",
+    consume: int = 1,
+) -> Tuple[bool, int, int, int]:
+    """
+    Atomic per-tenant rate limiter (fixed-window), shared across processes via SQLite.
+
+    Returns: (allowed, remaining, count_after, reset_epoch)
+
+    Fail-closed behavior:
+      - If DB operation fails for any reason, we deny (allowed=False).
+    """
+    tenant_id = (tenant_id or "").strip()
+    rule = (rule or "").strip()
+    limit_val = int(limit_val or 0)
+    window_sec = int(window_sec or 0)
+    consume = int(consume or 1)
+
+    if not tenant_id or not rule or limit_val <= 0 or window_sec <= 0 or consume <= 0:
+        # Misconfigured limiter => fail-closed (deny)
+        return (False, 0, 0, int(time.time()) + max(window_sec, 1))
+
+    now_epoch = int(time.time())
+    win_start = _window_start_epoch(now_epoch, window_sec)
+    reset_epoch = win_start + window_sec
+
+    ts = _utc_now_iso()
+
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    try:
+        cur = con.cursor()
+        cur.execute("PRAGMA foreign_keys = ON;")
+
+        # IMMEDIATE gives us a write lock early (race-safe across processes)
+        cur.execute("BEGIN IMMEDIATE")
+
+        # Ensure row exists
+        cur.execute(
+            """
+            INSERT INTO tenant_rate_counters (tenant_id, rule, window_start_epoch, count, created_utc, updated_utc)
+            VALUES (?, ?, ?, 0, ?, ?)
+            ON CONFLICT(tenant_id, rule, window_start_epoch) DO NOTHING
+            """,
+            (tenant_id, rule, win_start, ts, ts),
+        )
+
+        cur.execute(
+            """
+            SELECT count
+            FROM tenant_rate_counters
+            WHERE tenant_id=? AND rule=? AND window_start_epoch=?
+            """,
+            (tenant_id, rule, win_start),
+        )
+        row = cur.fetchone()
+        count_before = int(row[0]) if row else 0
+
+        projected = count_before + consume
+        allowed = 1 if projected <= limit_val else 0
+
+        if allowed:
+            cur.execute(
+                """
+                UPDATE tenant_rate_counters
+                SET count = count + ?,
+                    updated_utc = ?
+                WHERE tenant_id=? AND rule=? AND window_start_epoch=?
+                """,
+                (consume, ts, tenant_id, rule, win_start),
+            )
+
+        # Re-read after update (authoritative)
+        cur.execute(
+            """
+            SELECT count
+            FROM tenant_rate_counters
+            WHERE tenant_id=? AND rule=? AND window_start_epoch=?
+            """,
+            (tenant_id, rule, win_start),
+        )
+        row2 = cur.fetchone()
+        count_after = int(row2[0]) if row2 else count_before
+
+        remaining = max(0, int(limit_val - count_after))
+
+        # Audit event (always log: allow/deny)
+        cur.execute(
+            """
+            INSERT INTO tenant_rate_events
+              (created_utc, tenant_id, rule, allowed, limit_val, window_sec, window_start_epoch,
+               count_before, count_after, key_id, route, ip)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                ts,
+                tenant_id,
+                rule,
+                int(bool(allowed)),
+                int(limit_val),
+                int(window_sec),
+                int(win_start),
+                int(count_before),
+                int(count_after),
+                (key_id or "")[:64] if key_id else None,
+                (route or "")[:120] if route else None,
+                (ip or "")[:64] if ip else None,
+            ),
+        )
+
+        con.commit()
+        return (bool(allowed), remaining, count_after, reset_epoch)
+
+    except Exception:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        # Fail-closed
+        return (False, 0, 0, reset_epoch)
+    finally:
+        con.close()
+
+
+def rate_limit_check_or_raise(
+    tenant_id: str,
+    rule: str,
+    limit_val: int,
+    window_sec: int,
+    *,
+    key_id: str = "",
+    route: str = "",
+    ip: str = "",
+    consume: int = 1,
+) -> Dict[str, int]:
+    """
+    Convenience wrapper: raises RuntimeError on deny (fail-closed).
+    Returns dict of metadata when allowed (for API response headers / logs).
+    """
+    allowed, remaining, count_after, reset_epoch = rate_limit_check(
+        tenant_id=tenant_id,
+        rule=rule,
+        limit_val=limit_val,
+        window_sec=window_sec,
+        key_id=key_id,
+        route=route,
+        ip=ip,
+        consume=consume,
+    )
+    if not allowed:
+        raise RuntimeError(f"Rate limit exceeded for {rule}")
+
+    return {
+        "remaining": int(remaining),
+        "count": int(count_after),
+        "reset_epoch": int(reset_epoch),
+        "limit": int(limit_val),
+        "window_sec": int(window_sec),
+    }
+
+
+def admin_recent_rate_events(limit: int = 500) -> List[Tuple]:
+    """
+    Returns most recent rate-limit events for audit review.
+    """
+    con = sqlite3.connect(DB_PATH, timeout=30)
+    cur = con.cursor()
+    cur.execute(
+        """
+        SELECT id, created_utc, tenant_id, rule, allowed, limit_val, window_sec,
+               window_start_epoch, count_before, count_after, key_id, route, ip
+        FROM tenant_rate_events
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (int(limit),),
+    )
+    rows = cur.fetchall()
+    con.close()
+    return rows
