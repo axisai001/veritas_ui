@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request  # <-- ADDED: Request (VER-B2B-008)
 
 from api_auth import (
     authenticate_request,
@@ -24,6 +24,8 @@ from api_auth import (
     TooManyRequests,
     TenantContext,
 )
+
+from tenant_store import rate_limit_check  # <-- ADDED (VER-B2B-008)
 
 # -------------------------------------------------
 # Header extraction
@@ -73,6 +75,7 @@ def get_api_key(
 # Dependency used by API routes
 # -------------------------------------------------
 def require_tenant(
+    request: Request,  # <-- ADDED (VER-B2B-008) for IP + route logging
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> TenantContext:
@@ -87,7 +90,61 @@ def require_tenant(
         raise HTTPException(status_code=401, detail="Invalid API key")
 
     try:
-        return authenticate_request(api_key)
+        tenant = authenticate_request(api_key)
+
+        # =============================================================================
+        # VER-B2B-008 — Per-tenant rate limiting (server-side, shared, audited)
+        # Replace session-based rate limiting with tenant_id-based enforcement.
+        # =============================================================================
+
+        tenant_id = str(getattr(tenant, "tenant_id", "") or "").strip()
+        key_id = str(getattr(tenant, "key_id", "") or "").strip()
+
+        # Best-effort route + IP for audit (do NOT block if missing)
+        route = ""
+        try:
+            route = str(getattr(request, "url", None).path or "")
+        except Exception:
+            route = ""
+        ip = ""
+        try:
+            ip = str(getattr(getattr(request, "client", None), "host", "") or "")
+        except Exception:
+            ip = ""
+
+        # Fail-closed: if tenant_id missing, deny (prevents unkeyed limiting)
+        if not tenant_id:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+        # Rule 1: 10 requests per minute per tenant (burst control)
+        allowed_1, _, _, _ = rate_limit_check(
+            tenant_id=tenant_id,
+            rule="tenant_rpm_10",
+            limit_val=10,
+            window_sec=60,
+            key_id=key_id,
+            route=route,
+            ip=ip,
+            consume=1,
+        )
+        if not allowed_1:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded (tenant_rpm_10)")
+
+        # Rule 2: 2 requests per second per tenant (sustained control)
+        allowed_2, _, _, _ = rate_limit_check(
+            tenant_id=tenant_id,
+            rule="tenant_rps_2",
+            limit_val=2,
+            window_sec=1,
+            key_id=key_id,
+            route=route,
+            ip=ip,
+            consume=1,
+        )
+        if not allowed_2:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded (tenant_rps_2)")
+
+        return tenant
 
     except TooManyRequests as e:
         raise HTTPException(status_code=429, detail=str(e))
@@ -99,5 +156,8 @@ def require_tenant(
         raise HTTPException(status_code=401, detail=str(e))
 
     # Catch-all fail-closed (avoid leaking unexpected errors)
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
