@@ -1,4 +1,6 @@
 # api_app.py — minimal FastAPI app (with quota consumption + 95% warning)
+# NOTE (VER-B2B-008): per-tenant rate limiting is enforced upstream in require_tenant()
+# and applies automatically to this endpoint.
 
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ def analyze(payload: dict, tenant: TenantContext = Depends(require_tenant)):
     """
     Behavior:
     - require_tenant() authenticates and hard-stops if already over quota (429).
+    - require_tenant() also enforces VER-B2B-008 per-tenant rate limiting (429) before handler runs.
     - We consume quota AFTER successful request handling.
     - We return a 95% usage warning as non-blocking metadata.
     - Warning fires ONCE per tenant per period.
