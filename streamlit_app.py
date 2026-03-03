@@ -15,14 +15,6 @@
 #   streamlit, openai, pandas, python-docx, pypdf
 
 import os
-
-# VER-B2B-007 — Internal Console Isolation Guardrail (fail-closed)
-if os.getenv("APP_MODE") != "internal_console":
-    raise RuntimeError(
-        "Internal console disabled in this environment. "
-        "Set APP_MODE=internal_console to run Streamlit UI."
-    )
-
 import io
 import re
 import csv
@@ -43,6 +35,31 @@ import pandas as pd
 import streamlit as st
 from openai import OpenAI
 
+# =============================================================================
+# VER-B2B-007 — Internal Console Isolation Guardrail (fail-closed, but no crash)
+# =============================================================================
+def _get_setting(name: str, default: str = "") -> str:
+    """Env-first, then Streamlit secrets. Returns stripped string."""
+    v = (os.getenv(name) or "").strip()
+    if v:
+        return v
+    try:
+        v = (st.secrets.get(name) or "").strip()
+    except Exception:
+        v = ""
+    return v or default
+
+APP_MODE = _get_setting("APP_MODE", "")
+BYPASS = _get_setting("INTERNAL_CONSOLE_BYPASS", "0")
+
+if APP_MODE != "internal_console" and BYPASS != "1":
+    st.set_page_config(page_title="Veritas", layout="centered")
+    st.error("Internal console is disabled in this environment.")
+    st.caption(
+        "Set APP_MODE=internal_console (env or Streamlit Secrets) to enable this Streamlit UI."
+    )
+    st.stop()
+
 # Refusal Router (required companion file)
 from refusal_router import check_refusal, render_refusal, RefusalResult
 
@@ -57,49 +74,43 @@ UPLOAD_DIR = STATIC_DIR / "uploads"
 for p in (DATA_DIR, STATIC_DIR, UPLOAD_DIR):
     p.mkdir(parents=True, exist_ok=True)
 
-APP_TITLE = (os.environ.get("APP_TITLE") or "Veritas").strip()
+APP_TITLE = (_get_setting("APP_TITLE", "Veritas")).strip()
 
 # OpenAI
-MODEL_NAME = (os.getenv("OPENAI_MODEL", "").strip() or "gpt-4.1-mini")
-TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.2"))
+MODEL_NAME = (_get_setting("OPENAI_MODEL", "") or "gpt-4.1-mini").strip()
+TEMPERATURE = float(_get_setting("OPENAI_TEMPERATURE", "0.2"))
 
-# --- ENFORCED OpenAI key wiring (Secrets-first fallback + env) ---
+# --- ENFORCED OpenAI key wiring (Env-first fallback + secrets) ---
 def _get_openai_api_key() -> str:
-    # Prefer env (typical for containers), fallback to Streamlit secrets
-    api_key = (os.environ.get("OPENAI_API_KEY") or "").strip()
-    if not api_key:
-        try:
-            api_key = (st.secrets.get("OPENAI_API_KEY") or "").strip()
-        except Exception:
-            api_key = ""
+    api_key = (_get_setting("OPENAI_API_KEY", "") or "").strip()
     return api_key
 
 def get_openai_client() -> OpenAI:
     api_key = _get_openai_api_key()
     if not api_key:
-        raise RuntimeError(
-            "OPENAI_API_KEY is not configured. Set it in Streamlit Secrets "
-            "(OPENAI_API_KEY) or as an environment variable."
-        )
+        # Streamlit will redact raw RuntimeError details, so show it cleanly instead.
+        st.error("OPENAI_API_KEY is not configured for this instance.")
+        st.caption("Set OPENAI_API_KEY in Streamlit Secrets or environment variables.")
+        st.stop()
     return OpenAI(api_key=api_key)
 
 # Auth (set via Streamlit secrets or environment variables)
-APP_PASSWORD = (os.environ.get("APP_PASSWORD") or "").strip()
-ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+APP_PASSWORD = (_get_setting("APP_PASSWORD", "")).strip()
+ADMIN_PASSWORD = (_get_setting("ADMIN_PASSWORD", "")).strip()
 
 # Optional admin email allowlist (recommended for B2B admin access)
 ADMIN_EMAILS = set()
-_raw_admin_emails = (os.environ.get("ADMIN_EMAILS") or "").strip()
+_raw_admin_emails = (_get_setting("ADMIN_EMAILS", "")).strip()
 if _raw_admin_emails:
     ADMIN_EMAILS = {e.strip().lower() for e in _raw_admin_emails.split(",") if e.strip()}
 
 # Privacy / Terms (optional but used for acknowledgment gate)
-PRIVACY_URL = (os.environ.get("PRIVACY_URL") or "").strip()
-TERMS_URL = (os.environ.get("TERMS_URL") or "").strip()
+PRIVACY_URL = (_get_setting("PRIVACY_URL", "")).strip()
+TERMS_URL = (_get_setting("TERMS_URL", "")).strip()
 
 # Upload limits
-MAX_UPLOAD_MB = float(os.environ.get("MAX_UPLOAD_MB", "10"))
-MAX_EXTRACT_CHARS = int(os.environ.get("MAX_EXTRACT_CHARS", "50000"))
+MAX_UPLOAD_MB = float(_get_setting("MAX_UPLOAD_MB", "10"))
+MAX_EXTRACT_CHARS = int(_get_setting("MAX_EXTRACT_CHARS", "50000"))
 DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
 
 # Logging (CSV + SQLite)
@@ -116,16 +127,16 @@ ACK_CSV = str(DATA_DIR / "ack_events.csv")
 REFUSALS_CSV = str(DATA_DIR / "refusal_telemetry.csv")
 
 # Rate limiting + lockout
-RATE_LIMIT_LOGIN = int(os.environ.get("RATE_LIMIT_LOGIN", "5"))
-RATE_LIMIT_CHAT = int(os.environ.get("RATE_LIMIT_CHAT", "6"))
-RATE_LIMIT_WINDOW_SEC = int(os.environ.get("RATE_LIMIT_WINDOW_SEC", "60"))
+RATE_LIMIT_LOGIN = int(_get_setting("RATE_LIMIT_LOGIN", "5"))
+RATE_LIMIT_CHAT = int(_get_setting("RATE_LIMIT_CHAT", "6"))
+RATE_LIMIT_WINDOW_SEC = int(_get_setting("RATE_LIMIT_WINDOW_SEC", "60"))
 
-LOCKOUT_THRESHOLD = int(os.environ.get("LOCKOUT_THRESHOLD", "5"))
-LOCKOUT_WINDOW_SEC = int(os.environ.get("LOCKOUT_WINDOW_SEC", "900"))
-LOCKOUT_DURATION_SEC = int(os.environ.get("LOCKOUT_DURATION_SEC", "1800"))
+LOCKOUT_THRESHOLD = int(_get_setting("LOCKOUT_THRESHOLD", "5"))
+LOCKOUT_WINDOW_SEC = int(_get_setting("LOCKOUT_WINDOW_SEC", "900"))
+LOCKOUT_DURATION_SEC = int(_get_setting("LOCKOUT_DURATION_SEC", "1800"))
 
 # TTL pruning
-TTL_DAYS_DEFAULT = int(os.environ.get("LOG_TTL_DAYS", "365"))
+TTL_DAYS_DEFAULT = int(_get_setting("LOG_TTL_DAYS", "365"))
 
 # =============================================================================
 # TENANT / B2B IMPORTS (AFTER DB_PATH IS FORCED)
@@ -217,11 +228,6 @@ def ensure_session_id() -> str:
         sid = secrets.token_hex(16)
         st.session_state["sid"] = sid
     return sid
-
-def ensure_analysis_id() -> str:
-    if not st.session_state.get("veritas_analysis_id"):
-        st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
-    return st.session_state["veritas_analysis_id"]
 
 def new_request_id(prefix: str = "RQ") -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -321,10 +327,7 @@ def _init_db() -> None:
     con.commit()
     con.close()
 
-# Initialize core application tables ONCE
 _init_db()
-
-# Initialize B2B tenant tables ONCE (VER-B2B-001)
 init_tenant_tables()
 
 def _prune_table(table: str, ts_col: str, ttl_days: int) -> None:
@@ -413,137 +416,9 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
     except Exception:
         pass
 
-def log_error_event(kind: str, route: str, http_status: int, detail: str) -> None:
-    ts = _now_utc_iso()
-    rid = st.session_state.get("request_id") or new_request_id()
-    sid = ensure_session_id()
-    login_id = st.session_state.get("login_id", "")
-    safe_detail = (detail or "")[:500]
+def _is_locked() -> bool:
+    return time.time() < st.session_state.get("_locked_until", 0.0)
 
-    try:
-        with open(ERRORS_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, rid, route, kind, http_status, safe_detail, sid, login_id])
-    except Exception:
-        pass
-
-    try:
-        _db_exec(
-            """INSERT INTO errors (timestamp_utc,request_id,route,kind,http_status,detail,session_id,login_id)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (ts, rid, route, kind, http_status, safe_detail, sid, login_id),
-        )
-    except Exception:
-        pass
-
-def log_analysis_run(analysis_id: str, input_text: str, elapsed_seconds: float, model_name: str) -> None:
-    ts = _now_utc_iso()
-    sid = ensure_session_id()
-    login_id = st.session_state.get("login_id", "")
-
-    row = [
-        ts,
-        analysis_id,
-        sid,
-        login_id,
-        model_name,
-        round(float(elapsed_seconds or 0.0), 3),
-        len(input_text or ""),
-        _safe_preview(input_text),
-        _sha256(input_text),
-    ]
-    try:
-        with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(row)
-    except Exception:
-        pass
-
-    try:
-        _db_exec(
-            """INSERT INTO analyses (timestamp_utc,analysis_id,session_id,login_id,model,elapsed_seconds,input_chars,input_preview,input_sha256)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (ts, analysis_id, sid, login_id, model_name, float(elapsed_seconds or 0.0), len(input_text or ""), _safe_preview(input_text), _sha256(input_text)),
-        )
-    except Exception:
-        pass
-
-def log_ack_event(ack_key: str, acknowledged: bool) -> None:
-    ts = _now_utc_iso()
-    sid = ensure_session_id()
-    login_id = st.session_state.get("login_id", "")
-
-    try:
-        with open(ACK_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, ack_key, sid, login_id, 1 if acknowledged else 0, PRIVACY_URL, TERMS_URL])
-    except Exception:
-        pass
-
-    try:
-        _db_exec(
-            """INSERT INTO ack_events (timestamp_utc,ack_key,session_id,login_id,acknowledged,privacy_url,terms_url)
-               VALUES (?,?,?,?,?,?,?)""",
-            (ts, ack_key, sid, login_id, 1 if acknowledged else 0, PRIVACY_URL, TERMS_URL),
-        )
-    except Exception:
-        pass
-
-def log_refusal_event(analysis_id: str, category: str, reason: str, source: str, input_text: str) -> None:
-    created = _now_utc_iso()
-    in_len = len((input_text or "").strip())
-    in_hash = _sha256((input_text or "").strip())
-
-    try:
-        with open(REFUSALS_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([created, analysis_id, source, category, (reason or "")[:240], in_len, in_hash])
-    except Exception:
-        pass
-
-    try:
-        _db_exec(
-            """INSERT INTO refusal_events (created_utc,analysis_id,source,category,reason,input_len,input_sha256)
-               VALUES (?,?,?,?,?,?,?)""",
-            (created, analysis_id, source, category, (reason or "")[:240], in_len, in_hash),
-        )
-    except Exception:
-        pass
-
-def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
-    try:
-        con = sqlite3.connect(DB_PATH, timeout=30)
-        cur = con.cursor()
-
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS refusal_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                created_utc TEXT,
-                analysis_id TEXT,
-                source TEXT,
-                category TEXT,
-                reason TEXT,
-                input_len INTEGER,
-                input_sha256 TEXT
-            )
-        """)
-
-        cur.execute(
-            """SELECT created_utc, analysis_id, source, category, reason, input_len
-               FROM refusal_events
-               ORDER BY id DESC
-               LIMIT ?""",
-            (limit,),
-        )
-        rows = cur.fetchall()
-        con.close()
-        return rows
-    except sqlite3.OperationalError:
-        try:
-            con.close()
-        except Exception:
-            pass
-        return []
-
-# =============================================================================
-# RATE LIMIT + LOCKOUT
-# =============================================================================
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
     dq = dq_map.get(key)
@@ -558,9 +433,6 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
         return False
     dq.append(now)
     return True
-
-def _is_locked() -> bool:
-    return time.time() < st.session_state.get("_locked_until", 0.0)
 
 def _note_failed_login(attempted_secret: str = "") -> None:
     now = time.time()
@@ -589,10 +461,7 @@ def _has_ack(ack_key: str) -> bool:
     try:
         con = sqlite3.connect(DB_PATH)
         cur = con.cursor()
-        cur.execute(
-            """SELECT 1 FROM ack_events WHERE acknowledged=1 AND ack_key=? LIMIT 1""",
-            (ack_key,),
-        )
+        cur.execute("""SELECT 1 FROM ack_events WHERE acknowledged=1 AND ack_key=? LIMIT 1""", (ack_key,))
         ok = cur.fetchone() is not None
         con.close()
         return ok
@@ -622,7 +491,22 @@ def require_acknowledgment() -> None:
             if not (c1 and c2):
                 st.error("Please check both boxes.")
                 st.stop()
-            log_ack_event(ack_key, True)
+            ts = _now_utc_iso()
+            sid = ensure_session_id()
+            login_id = st.session_state.get("login_id", "")
+            try:
+                with open(ACK_CSV, "a", newline="", encoding="utf-8") as f:
+                    csv.writer(f).writerow([ts, ack_key, sid, login_id, 1, PRIVACY_URL, TERMS_URL])
+            except Exception:
+                pass
+            try:
+                _db_exec(
+                    """INSERT INTO ack_events (timestamp_utc,ack_key,session_id,login_id,acknowledged,privacy_url,terms_url)
+                       VALUES (?,?,?,?,?,?,?)""",
+                    (ts, ack_key, sid, login_id, 1, PRIVACY_URL, TERMS_URL),
+                )
+            except Exception:
+                pass
             st.session_state["ack_ok"] = True
             st.success("Acknowledgment recorded.")
             _safe_rerun()
@@ -702,14 +586,7 @@ st.session_state.setdefault("login_id", "")
 st.session_state.setdefault("ack_ok", False)
 st.session_state.setdefault("doc_uploader_key", 0)
 st.session_state.setdefault("last_report", "")
-st.session_state.setdefault("last_report_id", "")
 st.session_state.setdefault("report_ready", False)
-
-# Tenant session defaults (B2B)
-st.session_state.setdefault("tenant_verified", False)
-st.session_state.setdefault("tenant_id", "")
-st.session_state.setdefault("tenant_limit", 0)  # annual entitlement (canonical key: annual_analysis_limit)
-st.session_state.setdefault("tenant_key_id", "")
 
 # =============================================================================
 # AUTH UI
@@ -822,13 +699,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-    if st.session_state.get("is_admin", False):
-        try:
-            import refusal_router as rr
-            st.caption(f"refusal_router: {rr.__file__}")
-        except Exception:
-            pass
-
     if st.button("Logout"):
         log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
         sid = st.session_state.get("sid")
@@ -837,29 +707,21 @@ with st.sidebar:
         _safe_rerun()
 
 # =============================================================================
-# MAIN UI
+# MAIN UI (ADMIN-ONLY CONSOLE)
 # =============================================================================
-tabs = ["Admin"]
-if st.session_state.get("is_admin", False):
-    tabs.insert(0, "Analyze")  # optional internal test console
-else:
-    # if non-admins should not use Streamlit at all
+if not st.session_state.get("is_admin", False):
     st.error("This console is restricted to administrators.")
     st.stop()
 
-tab_objs = st.tabs(tabs)
-tab_map = {name: tab_objs[i] for i, name in enumerate(tabs)}
-tab_analyze = tab_map["Analyze"]
-tab_admin = tab_map.get("Admin")
+tabs = st.tabs(["Analyze", "Admin"])
+tab_analyze, tab_admin = tabs[0], tabs[1]
 
 def reset_canvas() -> None:
     st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
     st.session_state["last_report"] = ""
-    st.session_state["last_report_id"] = ""
     st.session_state["report_ready"] = False
-
-    st.session_state["veritas_analysis_id"] = ""
     st.session_state["user_input_box"] = ""
+    st.session_state["veritas_analysis_id"] = ""
 
 # =============================================================================
 # ANALYZE TAB
@@ -868,361 +730,231 @@ with tab_analyze:
     st.subheader("Veritas — Content Analysis and Advisory System")
     st.caption("Veritas returns objective findings with non-prescriptive advisory guidance.")
 
-    # Show Analysis ID only after a report exists
     if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
 
-    # -----------------------------
-    # TENANT ACCESS GATE (B2B)
-    # - Non-admins: must verify tenant key
-    # - Admins: bypass tenant key prompt (internal UI use)
-    # -----------------------------
-    if st.session_state.get("is_admin", False):
-        tenant_ok = True
-    else:
-        tenant_ok = st.session_state.get("tenant_verified", False)
+    submitted = False
 
-    if not tenant_ok:
-        st.info("Enter your tenant access key to unlock analysis.")
+    with st.form("analysis_form"):
+        user_text = st.text_area(
+            "Paste or type text to analyze",
+            height=220,
+            key="user_input_box",
+        )
 
-        with st.form("tenant_access_form"):
-            tenant_key = st.text_input("Tenant Key (vx_...)", type="password")
-            verify_btn = st.form_submit_button("Verify Key")
+        doc = st.file_uploader(
+            f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
+            type=list(DOC_ALLOWED_EXTENSIONS),
+            accept_multiple_files=False,
+        )
 
-        if verify_btn:
-            t = verify_tenant_key((tenant_key or "").strip())
-            if not t:
-                st.error("Invalid or inactive tenant key.")
-                st.session_state["tenant_verified"] = False
-            else:
-                st.session_state["tenant_verified"] = True
-                st.session_state["tenant_id"] = t["tenant_id"]
-                st.session_state["tenant_limit"] = int(t.get("annual_analysis_limit") or 0)
-                st.session_state["tenant_key_id"] = t.get("key_id", "")
-                st.success("Tenant verified. You may now run analyses.")
-                _safe_rerun()
+        c1, c2 = st.columns([1, 1])
+        submitted = c1.form_submit_button("Engage Veritas")
+        c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
 
-    else:
-        # -----------------------------
-        # ANALYSIS FORM
-        # -----------------------------
-        submitted = False
+    if submitted:
+        new_request_id()
 
-        with st.form("analysis_form"):
-            user_text = st.text_area(
-                "Paste or type text to analyze",
-                height=220,
-                key="user_input_box",
-            )
+        extracted_text = ""
+        if doc is not None:
+            extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
 
-            doc = st.file_uploader(
-                f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
-                type=list(DOC_ALLOWED_EXTENSIONS),
-                accept_multiple_files=False,
-            )
+        final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
 
-            c1, c2 = st.columns([1, 1])
-            submitted = c1.form_submit_button("Engage Veritas")
-            c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
+        if not final_input:
+            st.warning("Please paste text or upload a document to analyze.")
+            st.stop()
 
-        # -----------------------------
-        # SUBMIT HANDLER
-        # -----------------------------
-        if submitted:
-            new_request_id()
+        st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
+        analysis_id = st.session_state["veritas_analysis_id"]
 
-            # Enforce tenant metering ONLY for non-admins
-            if not st.session_state.get("is_admin", False):
-                tenant_id = st.session_state.get("tenant_id")
-                annual_limit = int(st.session_state.get("tenant_limit") or 0)
-
-                if not tenant_id or annual_limit <= 0:
-                    st.error("Tenant context missing. Please re-verify your tenant key.")
-                    st.session_state["tenant_verified"] = False
-                    st.stop()
-
-                period = current_period_yyyy()
-                used = get_usage(tenant_id, period)
-
-                if used >= annual_limit:
-                    st.error(f"Annual analysis limit reached ({used}/{annual_limit}) for {period}.")
-                    st.stop()
-            else:
-                # Admin run: no tenant metering
-                tenant_id = None
-                period = current_period_yyyy()
-
-            extracted_text = ""
-            if doc is not None:
-                extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
-
-            final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
-
-            if not final_input:
-                st.warning("Please paste text or upload a document to analyze.")
-                st.stop()
-
-            st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
-            analysis_id = st.session_state["veritas_analysis_id"]
-
-            refusal = check_refusal(final_input)
-            if refusal.should_refuse:
-                output = render_refusal(refusal.category, refusal.reason)
-                st.session_state["last_report"] = output
-                st.session_state["report_ready"] = True
-                st.markdown(output)
-                st.stop()
-
-            client = get_openai_client()
-            resp = client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                    {"role": "user", "content": final_input},
-                ],
-                temperature=TEMPERATURE,
-            )
-
-            report = resp.choices[0].message.content.strip()
-            st.session_state["last_report"] = report
+        refusal = check_refusal(final_input)
+        if refusal.should_refuse:
+            output = render_refusal(refusal.category, refusal.reason)
+            st.session_state["last_report"] = output
             st.session_state["report_ready"] = True
+            st.markdown(output)
+            st.stop()
 
-            # Increment usage ONLY for non-admins
-            if tenant_id:
-                increment_usage(tenant_id, period)
+        safety_msg = local_safety_stop(final_input)
+        if safety_msg:
+            st.session_state["last_report"] = safety_msg
+            st.session_state["report_ready"] = True
+            st.markdown(safety_msg)
+            st.stop()
 
-        if st.session_state.get("report_ready") and st.session_state.get("last_report"):
-            st.markdown(st.session_state["last_report"])
+        client = get_openai_client()
+        resp = client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
+                {"role": "user", "content": final_input},
+            ],
+            temperature=TEMPERATURE,
+        )
+
+        report = (resp.choices[0].message.content or "").strip()
+        st.session_state["last_report"] = report
+        st.session_state["report_ready"] = True
+
+    if st.session_state.get("report_ready") and st.session_state.get("last_report"):
+        st.markdown(st.session_state["last_report"])
 
 # =============================================================================
 # ADMIN TAB
 # =============================================================================
-if tab_admin is not None:
-    with tab_admin:
-        st.header("Admin Dashboard")
+with tab_admin:
+    st.header("Admin Dashboard")
 
-        st.subheader("Refusal Telemetry")
-        rows = fetch_recent_refusals(limit=500)
-        if not rows:
-            st.info("No refusal events logged yet.")
-        else:
-            df = pd.DataFrame(
-                rows,
-                columns=["created_utc", "analysis_id", "source", "category", "reason", "input_len"]
+    st.subheader("Diagnostics")
+    st.write(f"APP_MODE: `{APP_MODE or '(unset)'}`")
+    st.write(f"Model: `{MODEL_NAME}`")
+    st.write(f"Temperature: `{TEMPERATURE}`")
+    st.write(f"DB Path: `{DB_PATH}`")
+
+    st.subheader("Refusal Telemetry")
+    def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
+        try:
+            con = sqlite3.connect(DB_PATH, timeout=30)
+            cur = con.cursor()
+            cur.execute(
+                """SELECT created_utc, analysis_id, source, category, reason, input_len
+                   FROM refusal_events
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (limit,),
             )
-            st.dataframe(df, use_container_width=True)
-            st.download_button(
-                "Download Refusal Log (CSV)",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name="veritas_refusal_log.csv",
-                mime="text/csv",
-            )
+            rows = cur.fetchall()
+            con.close()
+            return rows
+        except Exception:
+            try:
+                con.close()
+            except Exception:
+                pass
+            return []
 
-        st.subheader("Diagnostics")
-        st.write(f"Model: `{MODEL_NAME}`")
-        st.write(f"Temperature: `{TEMPERATURE}`")
-        st.write(f"DB Path: `{DB_PATH}`")
+    rows = fetch_recent_refusals(limit=500)
+    if not rows:
+        st.info("No refusal events logged yet.")
+    else:
+        df = pd.DataFrame(rows, columns=["created_utc", "analysis_id", "source", "category", "reason", "input_len"])
+        st.dataframe(df, use_container_width=True)
+        st.download_button(
+            "Download Refusal Log (CSV)",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name="veritas_refusal_log.csv",
+            mime="text/csv",
+        )
 
-        st.subheader("Tenant Management")
+    st.subheader("Tenant Management")
 
-        # --- Create Tenant ---
-        with st.form("create_tenant_form"):
-            tenant_id = st.text_input("Tenant ID")
-            tier = st.selectbox("Tier", ["Starter", "Professional", "Enterprise"])
-            annual_limit = st.number_input(
-                "Annual Analysis Limit",
-                min_value=1,
-                value=100
-            )
-            create = st.form_submit_button("Create Tenant & Issue Key")
+    with st.form("create_tenant_form"):
+        tenant_id = st.text_input("Tenant ID")
+        tier = st.selectbox("Tier", ["Starter", "Professional", "Enterprise"])
+        annual_limit = st.number_input("Annual Analysis Limit", min_value=1, value=100)
+        create = st.form_submit_button("Create Tenant & Issue Key")
 
-            if create:
-                if not tenant_id:
-                    st.error("Tenant ID is required.")
-                    st.stop()
-
-                raw_key = admin_create_tenant(
-                    tenant_id=tenant_id.strip(),
-                    tier=tier,
-                    monthly_limit=int(annual_limit),  # function param name may remain monthly_limit
-                )
-
-                st.success("Tenant created. Copy the key now — it will not be shown again.")
-                st.code(raw_key)
-
-        st.divider()
-
-        # --- Suspend Tenant ---
-        with st.form("suspend_tenant_form"):
-            suspend_id = st.text_input("Tenant ID to Suspend")
-            suspend = st.form_submit_button("Suspend Tenant")
-
-            if suspend:
-                if not suspend_id:
-                    st.error("Tenant ID is required.")
-                    st.stop()
-
-                suspend_tenant(suspend_id.strip())
-                st.success(f"Tenant '{suspend_id.strip()}' has been suspended.")
-
-        st.divider()
-
-        # --- Rotate Tenant Key ---
-        with st.form("rotate_key_form"):
-            rotate_tenant_id = st.text_input("Tenant ID")
-            old_key_id = st.text_input("Current Key ID")
-            rotate = st.form_submit_button("Rotate Tenant Key")
-
-            if rotate:
-                if not rotate_tenant_id or not old_key_id:
-                    st.error("Tenant ID and Key ID are required.")
-                    st.stop()
-
-                new_key = rotate_key(rotate_tenant_id.strip(), old_key_id.strip())
-                st.success("Key rotated. Copy the new key now — it will not be shown again.")
-                st.code(new_key)
-
-        st.divider()
-        st.subheader("Tenant Reporting")
-
-        period = current_period_yyyy()
-        st.caption(f"Usage period (UTC): {period}")
-
-        # Tenant Snapshot (all tenants)
-        rows = admin_usage_snapshot(period_yyyy=period, limit=500)
-        if rows:
-            df = pd.DataFrame(
-                rows,
-                columns=["tenant_id", "tier", "annual_limit", "status", "analysis_count"]
-            )
-            st.dataframe(df, use_container_width=True)
-            st.download_button(
-                "Download Tenant Usage Snapshot (CSV)",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name=f"tenant_usage_snapshot_{period}.csv",
-                mime="text/csv",
-            )
-        else:
-            st.info("No tenants found.")
-
-        st.divider()
-
-        # Tenant Lookup (details)
-        st.markdown("### Tenant Lookup")
-        lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
-
-        if st.button("Lookup Tenant", key="tenant_lookup_btn"):
-            t = admin_get_tenant((lookup_id or "").strip())
-            if not t:
-                st.error("No tenant found with that Tenant ID.")
+        if create:
+            if not tenant_id:
+                st.error("Tenant ID is required.")
                 st.stop()
 
-            tenant_id_val = t.get("tenant_id")
-            if not tenant_id_val:
-                st.error("Tenant record missing tenant_id. Check tenant_store.admin_get_tenant() return shape.")
-                st.stop()
-
-            used = admin_get_usage(tenant_id_val, period)
-
-            limit_val = int(t.get("annual_analysis_limit") or 0)
-
-            st.success("Tenant found.")
-            st.write({
-                "tenant_id": tenant_id_val,
-                "tier": t.get("tier"),
-                "annual_limit": limit_val,
-                "status": t.get("status"),
-                "usage_this_year": used,
-                "created_utc": t.get("created_utc"),
-                "updated_utc": t.get("updated_utc"),
-            })
-
-            keys = admin_list_tenant_keys(tenant_id_val, limit=50)
-            if keys:
-                kdf = pd.DataFrame(
-                    keys,
-                    columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"]
-                )
-                st.markdown("#### Tenant Keys")
-                st.dataframe(kdf, use_container_width=True)
-                st.download_button(
-                    "Download Tenant Keys (CSV)",
-                    data=kdf.to_csv(index=False).encode("utf-8"),
-                    file_name=f"tenant_keys_{tenant_id_val}.csv",
-                    mime="text/csv",
-                )
-            else:
-                st.info("No keys found for this tenant.")
-
-        # TENANT TEST GATEWAY (DEV / ADMIN ONLY)
-        if os.environ.get("ENABLE_TENANT_TEST_GATE") == "1":
-            st.divider()
-            st.subheader("Tenant Test Gateway (Admin / Dev Only)")
-            st.caption("Simulates a customer request using a vx tenant key. Disabled in production.")
-
-            test_key = st.text_input(
-                "Paste Tenant vx Key",
-                type="password",
-                key="tg_tenant_test_key"
+            raw_key = admin_create_tenant(
+                tenant_id=tenant_id.strip(),
+                tier=tier,
+                monthly_limit=int(annual_limit),  # underlying function may still use this param name
             )
 
-            if st.button("Verify Tenant Key", key="tg_verify_btn"):
-                tenant = verify_tenant_key((test_key or "").strip())
-                if not tenant:
-                    st.error("Invalid or inactive tenant key.")
-                else:
-                    st.session_state["test_tenant_ctx"] = tenant
-                    st.success("Tenant resolved successfully.")
+            st.success("Tenant created. Copy the key now — it will not be shown again.")
+            st.code(raw_key)
 
-            tenant_ctx = st.session_state.get("test_tenant_ctx")
+    st.divider()
 
-            if tenant_ctx:
-                # Read ONLY annual_analysis_limit (tenant_store now returns this)
-                limit_val = int(tenant_ctx.get("annual_analysis_limit") or 0)
+    with st.form("suspend_tenant_form"):
+        suspend_id = st.text_input("Tenant ID to Suspend")
+        suspend = st.form_submit_button("Suspend Tenant")
 
-                st.markdown("### Resolved Tenant Context")
-                st.json({
-                    "tenant_id": tenant_ctx["tenant_id"],
-                    "tier": tenant_ctx["tier"],
-                    "annual_limit": limit_val,
-                    "key_id": tenant_ctx.get("key_id", ""),
-                })
+        if suspend:
+            if not suspend_id:
+                st.error("Tenant ID is required.")
+                st.stop()
+            suspend_tenant(suspend_id.strip())
+            st.success(f"Tenant '{suspend_id.strip()}' has been suspended.")
 
-                period = current_period_yyyy()
-                used = get_usage(tenant_ctx["tenant_id"], period)
+    st.divider()
 
-                st.markdown("### Usage Status")
-                st.write(f"Period: {period}")
-                st.write(f"Used: {used} / {limit_val}")
+    with st.form("rotate_key_form"):
+        rotate_tenant_id = st.text_input("Tenant ID")
+        old_key_id = st.text_input("Current Key ID")
+        rotate = st.form_submit_button("Rotate Tenant Key")
 
-                if st.button("Run Test Analysis as Tenant", key="tg_run_btn"):
-                    if used >= int(limit_val or 0):
-                        st.error("Tenant annual limit reached. Test blocked.")
-                    else:
-                        test_input = "This is a neutral policy statement for tenant gateway testing."
+        if rotate:
+            if not rotate_tenant_id or not old_key_id:
+                st.error("Tenant ID and Key ID are required.")
+                st.stop()
+            new_key = rotate_key(rotate_tenant_id.strip(), old_key_id.strip())
+            st.success("Key rotated. Copy the new key now — it will not be shown again.")
+            st.code(new_key)
 
-                        try:
-                            client = get_openai_client()
-                            resp = client.chat.completions.create(
-                                model=MODEL_NAME,
-                                messages=[
-                                    {"role": "system", "content": DEFAULT_SYSTEM_PROMPT},
-                                    {"role": "user", "content": test_input},
-                                ],
-                                temperature=TEMPERATURE,
-                            )
+    st.divider()
+    st.subheader("Tenant Reporting")
 
-                            output = resp.choices[0].message.content if resp.choices else ""
-                            if not output:
-                                raise RuntimeError("Empty model response")
+    period = current_period_yyyy()
+    st.caption(f"Usage period (UTC): {period}")
 
-                            increment_usage(tenant_ctx["tenant_id"], period)
-                            st.success("Test analysis completed and usage recorded.")
-                            st.text_area("Model Output (Test)", output, height=200)
+    rows = admin_usage_snapshot(period_yyyy=period, limit=500)
+    if rows:
+        df = pd.DataFrame(rows, columns=["tenant_id", "tier", "annual_limit", "status", "analysis_count"])
+        st.dataframe(df, use_container_width=True)
+        st.download_button(
+            "Download Tenant Usage Snapshot (CSV)",
+            data=df.to_csv(index=False).encode("utf-8"),
+            file_name=f"tenant_usage_snapshot_{period}.csv",
+            mime="text/csv",
+        )
+    else:
+        st.info("No tenants found.")
 
-                        except Exception as e:
-                            st.error("Test analysis failed.")
-                            st.exception(e)
+    st.divider()
+
+    st.markdown("### Tenant Lookup")
+    lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
+
+    if st.button("Lookup Tenant", key="tenant_lookup_btn"):
+        t = admin_get_tenant((lookup_id or "").strip())
+        if not t:
+            st.error("No tenant found with that Tenant ID.")
+            st.stop()
+
+        tenant_id_val = t.get("tenant_id")
+        used = admin_get_usage(tenant_id_val, period)
+        limit_val = int(t.get("annual_analysis_limit") or 0)
+
+        st.success("Tenant found.")
+        st.write({
+            "tenant_id": tenant_id_val,
+            "tier": t.get("tier"),
+            "annual_limit": limit_val,
+            "status": t.get("status"),
+            "usage_this_year": used,
+            "created_utc": t.get("created_utc"),
+            "updated_utc": t.get("updated_utc"),
+        })
+
+        keys = admin_list_tenant_keys(tenant_id_val, limit=50)
+        if keys:
+            kdf = pd.DataFrame(keys, columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"])
+            st.markdown("#### Tenant Keys")
+            st.dataframe(kdf, use_container_width=True)
+            st.download_button(
+                "Download Tenant Keys (CSV)",
+                data=kdf.to_csv(index=False).encode("utf-8"),
+                file_name=f"tenant_keys_{tenant_id_val}.csv",
+                mime="text/csv",
+            )
+        else:
+            st.info("No keys found for this tenant.")
 
 # =============================================================================
 # FOOTER
@@ -1231,17 +963,6 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
-
-
-
-
-
-
-
-
-
-
-
 
 
 
