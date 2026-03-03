@@ -14,6 +14,8 @@
 #
 # Dependencies:
 #   streamlit, openai, pandas, python-docx, pypdf
+# Optional (recommended for encryption at rest):
+#   cryptography
 
 import os
 import io
@@ -83,6 +85,10 @@ TEMPERATURE = float(_get_setting("OPENAI_TEMPERATURE", "0.2"))
 # --- Trial Feedback (toggleable) ---
 INSTITUTIONAL_TRIAL_MODE = (_get_setting("INSTITUTIONAL_TRIAL_MODE", "1")).strip() == "1"
 MAX_FEEDBACK_COMMENT_CHARS = int(_get_setting("MAX_FEEDBACK_COMMENT_CHARS", "2000"))
+
+# --- Input storage for feedback (encrypted at rest in SQLite) ---
+STORE_FULL_INPUT_FOR_FEEDBACK = (_get_setting("STORE_FULL_INPUT_FOR_FEEDBACK", "0")).strip() == "1"
+INPUT_ENCRYPTION_KEY = (_get_setting("INPUT_ENCRYPTION_KEY", "")).strip()  # Fernet key recommended
 
 # --- ENFORCED OpenAI key wiring (Env-first fallback + secrets) ---
 def _get_openai_api_key() -> str:
@@ -375,6 +381,45 @@ def new_request_id(prefix: str = "RQ") -> str:
 
 
 # =============================================================================
+# INPUT STORAGE HELPERS (encrypted at rest)
+# =============================================================================
+def _xor_crypt(data: bytes, key: bytes) -> bytes:
+    out = bytearray(len(data))
+    for i, b in enumerate(data):
+        out[i] = b ^ key[i % len(key)]
+    return bytes(out)
+
+
+def _encrypt_text(plain: str) -> str:
+    """
+    Encrypt plaintext for SQLite storage.
+
+    Prefers cryptography.Fernet if installed.
+    Falls back to XOR+base64 (weak). Still avoids plaintext at rest.
+    """
+    plain_b = (plain or "").encode("utf-8", errors="ignore")
+    if not plain_b:
+        return ""
+
+    # Prefer Fernet if available
+    try:
+        from cryptography.fernet import Fernet  # type: ignore
+
+        if not INPUT_ENCRYPTION_KEY:
+            raise RuntimeError("Missing INPUT_ENCRYPTION_KEY")
+        f = Fernet(INPUT_ENCRYPTION_KEY.encode("utf-8"))
+        return f.encrypt(plain_b).decode("utf-8")
+    except Exception:
+        # Fallback (weak): XOR + base64
+        import base64
+
+        if not INPUT_ENCRYPTION_KEY:
+            raise RuntimeError("Missing INPUT_ENCRYPTION_KEY")
+        key_b = hashlib.sha256(INPUT_ENCRYPTION_KEY.encode("utf-8")).digest()
+        return base64.b64encode(_xor_crypt(plain_b, key_b)).decode("utf-8")
+
+
+# =============================================================================
 # DB / CSV INIT
 # =============================================================================
 def _init_csv(path: str, header: List[str]) -> None:
@@ -389,6 +434,23 @@ def _db_exec(sql: str, params: Tuple[Any, ...] = ()) -> None:
     cur.execute(sql, params)
     con.commit()
     con.close()
+
+
+def _db_add_column_if_missing(table: str, col: str, coltype: str) -> None:
+    try:
+        con = sqlite3.connect(DB_PATH)
+        cur = con.cursor()
+        cur.execute(f"PRAGMA table_info({table})")
+        cols = {r[1] for r in cur.fetchall()}
+        if col not in cols:
+            cur.execute(f"ALTER TABLE {table} ADD COLUMN {col} {coltype}")
+            con.commit()
+        con.close()
+    except Exception:
+        try:
+            con.close()
+        except Exception:
+            pass
 
 
 def _init_db() -> None:
@@ -474,6 +536,7 @@ def _init_db() -> None:
     """
     )
 
+    # Feedback now includes input_sha256 + input_encrypted (encrypted at rest) for trial analytics
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS feedback_events (
@@ -487,7 +550,9 @@ def _init_db() -> None:
             usefulness INTEGER,
             appropriateness INTEGER,
             alignment INTEGER,
-            comments TEXT
+            comments TEXT,
+            input_sha256 TEXT,
+            input_encrypted TEXT
         )
     """
     )
@@ -497,6 +562,10 @@ def _init_db() -> None:
 
 
 _init_db()
+# Backward-compatible DB migration
+_db_add_column_if_missing("feedback_events", "input_sha256", "TEXT")
+_db_add_column_if_missing("feedback_events", "input_encrypted", "TEXT")
+
 init_tenant_tables()
 
 
@@ -554,9 +623,22 @@ _init_csv(
 _init_csv(ERRORS_CSV, ["timestamp_utc", "request_id", "route", "kind", "http_status", "detail", "session_id", "login_id"])
 _init_csv(ACK_CSV, ["timestamp_utc", "ack_key", "session_id", "login_id", "acknowledged", "privacy_url", "terms_url"])
 _init_csv(REFUSALS_CSV, ["created_utc", "analysis_id", "source", "category", "reason", "input_len", "input_sha256"])
+# CSV stores input_sha256 only (not the encrypted blob)
 _init_csv(
     FEEDBACK_CSV,
-    ["timestamp_utc", "analysis_id", "session_id", "login_id", "clarity", "objectivity", "usefulness", "appropriateness", "alignment", "comments"],
+    [
+        "timestamp_utc",
+        "analysis_id",
+        "session_id",
+        "login_id",
+        "clarity",
+        "objectivity",
+        "usefulness",
+        "appropriateness",
+        "alignment",
+        "comments",
+        "input_sha256",
+    ],
 )
 
 _prune_csv(AUTH_CSV, TTL_DAYS_DEFAULT)
@@ -615,6 +697,7 @@ def save_feedback(
     appropriateness: int,
     alignment: int,
     comments: str = "",
+    analyzed_text: str = "",
 ) -> None:
     """Persist post-analysis feedback (CSV + SQLite)."""
     ts = _now_utc_iso()
@@ -625,19 +708,33 @@ def save_feedback(
     if len(cmt) > MAX_FEEDBACK_COMMENT_CHARS:
         cmt = cmt[:MAX_FEEDBACK_COMMENT_CHARS] + "…"
 
-    # CSV
+    text = (analyzed_text or "").strip()
+    text_sha = _sha256(text) if text else ""
+    text_enc = ""
+
+    if STORE_FULL_INPUT_FOR_FEEDBACK:
+        # Fail-closed: never store plaintext
+        if INPUT_ENCRYPTION_KEY:
+            try:
+                text_enc = _encrypt_text(text)
+            except Exception:
+                text_enc = ""
+        else:
+            text_enc = ""
+
+    # CSV (hash only)
     try:
         with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt])
+            csv.writer(f).writerow([ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt, text_sha])
     except Exception:
         pass
 
-    # SQLite
+    # SQLite (hash + optional encrypted text)
     try:
         _db_exec(
             """INSERT INTO feedback_events
-               (timestamp_utc,analysis_id,session_id,login_id,clarity,objectivity,usefulness,appropriateness,alignment,comments)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+               (timestamp_utc,analysis_id,session_id,login_id,clarity,objectivity,usefulness,appropriateness,alignment,comments,input_sha256,input_encrypted)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 ts,
                 aid,
@@ -649,6 +746,8 @@ def save_feedback(
                 int(appropriateness),
                 int(alignment),
                 cmt,
+                text_sha,
+                text_enc,
             ),
         )
     except Exception:
@@ -838,6 +937,7 @@ st.session_state.setdefault("last_report", "")
 st.session_state.setdefault("report_ready", False)
 st.session_state.setdefault("veritas_analysis_id", "")
 st.session_state.setdefault("feedback_last_submitted_analysis_id", "")
+st.session_state.setdefault("last_analyzed_input", "")
 
 # =============================================================================
 # AUTH UI
@@ -974,6 +1074,7 @@ def reset_canvas() -> None:
     st.session_state["last_report"] = ""
     st.session_state["report_ready"] = False
     st.session_state["veritas_analysis_id"] = ""
+    st.session_state["last_analyzed_input"] = ""
 
 
 if st.session_state.get("is_admin", False):
@@ -1030,6 +1131,9 @@ with tab_analyze:
         if not final_input:
             st.warning("Please paste text or upload a document to analyze.")
             st.stop()
+
+        # Store analyzed input (used for encrypted feedback storage)
+        st.session_state["last_analyzed_input"] = final_input
 
         st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
         analysis_id = st.session_state["veritas_analysis_id"]
@@ -1099,6 +1203,7 @@ with tab_analyze:
                         appropriateness=appropriateness,
                         alignment=alignment,
                         comments=comments,
+                        analyzed_text=st.session_state.get("last_analyzed_input", ""),
                     )
                     st.session_state["feedback_last_submitted_analysis_id"] = st.session_state["veritas_analysis_id"]
                     st.success("Thank you. Your feedback has been recorded.")
@@ -1117,6 +1222,7 @@ if tab_admin is not None:
         st.write(f"Temperature: `{TEMPERATURE}`")
         st.write(f"DB Path: `{DB_PATH}`")
         st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
+        st.write(f"Store full input for feedback: `{'ON' if STORE_FULL_INPUT_FOR_FEEDBACK else 'OFF'}`")
 
         st.subheader("Refusal Telemetry")
 
@@ -1274,7 +1380,8 @@ if tab_admin is not None:
                 cur = con.cursor()
                 cur.execute(
                     """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness,
-                              appropriateness, alignment, comments
+                              appropriateness, alignment, comments, input_sha256,
+                              CASE WHEN input_encrypted IS NOT NULL AND input_encrypted != '' THEN 1 ELSE 0 END AS has_input
                        FROM feedback_events
                        ORDER BY id DESC
                        LIMIT ?""",
@@ -1306,6 +1413,8 @@ if tab_admin is not None:
                     "appropriateness",
                     "alignment",
                     "comments",
+                    "input_sha256",
+                    "has_input",
                 ],
             )
             st.dataframe(fdf, use_container_width=True)
