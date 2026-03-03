@@ -277,16 +277,17 @@ st.markdown(
     }
 
     /* ============================= */
-    /* RADIO BUTTONS (ORANGE ACCENT) */
+    /* RADIO BUTTONS (NEUTRAL) */
     /* ============================= */
 
     div[role="radiogroup"] label {
         color: #FFFFFF !important;
+        background-color: transparent !important;
     }
 
     input[type="radio"]:checked + div {
-        background-color: #FF7A00 !important;
-        border-color: #FF7A00 !important;
+        background-color: transparent !important;
+        border-color: #FFFFFF !important;
     }
 
     /* ============================= */
@@ -1095,6 +1096,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
