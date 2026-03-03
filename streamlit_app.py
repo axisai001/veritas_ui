@@ -192,51 +192,112 @@ st.markdown(
     /* GLOBAL DARK ROYAL BLUE THEME */
     /* ============================= */
 
-    .stApp {
-        background-color: #0B1F3B;
-        color: #FFFFFF;
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: #0B1F3B !important;
+        color: #FFFFFF !important;
     }
 
-    /* Remove Streamlit header/footer */
+    .stApp {
+        background-color: #0B1F3B !important;
+        color: #FFFFFF !important;
+    }
+
+    /* ============================= */
+    /* REMOVE STREAMLIT GREEN HEADER */
+    /* ============================= */
+
+    header[data-testid="stHeader"] {
+        background-color: #0B1F3B !important;
+        height: 0px !important;
+    }
+
+    header[data-testid="stHeader"] > div {
+        background-color: #0B1F3B !important;
+    }
+
+    /* Remove toolbar / footer */
     [data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
     #MainMenu { visibility: hidden !important; }
     footer { visibility: hidden !important; }
 
-    /* Sidebar */
+    /* ============================= */
+    /* SIDEBAR */
+    /* ============================= */
+
     section[data-testid="stSidebar"] {
-        background-color: #08172B;
+        background-color: #08172B !important;
     }
 
-    /* Buttons (Bright Orange) */
+    /* ============================= */
+    /* BUTTONS (BRIGHT ORANGE) */
+    /* ============================= */
+
     div.stButton > button {
-        background-color: #FF7A00;
-        color: white;
-        font-weight: 600;
-        border-radius: 6px;
-        border: none;
+        background-color: #FF7A00 !important;
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+        border-radius: 6px !important;
+        border: none !important;
     }
 
     div.stButton > button:hover {
-        background-color: #E06600;
+        background-color: #E06600 !important;
     }
 
-    /* Input fields */
+    /* ============================= */
+    /* INPUT FIELDS */
+    /* ============================= */
+
     input, textarea {
         background-color: #132B4F !important;
-        color: white !important;
+        color: #FFFFFF !important;
         border-radius: 6px !important;
         border: 1px solid #1E3A66 !important;
     }
 
-    /* Tabs */
-    button[role="tab"] {
+    /* Fix password visibility icon background */
+    button[kind="secondary"] {
         background-color: #132B4F !important;
-        color: white !important;
     }
 
-    /* DataFrames */
+    /* ============================= */
+    /* RADIO BUTTONS (ORANGE ACCENT) */
+    /* ============================= */
+
+    div[role="radiogroup"] label {
+        color: #FFFFFF !important;
+    }
+
+    input[type="radio"]:checked + div {
+        background-color: #FF7A00 !important;
+        border-color: #FF7A00 !important;
+    }
+
+    /* ============================= */
+    /* TABS */
+    /* ============================= */
+
+    button[role="tab"] {
+        background-color: #132B4F !important;
+        color: #FFFFFF !important;
+    }
+
+    /* ============================= */
+    /* DATAFRAMES */
+    /* ============================= */
+
     .stDataFrame {
-        background-color: #132B4F;
+        background-color: #132B4F !important;
+    }
+
+    /* ============================= */
+    /* LOGIN TITLE CLASS */
+    /* ============================= */
+
+    .login-title {
+        color: #FF7A00 !important;
+        font-weight: 800 !important;
+        margin-bottom: 0.5rem !important;
     }
 
     </style>
@@ -1018,6 +1079,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
