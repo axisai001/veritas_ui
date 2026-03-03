@@ -243,6 +243,22 @@ st.markdown(
     div.stButton > button:hover {
         background-color: #E06600 !important;
     }
+    
+    /* ============================= */
+    /* FORM SUBMIT BUTTONS (ORANGE) */
+    /* ============================= */
+
+    div[data-testid="stFormSubmitButton"] > button {
+        background-color: #FF7A00 !important;
+        color: #FFFFFF !important;
+        font-weight: 700 !important;
+        border-radius: 6px !important;
+        border: none !important;
+    }
+
+    div[data-testid="stFormSubmitButton"] > button:hover {
+    background-color: #E06600 !important;
+    }
 
     /* ============================= */
     /* INPUT FIELDS */
@@ -1079,6 +1095,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
