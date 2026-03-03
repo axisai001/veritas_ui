@@ -879,11 +879,20 @@ with tab_analyze:
             f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
             accept_multiple_files=False,
-        )
+        
+        c1, c2 = st.columns([2, 1])  # Make Engage slightly dominant
 
-        c1, c2 = st.columns([1, 1])
-        submitted = c1.form_submit_button("Engage Veritas")
-        c2.form_submit_button("Reset Canvas", on_click=reset_canvas)
+        with c1:
+            submitted = st.form_submit_button(
+                "Engage Veritas",
+                use_container_width=True
+                )
+        with c2:
+            reset_clicked = st.form_submit_button(
+                "Reset Canvas",
+                use_container_width=True,
+                on_click=reset_canvas
+        )
 
     if submitted:
         new_request_id()
@@ -1096,6 +1105,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
