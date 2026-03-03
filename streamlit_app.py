@@ -638,14 +638,9 @@ st.session_state.setdefault("report_ready", False)
 # AUTH UI
 # =============================================================================
 def show_login() -> None:
-    st.subheader("Veritas Institutional Trial Portal")
-
-    mode = st.radio(
-        label="",
-        options=["User", "Admin"],
-        index=0,
-        horizontal=True,
-        label_visibility="collapsed",
+    st.markdown(
+        "<h2 style='color:#FF7A00; font-weight:700;'>Veritas Institutional Trial Portal</h2>",
+        unsafe_allow_html=True,
     )
 
     if mode == "User":
@@ -1009,6 +1004,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
