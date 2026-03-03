@@ -187,16 +187,62 @@ st.set_page_config(page_title=APP_TITLE, layout="centered")
 st.markdown(
     """
     <style>
-      .veritas-id { font-size: 1.15rem; font-weight: 700; margin: .25rem 0 .5rem 0; }
-      .small-muted { opacity: .78; font-size: .92rem; }
-      [data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
-      #MainMenu { visibility: hidden !important; }
-      footer { visibility: hidden !important; }
+
+    /* ============================= */
+    /* GLOBAL DARK ROYAL BLUE THEME */
+    /* ============================= */
+
+    .stApp {
+        background-color: #0B1F3B;
+        color: #FFFFFF;
+    }
+
+    /* Remove Streamlit header/footer */
+    [data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
+    #MainMenu { visibility: hidden !important; }
+    footer { visibility: hidden !important; }
+
+    /* Sidebar */
+    section[data-testid="stSidebar"] {
+        background-color: #08172B;
+    }
+
+    /* Buttons (Bright Orange) */
+    div.stButton > button {
+        background-color: #FF7A00;
+        color: white;
+        font-weight: 600;
+        border-radius: 6px;
+        border: none;
+    }
+
+    div.stButton > button:hover {
+        background-color: #E06600;
+    }
+
+    /* Input fields */
+    input, textarea {
+        background-color: #132B4F !important;
+        color: white !important;
+        border-radius: 6px !important;
+        border: 1px solid #1E3A66 !important;
+    }
+
+    /* Tabs */
+    button[role="tab"] {
+        background-color: #132B4F !important;
+        color: white !important;
+    }
+
+    /* DataFrames */
+    .stDataFrame {
+        background-color: #132B4F;
+    }
+
     </style>
     """,
     unsafe_allow_html=True,
 )
-
 # =============================================================================
 # UTILITIES
 # =============================================================================
@@ -963,6 +1009,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
