@@ -592,7 +592,7 @@ st.session_state.setdefault("report_ready", False)
 # AUTH UI
 # =============================================================================
 def show_login() -> None:
-    st.subheader("Launch Veritas")
+    st.subheader("Veritas Institutional Trial Portal")
 
     mode = st.radio(
         label="",
@@ -963,6 +963,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
