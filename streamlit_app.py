@@ -906,22 +906,17 @@ with st.sidebar:
         _safe_rerun()
 
 # =============================================================================
-# MAIN UI (ADMIN-ONLY CONSOLE)
+# MAIN UI
+# - Users: Analyze only
+# - Admins: Analyze + Admin
 # =============================================================================
-if not st.session_state.get("is_admin", False):
-    st.error("This console is restricted to administrators.")
-    st.stop()
-
-tabs = st.tabs(["Analyze", "Admin"])
-tab_analyze, tab_admin = tabs[0], tabs[1]
-
-def reset_canvas() -> None:
-    st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
-    st.session_state["last_report"] = ""
-    st.session_state["report_ready"] = False
-    st.session_state["user_input_box"] = ""
-    st.session_state["veritas_analysis_id"] = ""
-    st.session_state["feedback_last_submitted_analysis_id"] = ""
+if st.session_state.get("is_admin", False):
+    tabs = st.tabs(["Analyze", "Admin"])
+    tab_analyze, tab_admin = tabs[0], tabs[1]
+else:
+    tabs = st.tabs(["Analyze"])
+    tab_analyze = tabs[0]
+    tab_admin = None
 
 # =============================================================================
 # ANALYZE TAB
@@ -1055,7 +1050,8 @@ with tab_analyze:
 # =============================================================================
 # ADMIN TAB
 # =============================================================================
-with tab_admin:
+if tab_admin is not None:
+    with tab_admin:
     st.header("Admin Dashboard")
 
     st.subheader("Diagnostics")
@@ -1257,6 +1253,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
