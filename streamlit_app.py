@@ -8,13 +8,13 @@
 # - User/Admin login gate (password-gated)
 # - Privacy/Terms acknowledgment gate for non-admins (persisted)
 # - Refusal routing (refusal_router.py) + refusal telemetry (CSV + SQLite)
-# - Analysis logging (CSV + SQLite) WITHOUT storing full user text
+# - Analysis logging (CSV + SQLite) INCLUDING full input text + output text
 # - PDF/DOCX/TXT/MD/CSV text extraction
-# - Post-analysis feedback form (CSV + SQLite) tied to Analysis ID
+# - Post-analysis feedback form (CSV + SQLite) tied to Analysis ID (stores full input text too)
 #
 # Dependencies:
 #   streamlit, openai, pandas, python-docx, pypdf
-# Optional (recommended for encryption at rest):
+# Optional (recommended for encryption at rest of feedback input copy):
 #   cryptography
 
 import os
@@ -24,7 +24,6 @@ import csv
 import time
 import hmac
 import uuid
-import json
 import hashlib
 import secrets
 import sqlite3
@@ -32,7 +31,7 @@ import unicodedata
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 import pandas as pd
 import streamlit as st
@@ -63,7 +62,7 @@ if APP_MODE != "internal_console" and BYPASS != "1":
     st.stop()
 
 # Refusal Router (required companion file)
-from refusal_router import check_refusal, render_refusal, RefusalResult
+from refusal_router import check_refusal, render_refusal
 
 # =============================================================================
 # CONFIG
@@ -86,14 +85,13 @@ TEMPERATURE = float(_get_setting("OPENAI_TEMPERATURE", "0.2"))
 INSTITUTIONAL_TRIAL_MODE = (_get_setting("INSTITUTIONAL_TRIAL_MODE", "1")).strip() == "1"
 MAX_FEEDBACK_COMMENT_CHARS = int(_get_setting("MAX_FEEDBACK_COMMENT_CHARS", "2000"))
 
-# --- Input storage for feedback (encrypted at rest in SQLite) ---
-STORE_FULL_INPUT_FOR_FEEDBACK = (_get_setting("STORE_FULL_INPUT_FOR_FEEDBACK", "0")).strip() == "1"
+# --- Optional encrypted copy for feedback input (in addition to plaintext storage) ---
+STORE_ENCRYPTED_INPUT_FOR_FEEDBACK = (_get_setting("STORE_ENCRYPTED_INPUT_FOR_FEEDBACK", "0")).strip() == "1"
 INPUT_ENCRYPTION_KEY = (_get_setting("INPUT_ENCRYPTION_KEY", "")).strip()  # Fernet key recommended
 
 # --- ENFORCED OpenAI key wiring (Env-first fallback + secrets) ---
 def _get_openai_api_key() -> str:
-    api_key = (_get_setting("OPENAI_API_KEY", "") or "").strip()
-    return api_key
+    return (_get_setting("OPENAI_API_KEY", "") or "").strip()
 
 
 def get_openai_client() -> OpenAI:
@@ -126,10 +124,7 @@ DOC_ALLOWED_EXTENSIONS = {"pdf", "docx", "txt", "md", "csv"}
 
 # Logging (CSV + SQLite)
 DB_PATH = str(DATA_DIR / "veritas.db")
-
-# Ensure ALL modules (tenant_store, admin tools, etc.) use the SAME DB
-# IMPORTANT: must be set BEFORE importing tenant_store.
-os.environ["DB_PATH"] = DB_PATH  # force single source of truth
+os.environ["DB_PATH"] = DB_PATH  # force single source of truth for other modules
 
 ANALYSES_CSV = str(DATA_DIR / "analyses.csv")
 ERRORS_CSV = str(DATA_DIR / "errors.csv")
@@ -155,10 +150,7 @@ TTL_DAYS_DEFAULT = int(_get_setting("LOG_TTL_DAYS", "365"))
 # =============================================================================
 from tenant_store import (
     init_tenant_tables,
-    verify_tenant_key,
     current_period_yyyy,
-    get_usage,
-    increment_usage,
     admin_create_tenant,
     suspend_tenant,
     rotate_key,
@@ -192,143 +184,48 @@ REQUIRED:
 """.strip()
 
 # =============================================================================
-# STREAMLIT PAGE
+# STREAMLIT PAGE + THEME
 # =============================================================================
 st.set_page_config(page_title=APP_TITLE, layout="centered")
 
 st.markdown(
     """
     <style>
+    html, body, [data-testid="stAppViewContainer"] { background-color:#0B1F3B !important; color:#FFFFFF !important; }
+    .stApp { background-color:#0B1F3B !important; color:#FFFFFF !important; }
+    header[data-testid="stHeader"] { background-color:#0B1F3B !important; height:0px !important; }
+    header[data-testid="stHeader"] > div { background-color:#0B1F3B !important; }
+    [data-testid="stToolbar"] { visibility:hidden !important; height:0 !important; }
+    #MainMenu { visibility:hidden !important; }
+    footer { visibility:hidden !important; }
 
-    /* ============================= */
-    /* GLOBAL DARK ROYAL BLUE THEME */
-    /* ============================= */
+    section[data-testid="stSidebar"] { background-color:#08172B !important; }
 
-    html, body, [data-testid="stAppViewContainer"] {
-        background-color: #0B1F3B !important;
-        color: #FFFFFF !important;
-    }
-
-    .stApp {
-        background-color: #0B1F3B !important;
-        color: #FFFFFF !important;
-    }
-
-    /* ============================= */
-    /* REMOVE STREAMLIT GREEN HEADER */
-    /* ============================= */
-
-    header[data-testid="stHeader"] {
-        background-color: #0B1F3B !important;
-        height: 0px !important;
-    }
-
-    header[data-testid="stHeader"] > div {
-        background-color: #0B1F3B !important;
-    }
-
-    /* Remove toolbar / footer */
-    [data-testid="stToolbar"] { visibility: hidden !important; height: 0 !important; }
-    #MainMenu { visibility: hidden !important; }
-    footer { visibility: hidden !important; }
-
-    /* ============================= */
-    /* SIDEBAR */
-    /* ============================= */
-
-    section[data-testid="stSidebar"] {
-        background-color: #08172B !important;
-    }
-
-    /* ============================= */
-    /* BUTTONS (BRIGHT ORANGE) */
-    /* ============================= */
-
-    div.stButton > button {
-        background-color: #FF7A00 !important;
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-        border-radius: 6px !important;
-        border: none !important;
-    }
-
-    div.stButton > button:hover {
-        background-color: #E06600 !important;
-    }
-
-    /* ============================= */
-    /* FORM SUBMIT BUTTONS (ORANGE) */
-    /* ============================= */
-
+    div.stButton > button,
     div[data-testid="stFormSubmitButton"] > button {
-        background-color: #FF7A00 !important;
-        color: #FFFFFF !important;
-        font-weight: 700 !important;
-        border-radius: 6px !important;
-        border: none !important;
+        background-color:#FF7A00 !important;
+        color:#FFFFFF !important;
+        font-weight:700 !important;
+        border-radius:6px !important;
+        border:none !important;
     }
-
-    div[data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #E06600 !important;
-    }
-
-    /* ============================= */
-    /* INPUT FIELDS */
-    /* ============================= */
+    div.stButton > button:hover,
+    div[data-testid="stFormSubmitButton"] > button:hover { background-color:#E06600 !important; }
 
     input, textarea {
-        background-color: #132B4F !important;
-        color: #FFFFFF !important;
-        border-radius: 6px !important;
-        border: 1px solid #1E3A66 !important;
+        background-color:#132B4F !important;
+        color:#FFFFFF !important;
+        border-radius:6px !important;
+        border:1px solid #1E3A66 !important;
     }
 
-    /* Fix password visibility icon background */
-    button[kind="secondary"] {
-        background-color: #132B4F !important;
-    }
+    button[kind="secondary"] { background-color:#132B4F !important; }
 
-    /* ============================= */
-    /* RADIO BUTTONS (NEUTRAL) */
-    /* ============================= */
+    button[role="tab"] { background-color:#132B4F !important; color:#FFFFFF !important; }
 
-    div[role="radiogroup"] label {
-        color: #FFFFFF !important;
-        background-color: transparent !important;
-    }
+    .stDataFrame { background-color:#132B4F !important; }
 
-    input[type="radio"]:checked + div {
-        background-color: transparent !important;
-        border-color: #FFFFFF !important;
-    }
-
-    /* ============================= */
-    /* TABS */
-    /* ============================= */
-
-    button[role="tab"] {
-        background-color: #132B4F !important;
-        color: #FFFFFF !important;
-    }
-
-    /* ============================= */
-    /* DATAFRAMES */
-    /* ============================= */
-
-    .stDataFrame {
-        background-color: #132B4F !important;
-    }
-
-    /* ============================= */
-    /* LOGIN TITLE CLASS */
-    /* ============================= */
-
-    .login-title {
-        color: #FF7A00 !important;
-        font-weight: 800 !important;
-        margin-bottom: 0.5rem !important;
-    }
-
+    .login-title { color:#FF7A00 !important; font-weight:800 !important; margin-bottom:0.5rem !important; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -381,7 +278,7 @@ def new_request_id(prefix: str = "RQ") -> str:
 
 
 # =============================================================================
-# INPUT STORAGE HELPERS (encrypted at rest)
+# OPTIONAL ENCRYPTION HELPERS (for feedback encrypted copy)
 # =============================================================================
 def _xor_crypt(data: bytes, key: bytes) -> bytes:
     out = bytearray(len(data))
@@ -393,28 +290,25 @@ def _xor_crypt(data: bytes, key: bytes) -> bytes:
 def _encrypt_text(plain: str) -> str:
     """
     Encrypt plaintext for SQLite storage.
-
     Prefers cryptography.Fernet if installed.
-    Falls back to XOR+base64 (weak). Still avoids plaintext at rest.
+    Falls back to XOR+base64 (weak). Still avoids plaintext at rest for encrypted copy.
     """
     plain_b = (plain or "").encode("utf-8", errors="ignore")
     if not plain_b:
         return ""
 
+    if not INPUT_ENCRYPTION_KEY:
+        raise RuntimeError("Missing INPUT_ENCRYPTION_KEY")
+
     # Prefer Fernet if available
     try:
         from cryptography.fernet import Fernet  # type: ignore
 
-        if not INPUT_ENCRYPTION_KEY:
-            raise RuntimeError("Missing INPUT_ENCRYPTION_KEY")
         f = Fernet(INPUT_ENCRYPTION_KEY.encode("utf-8"))
         return f.encrypt(plain_b).decode("utf-8")
     except Exception:
-        # Fallback (weak): XOR + base64
         import base64
 
-        if not INPUT_ENCRYPTION_KEY:
-            raise RuntimeError("Missing INPUT_ENCRYPTION_KEY")
         key_b = hashlib.sha256(INPUT_ENCRYPTION_KEY.encode("utf-8")).digest()
         return base64.b64encode(_xor_crypt(plain_b, key_b)).decode("utf-8")
 
@@ -470,9 +364,10 @@ def _init_db() -> None:
             success INTEGER,
             hashed_attempt_prefix TEXT
         )
-    """
+        """
     )
 
+    # ✅ analyses now stores full input_text + output_text
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS analyses (
@@ -485,9 +380,11 @@ def _init_db() -> None:
             elapsed_seconds REAL,
             input_chars INTEGER,
             input_preview TEXT,
-            input_sha256 TEXT
+            input_sha256 TEXT,
+            input_text TEXT,
+            output_text TEXT
         )
-    """
+        """
     )
 
     cur.execute(
@@ -503,7 +400,7 @@ def _init_db() -> None:
             session_id TEXT,
             login_id TEXT
         )
-    """
+        """
     )
 
     cur.execute(
@@ -518,7 +415,7 @@ def _init_db() -> None:
             privacy_url TEXT,
             terms_url TEXT
         )
-    """
+        """
     )
 
     cur.execute(
@@ -533,10 +430,10 @@ def _init_db() -> None:
             input_len INTEGER,
             input_sha256 TEXT
         )
-    """
+        """
     )
 
-    # Feedback now includes input_sha256 + input_encrypted (encrypted at rest) for trial analytics
+    # ✅ feedback now stores plaintext input_text (plus optional encrypted copy)
     cur.execute(
         """
         CREATE TABLE IF NOT EXISTS feedback_events (
@@ -552,9 +449,10 @@ def _init_db() -> None:
             alignment INTEGER,
             comments TEXT,
             input_sha256 TEXT,
+            input_text TEXT,
             input_encrypted TEXT
         )
-    """
+        """
     )
 
     con.commit()
@@ -562,8 +460,13 @@ def _init_db() -> None:
 
 
 _init_db()
-# Backward-compatible DB migration
+
+# Backward-compatible DB migrations (safe no-ops if columns already exist)
+_db_add_column_if_missing("analyses", "input_text", "TEXT")
+_db_add_column_if_missing("analyses", "output_text", "TEXT")
+
 _db_add_column_if_missing("feedback_events", "input_sha256", "TEXT")
+_db_add_column_if_missing("feedback_events", "input_text", "TEXT")
 _db_add_column_if_missing("feedback_events", "input_encrypted", "TEXT")
 
 init_tenant_tables()
@@ -618,12 +521,23 @@ _init_csv(
 )
 _init_csv(
     ANALYSES_CSV,
-    ["timestamp_utc", "analysis_id", "session_id", "login_id", "model", "elapsed_seconds", "input_chars", "input_preview", "input_sha256"],
+    [
+        "timestamp_utc",
+        "analysis_id",
+        "session_id",
+        "login_id",
+        "model",
+        "elapsed_seconds",
+        "input_chars",
+        "input_preview",
+        "input_sha256",
+        "input_text",
+        "output_text",
+    ],
 )
 _init_csv(ERRORS_CSV, ["timestamp_utc", "request_id", "route", "kind", "http_status", "detail", "session_id", "login_id"])
 _init_csv(ACK_CSV, ["timestamp_utc", "ack_key", "session_id", "login_id", "acknowledged", "privacy_url", "terms_url"])
 _init_csv(REFUSALS_CSV, ["created_utc", "analysis_id", "source", "category", "reason", "input_len", "input_sha256"])
-# CSV stores input_sha256 only (not the encrypted blob)
 _init_csv(
     FEEDBACK_CSV,
     [
@@ -638,6 +552,7 @@ _init_csv(
         "alignment",
         "comments",
         "input_sha256",
+        "input_text",
     ],
 )
 
@@ -689,6 +604,68 @@ def log_auth_event(
         pass
 
 
+def log_analysis_event(
+    analysis_id: str,
+    model: str,
+    elapsed_seconds: float,
+    analyzed_text: str,
+    output_text: str,
+) -> None:
+    """
+    ✅ Stores full analyzed input + full output in BOTH:
+    - analyses.csv
+    - analyses table (SQLite)
+    """
+    ts = _now_utc_iso()
+    sid = ensure_session_id()
+    login_id = (st.session_state.get("login_id") or "")[:120]
+
+    text = (analyzed_text or "").strip()
+    out = (output_text or "").strip()
+
+    row = [
+        ts,
+        (analysis_id or "")[:40],
+        sid,
+        login_id,
+        (model or "")[:80],
+        float(elapsed_seconds or 0.0),
+        len(text),
+        _safe_preview(text, 220),
+        _sha256(text) if text else "",
+        text,
+        out,
+    ]
+
+    try:
+        with open(ANALYSES_CSV, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(row)
+    except Exception:
+        pass
+
+    try:
+        _db_exec(
+            """INSERT INTO analyses
+               (timestamp_utc,analysis_id,session_id,login_id,model,elapsed_seconds,input_chars,input_preview,input_sha256,input_text,output_text)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                ts,
+                (analysis_id or "")[:40],
+                sid,
+                login_id,
+                (model or "")[:80],
+                float(elapsed_seconds or 0.0),
+                len(text),
+                _safe_preview(text, 220),
+                _sha256(text) if text else "",
+                text,
+                out,
+            ),
+        )
+    except Exception:
+        pass
+
+
 def save_feedback(
     analysis_id: str,
     clarity: int,
@@ -699,42 +676,46 @@ def save_feedback(
     comments: str = "",
     analyzed_text: str = "",
 ) -> None:
-    """Persist post-analysis feedback (CSV + SQLite)."""
+    """
+    ✅ Stores feedback + FULL input_text (plaintext) in:
+    - feedback_events.csv
+    - feedback_events table (SQLite)
+    Also stores optional encrypted copy in SQLite if enabled.
+    """
     ts = _now_utc_iso()
     sid = ensure_session_id()
     login_id = (st.session_state.get("login_id") or "")[:120]
     aid = (analysis_id or "")[:40]
+
     cmt = (comments or "").strip()
     if len(cmt) > MAX_FEEDBACK_COMMENT_CHARS:
         cmt = cmt[:MAX_FEEDBACK_COMMENT_CHARS] + "…"
 
     text = (analyzed_text or "").strip()
     text_sha = _sha256(text) if text else ""
-    text_enc = ""
 
-    if STORE_FULL_INPUT_FOR_FEEDBACK:
-        # Fail-closed: never store plaintext
-        if INPUT_ENCRYPTION_KEY:
-            try:
-                text_enc = _encrypt_text(text)
-            except Exception:
-                text_enc = ""
-        else:
+    text_enc = ""
+    if STORE_ENCRYPTED_INPUT_FOR_FEEDBACK and text:
+        try:
+            text_enc = _encrypt_text(text)
+        except Exception:
             text_enc = ""
 
-    # CSV (hash only)
+    # CSV (includes plaintext input_text)
     try:
         with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt, text_sha])
+            csv.writer(f).writerow(
+                [ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt, text_sha, text]
+            )
     except Exception:
         pass
 
-    # SQLite (hash + optional encrypted text)
+    # SQLite (includes plaintext + optional encrypted copy)
     try:
         _db_exec(
             """INSERT INTO feedback_events
-               (timestamp_utc,analysis_id,session_id,login_id,clarity,objectivity,usefulness,appropriateness,alignment,comments,input_sha256,input_encrypted)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+               (timestamp_utc,analysis_id,session_id,login_id,clarity,objectivity,usefulness,appropriateness,alignment,comments,input_sha256,input_text,input_encrypted)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 ts,
                 aid,
@@ -747,6 +728,7 @@ def save_feedback(
                 int(alignment),
                 cmt,
                 text_sha,
+                text,
                 text_enc,
             ),
         )
@@ -834,14 +816,17 @@ def require_acknowledgment() -> None:
             if not (c1 and c2):
                 st.error("Please check both boxes.")
                 st.stop()
+
             ts = _now_utc_iso()
             sid = ensure_session_id()
             login_id = st.session_state.get("login_id", "")
+
             try:
                 with open(ACK_CSV, "a", newline="", encoding="utf-8") as f:
                     csv.writer(f).writerow([ts, ack_key, sid, login_id, 1, PRIVACY_URL, TERMS_URL])
             except Exception:
                 pass
+
             try:
                 _db_exec(
                     """INSERT INTO ack_events (timestamp_utc,ack_key,session_id,login_id,acknowledged,privacy_url,terms_url)
@@ -850,6 +835,7 @@ def require_acknowledgment() -> None:
                 )
             except Exception:
                 pass
+
             st.session_state["ack_ok"] = True
             st.success("Acknowledgment recorded.")
             _safe_rerun()
@@ -1064,11 +1050,8 @@ with st.sidebar:
 
 # =============================================================================
 # MAIN UI
-# - Users: Analyze only
-# - Admins: Analyze + Admin
 # =============================================================================
 def reset_canvas() -> None:
-    """Reset analyze canvas + per-analysis state."""
     st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
     st.session_state["user_input_box"] = ""
     st.session_state["last_report"] = ""
@@ -1112,10 +1095,8 @@ with tab_analyze:
         )
 
         c1, c2 = st.columns([2, 1])
-
         with c1:
             submitted = st.form_submit_button("Engage Veritas", use_container_width=True)
-
         with c2:
             st.form_submit_button("Reset Canvas", use_container_width=True, on_click=reset_canvas)
 
@@ -1132,7 +1113,7 @@ with tab_analyze:
             st.warning("Please paste text or upload a document to analyze.")
             st.stop()
 
-        # Store analyzed input (used for encrypted feedback storage)
+        # Store analyzed input (for feedback + diagnostics)
         st.session_state["last_analyzed_input"] = final_input
 
         st.session_state["veritas_analysis_id"] = f"VTX-{uuid.uuid4().hex[:12].upper()}"
@@ -1154,6 +1135,8 @@ with tab_analyze:
             st.stop()
 
         client = get_openai_client()
+
+        t0 = time.time()
         resp = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
@@ -1162,10 +1145,20 @@ with tab_analyze:
             ],
             temperature=TEMPERATURE,
         )
+        elapsed = time.time() - t0
 
         report = (resp.choices[0].message.content or "").strip()
         st.session_state["last_report"] = report
         st.session_state["report_ready"] = True
+
+        # ✅ Persist EVERYTHING + full input + output
+        log_analysis_event(
+            analysis_id=analysis_id,
+            model=MODEL_NAME,
+            elapsed_seconds=elapsed,
+            analyzed_text=final_input,
+            output_text=report,
+        )
 
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         st.markdown(st.session_state["last_report"])
@@ -1222,43 +1215,7 @@ if tab_admin is not None:
         st.write(f"Temperature: `{TEMPERATURE}`")
         st.write(f"DB Path: `{DB_PATH}`")
         st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
-        st.write(f"Store full input for feedback: `{'ON' if STORE_FULL_INPUT_FOR_FEEDBACK else 'OFF'}`")
-
-        st.subheader("Refusal Telemetry")
-
-        def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
-            try:
-                con = sqlite3.connect(DB_PATH, timeout=30)
-                cur = con.cursor()
-                cur.execute(
-                    """SELECT created_utc, analysis_id, source, category, reason, input_len
-                       FROM refusal_events
-                       ORDER BY id DESC
-                       LIMIT ?""",
-                    (limit,),
-                )
-                rows = cur.fetchall()
-                con.close()
-                return rows
-            except Exception:
-                try:
-                    con.close()
-                except Exception:
-                    pass
-                return []
-
-        rows = fetch_recent_refusals(limit=500)
-        if not rows:
-            st.info("No refusal events logged yet.")
-        else:
-            df = pd.DataFrame(rows, columns=["created_utc", "analysis_id", "source", "category", "reason", "input_len"])
-            st.dataframe(df, use_container_width=True)
-            st.download_button(
-                "Download Refusal Log (CSV)",
-                data=df.to_csv(index=False).encode("utf-8"),
-                file_name="veritas_refusal_log.csv",
-                mime="text/csv",
-            )
+        st.write(f"Encrypted feedback input copy: `{'ON' if STORE_ENCRYPTED_INPUT_FOR_FEEDBACK else 'OFF'}`")
 
         st.subheader("Tenant Management")
 
@@ -1330,7 +1287,6 @@ if tab_admin is not None:
             st.info("No tenants found.")
 
         st.divider()
-
         st.markdown("### Tenant Lookup")
         lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
 
@@ -1372,6 +1328,58 @@ if tab_admin is not None:
                 st.info("No keys found for this tenant.")
 
         st.divider()
+        st.subheader("Analyses (Export)")
+
+        def fetch_recent_analyses(limit: int = 500) -> List[Tuple[Any, ...]]:
+            try:
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT timestamp_utc, analysis_id, login_id, model, elapsed_seconds,
+                              input_chars, input_preview, input_sha256, input_text, output_text
+                       FROM analyses
+                       ORDER BY id DESC
+                       LIMIT ?""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                con.close()
+                return rows
+            except Exception:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                return []
+
+        arows = fetch_recent_analyses(limit=500)
+        if not arows:
+            st.info("No analyses logged yet.")
+        else:
+            adf = pd.DataFrame(
+                arows,
+                columns=[
+                    "timestamp_utc",
+                    "analysis_id",
+                    "login_id",
+                    "model",
+                    "elapsed_seconds",
+                    "input_chars",
+                    "input_preview",
+                    "input_sha256",
+                    "input_text",
+                    "output_text",
+                ],
+            )
+            st.dataframe(adf, use_container_width=True)
+            st.download_button(
+                "Download Analyses Log (CSV)",
+                data=adf.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_analyses_log.csv",
+                mime="text/csv",
+            )
+
+        st.divider()
         st.subheader("Trial Feedback (Export)")
 
         def fetch_recent_feedback(limit: int = 1000) -> List[Tuple[Any, ...]]:
@@ -1380,8 +1388,8 @@ if tab_admin is not None:
                 cur = con.cursor()
                 cur.execute(
                     """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness,
-                              appropriateness, alignment, comments, input_sha256,
-                              CASE WHEN input_encrypted IS NOT NULL AND input_encrypted != '' THEN 1 ELSE 0 END AS has_input
+                              appropriateness, alignment, comments, input_sha256, input_text,
+                              CASE WHEN input_encrypted IS NOT NULL AND input_encrypted != '' THEN 1 ELSE 0 END AS has_encrypted_copy
                        FROM feedback_events
                        ORDER BY id DESC
                        LIMIT ?""",
@@ -1414,7 +1422,8 @@ if tab_admin is not None:
                     "alignment",
                     "comments",
                     "input_sha256",
-                    "has_input",
+                    "input_text",
+                    "has_encrypted_copy",
                 ],
             )
             st.dataframe(fdf, use_container_width=True)
