@@ -10,6 +10,7 @@
 # - Refusal routing (refusal_router.py) + refusal telemetry (CSV + SQLite)
 # - Analysis logging (CSV + SQLite) WITHOUT storing full user text
 # - PDF/DOCX/TXT/MD/CSV text extraction
+# - Post-analysis feedback form (CSV + SQLite) tied to Analysis ID
 #
 # Dependencies:
 #   streamlit, openai, pandas, python-docx, pypdf
@@ -80,6 +81,10 @@ APP_TITLE = (_get_setting("APP_TITLE", "Veritas")).strip()
 MODEL_NAME = (_get_setting("OPENAI_MODEL", "") or "gpt-4.1-mini").strip()
 TEMPERATURE = float(_get_setting("OPENAI_TEMPERATURE", "0.2"))
 
+# --- Trial Feedback (toggleable) ---
+INSTITUTIONAL_TRIAL_MODE = (_get_setting("INSTITUTIONAL_TRIAL_MODE", "1")).strip() == "1"
+MAX_FEEDBACK_COMMENT_CHARS = int(_get_setting("MAX_FEEDBACK_COMMENT_CHARS", "2000"))
+
 # --- ENFORCED OpenAI key wiring (Env-first fallback + secrets) ---
 def _get_openai_api_key() -> str:
     api_key = (_get_setting("OPENAI_API_KEY", "") or "").strip()
@@ -125,6 +130,7 @@ ERRORS_CSV = str(DATA_DIR / "errors.csv")
 AUTH_CSV = str(DATA_DIR / "auth_events.csv")
 ACK_CSV = str(DATA_DIR / "ack_events.csv")
 REFUSALS_CSV = str(DATA_DIR / "refusal_telemetry.csv")
+FEEDBACK_CSV = str(DATA_DIR / "feedback_events.csv")
 
 # Rate limiting + lockout
 RATE_LIMIT_LOGIN = int(_get_setting("RATE_LIMIT_LOGIN", "5"))
@@ -321,6 +327,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 # =============================================================================
 # UTILITIES
 # =============================================================================
@@ -448,6 +455,23 @@ def _init_db() -> None:
         )
     """)
 
+    # NEW: Feedback events (post-analysis)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS feedback_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp_utc TEXT,
+            analysis_id TEXT,
+            session_id TEXT,
+            login_id TEXT,
+            clarity INTEGER,
+            objectivity INTEGER,
+            usefulness INTEGER,
+            appropriateness INTEGER,
+            alignment INTEGER,
+            comments TEXT
+        )
+    """)
+
     con.commit()
     con.close()
 
@@ -500,18 +524,21 @@ _init_csv(ANALYSES_CSV, ["timestamp_utc","analysis_id","session_id","login_id","
 _init_csv(ERRORS_CSV, ["timestamp_utc","request_id","route","kind","http_status","detail","session_id","login_id"])
 _init_csv(ACK_CSV, ["timestamp_utc","ack_key","session_id","login_id","acknowledged","privacy_url","terms_url"])
 _init_csv(REFUSALS_CSV, ["created_utc","analysis_id","source","category","reason","input_len","input_sha256"])
+_init_csv(FEEDBACK_CSV, ["timestamp_utc","analysis_id","session_id","login_id","clarity","objectivity","usefulness","appropriateness","alignment","comments"])
 
 _prune_csv(AUTH_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ANALYSES_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ERRORS_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ACK_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(REFUSALS_CSV, TTL_DAYS_DEFAULT)
+_prune_csv(FEEDBACK_CSV, TTL_DAYS_DEFAULT)
 
 _prune_table("auth_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("analyses", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("errors", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("ack_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("refusal_events", "created_utc", TTL_DAYS_DEFAULT)
+_prune_table("feedback_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 
 # =============================================================================
 # LOGGING
@@ -536,6 +563,44 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
             """INSERT INTO auth_events (timestamp_utc,event_type,login_id,session_id,request_id,credential_label,success,hashed_attempt_prefix)
                VALUES (?,?,?,?,?,?,?,?)""",
             (ts, event_type, (login_id or "")[:120], sid, rid, credential_label, 1 if success else 0, hashed_prefix),
+        )
+    except Exception:
+        pass
+
+def save_feedback(
+    analysis_id: str,
+    clarity: int,
+    objectivity: int,
+    usefulness: int,
+    appropriateness: int,
+    alignment: int,
+    comments: str = "",
+) -> None:
+    """Persist post-analysis feedback (CSV + SQLite)."""
+    ts = _now_utc_iso()
+    sid = ensure_session_id()
+    login_id = (st.session_state.get("login_id") or "")[:120]
+    aid = (analysis_id or "")[:40]
+    cmt = (comments or "").strip()
+    if len(cmt) > MAX_FEEDBACK_COMMENT_CHARS:
+        cmt = cmt[:MAX_FEEDBACK_COMMENT_CHARS] + "…"
+
+    # CSV
+    try:
+        with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(
+                [ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt]
+            )
+    except Exception:
+        pass
+
+    # SQLite
+    try:
+        _db_exec(
+            """INSERT INTO feedback_events
+               (timestamp_utc,analysis_id,session_id,login_id,clarity,objectivity,usefulness,appropriateness,alignment,comments)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (ts, aid, sid, login_id, int(clarity), int(objectivity), int(usefulness), int(appropriateness), int(alignment), cmt),
         )
     except Exception:
         pass
@@ -711,6 +776,8 @@ st.session_state.setdefault("ack_ok", False)
 st.session_state.setdefault("doc_uploader_key", 0)
 st.session_state.setdefault("last_report", "")
 st.session_state.setdefault("report_ready", False)
+st.session_state.setdefault("veritas_analysis_id", "")
+st.session_state.setdefault("feedback_last_submitted_analysis_id", "")
 
 # =============================================================================
 # AUTH UI
@@ -813,7 +880,6 @@ def show_login() -> None:
                 st.error("Invalid admin credentials.")
                 st.stop()
 
-
 if not st.session_state.get("authed", False):
     show_login()
     st.stop()
@@ -855,6 +921,7 @@ def reset_canvas() -> None:
     st.session_state["report_ready"] = False
     st.session_state["user_input_box"] = ""
     st.session_state["veritas_analysis_id"] = ""
+    st.session_state["feedback_last_submitted_analysis_id"] = ""
 
 # =============================================================================
 # ANALYZE TAB
@@ -945,6 +1012,46 @@ with tab_analyze:
 
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         st.markdown(st.session_state["last_report"])
+
+        # =============================================================================
+        # POST-ANALYSIS FEEDBACK (Trial Mode)
+        # =============================================================================
+        if INSTITUTIONAL_TRIAL_MODE and st.session_state.get("veritas_analysis_id"):
+            st.divider()
+            st.subheader("Institutional Trial Feedback")
+
+            already_submitted = (
+                st.session_state.get("feedback_last_submitted_analysis_id", "") == st.session_state["veritas_analysis_id"]
+            )
+
+            if already_submitted:
+                st.success("Feedback recorded for this analysis.")
+            else:
+                with st.form("feedback_form", clear_on_submit=True):
+                    st.caption("Quick ratings help validate output quality during the trial period.")
+                    clarity = st.slider("Clarity of Analysis", 1, 5, 3)
+                    objectivity = st.slider("Perceived Objectivity", 1, 5, 3)
+                    usefulness = st.slider("Usefulness of Findings", 1, 5, 3)
+                    appropriateness = st.slider("Institutional Appropriateness", 1, 5, 3)
+                    alignment = st.slider("Alignment with Your Assessment", 1, 5, 3)
+                    comments = st.text_area("Additional Comments (Optional)", height=120)
+
+                    feedback_submit = st.form_submit_button("Submit Feedback")
+
+                if feedback_submit:
+                    save_feedback(
+                        analysis_id=st.session_state["veritas_analysis_id"],
+                        clarity=clarity,
+                        objectivity=objectivity,
+                        usefulness=usefulness,
+                        appropriateness=appropriateness,
+                        alignment=alignment,
+                        comments=comments,
+                    )
+                    st.session_state["feedback_last_submitted_analysis_id"] = st.session_state["veritas_analysis_id"]
+                    st.success("Thank you. Your feedback has been recorded.")
+                    _safe_rerun()
+
 # =============================================================================
 # ADMIN TAB
 # =============================================================================
@@ -956,6 +1063,7 @@ with tab_admin:
     st.write(f"Model: `{MODEL_NAME}`")
     st.write(f"Temperature: `{TEMPERATURE}`")
     st.write(f"DB Path: `{DB_PATH}`")
+    st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
 
     st.subheader("Refusal Telemetry")
     def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
@@ -1100,6 +1208,47 @@ with tab_admin:
             )
         else:
             st.info("No keys found for this tenant.")
+
+    # OPTIONAL: Feedback export (quick access for trial reporting)
+    st.divider()
+    st.subheader("Trial Feedback (Export)")
+
+    def fetch_recent_feedback(limit: int = 1000) -> List[Tuple[Any, ...]]:
+        try:
+            con = sqlite3.connect(DB_PATH, timeout=30)
+            cur = con.cursor()
+            cur.execute(
+                """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness, appropriateness, alignment, comments
+                   FROM feedback_events
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (limit,),
+            )
+            rows = cur.fetchall()
+            con.close()
+            return rows
+        except Exception:
+            try:
+                con.close()
+            except Exception:
+                pass
+            return []
+
+    frows = fetch_recent_feedback(limit=1000)
+    if not frows:
+        st.info("No feedback submitted yet.")
+    else:
+        fdf = pd.DataFrame(
+            frows,
+            columns=["timestamp_utc","analysis_id","login_id","clarity","objectivity","usefulness","appropriateness","alignment","comments"]
+        )
+        st.dataframe(fdf, use_container_width=True)
+        st.download_button(
+            "Download Feedback Log (CSV)",
+            data=fdf.to_csv(index=False).encode("utf-8"),
+            file_name="veritas_feedback_log.csv",
+            mime="text/csv",
+        )
 
 # =============================================================================
 # FOOTER
