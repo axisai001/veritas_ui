@@ -860,8 +860,8 @@ def reset_canvas() -> None:
 # ANALYZE TAB
 # =============================================================================
 with tab_analyze:
-    st.subheader("Veritas — Content Analysis and Advisory System")
-    st.caption("Veritas returns objective findings with non-prescriptive advisory guidance.")
+    st.subheader("Veritas — Content Review & Advisory Platform")
+    st.caption("Veritas provides structured analysis with objective findings and non-prescriptive advisory guidance.")
 
     if st.session_state.get("report_ready") and st.session_state.get("veritas_analysis_id"):
         st.markdown(f"**Veritas Analysis ID:** `{st.session_state['veritas_analysis_id']}`")
@@ -1096,6 +1096,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
