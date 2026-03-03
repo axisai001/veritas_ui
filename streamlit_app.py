@@ -879,20 +879,22 @@ with tab_analyze:
             f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
             accept_multiple_files=False,
-        
-        c1, c2 = st.columns([2, 1])  # Make Engage slightly dominant
+        )
+
+        c1, c2 = st.columns([2, 1])
 
         with c1:
             submitted = st.form_submit_button(
                 "Engage Veritas",
-                use_container_width=True
-                )
+                use_container_width=True,
+            )
+
         with c2:
-            reset_clicked = st.form_submit_button(
+            st.form_submit_button(
                 "Reset Canvas",
                 use_container_width=True,
-                on_click=reset_canvas
-        )
+                on_click=reset_canvas,
+            )
 
     if submitted:
         new_request_id()
@@ -901,7 +903,9 @@ with tab_analyze:
         if doc is not None:
             extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
 
-        final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
+        final_input = (
+            user_text + ("\n\n" + extracted_text if extracted_text else "")
+        ).strip()
 
         if not final_input:
             st.warning("Please paste text or upload a document to analyze.")
@@ -941,7 +945,6 @@ with tab_analyze:
 
     if st.session_state.get("report_ready") and st.session_state.get("last_report"):
         st.markdown(st.session_state["last_report"])
-
 # =============================================================================
 # ADMIN TAB
 # =============================================================================
@@ -1105,6 +1108,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
