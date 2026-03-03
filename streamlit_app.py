@@ -717,7 +717,7 @@ def show_login() -> None:
     if mode == "User":
         with st.form("login_form_user"):
             login_id = st.text_input(
-                "Tester ID or Business User ID",
+                "Institutional User ID",
                 value=st.session_state.get("login_id", "")
             )
             pwd = st.text_input("Password", type="password")
@@ -1079,6 +1079,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
