@@ -643,9 +643,22 @@ def show_login() -> None:
         unsafe_allow_html=True,
     )
 
+    # ✅ DEFINE mode (this is what you accidentally removed)
+    mode = st.radio(
+        label="",
+        options=["User", "Admin"],
+        index=0,
+        horizontal=True,
+        label_visibility="collapsed",
+        key="login_mode",
+    )
+
     if mode == "User":
         with st.form("login_form_user"):
-            login_id = st.text_input("Tester ID or Business User ID", value=st.session_state.get("login_id", ""))
+            login_id = st.text_input(
+                "Tester ID or Business User ID",
+                value=st.session_state.get("login_id", "")
+            )
             pwd = st.text_input("Password", type="password")
             submit = st.form_submit_button("Enter")
 
@@ -721,6 +734,7 @@ def show_login() -> None:
                 _note_failed_login(attempted_secret=admin_pwd)
                 st.error("Invalid admin credentials.")
                 st.stop()
+
 
 if not st.session_state.get("authed", False):
     show_login()
@@ -1004,6 +1018,7 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
 
