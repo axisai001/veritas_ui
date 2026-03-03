@@ -50,15 +50,14 @@ def _get_setting(name: str, default: str = "") -> str:
         v = ""
     return v or default
 
+
 APP_MODE = _get_setting("APP_MODE", "")
 BYPASS = _get_setting("INTERNAL_CONSOLE_BYPASS", "0")
 
 if APP_MODE != "internal_console" and BYPASS != "1":
     st.set_page_config(page_title="Veritas", layout="centered")
     st.error("Internal console is disabled in this environment.")
-    st.caption(
-        "Set APP_MODE=internal_console (env or Streamlit Secrets) to enable this Streamlit UI."
-    )
+    st.caption("Set APP_MODE=internal_console (env or Streamlit Secrets) to enable this Streamlit UI.")
     st.stop()
 
 # Refusal Router (required companion file)
@@ -90,14 +89,15 @@ def _get_openai_api_key() -> str:
     api_key = (_get_setting("OPENAI_API_KEY", "") or "").strip()
     return api_key
 
+
 def get_openai_client() -> OpenAI:
     api_key = _get_openai_api_key()
     if not api_key:
-        # Streamlit will redact raw RuntimeError details, so show it cleanly instead.
         st.error("OPENAI_API_KEY is not configured for this instance.")
         st.caption("Set OPENAI_API_KEY in Streamlit Secrets or environment variables.")
         st.stop()
     return OpenAI(api_key=api_key)
+
 
 # Auth (set via Streamlit secrets or environment variables)
 APP_PASSWORD = (_get_setting("APP_PASSWORD", "")).strip()
@@ -249,7 +249,7 @@ st.markdown(
     div.stButton > button:hover {
         background-color: #E06600 !important;
     }
-    
+
     /* ============================= */
     /* FORM SUBMIT BUTTONS (ORANGE) */
     /* ============================= */
@@ -263,7 +263,7 @@ st.markdown(
     }
 
     div[data-testid="stFormSubmitButton"] > button:hover {
-    background-color: #E06600 !important;
+        background-color: #E06600 !important;
     }
 
     /* ============================= */
@@ -334,12 +334,15 @@ st.markdown(
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
+
 def _sha256(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8", errors="ignore")).hexdigest()
+
 
 def _safe_preview(text: str, max_chars: int = 220) -> str:
     t = (text or "").replace("\n", " ").strip()
     return (t[:max_chars] + "…") if len(t) > max_chars else t
+
 
 def _safe_rerun() -> None:
     try:
@@ -350,8 +353,10 @@ def _safe_rerun() -> None:
         except Exception:
             pass
 
+
 def _norm(s: str) -> str:
     return unicodedata.normalize("NFC", str(s)).strip()
+
 
 def ensure_session_id() -> str:
     sid = st.session_state.get("sid")
@@ -360,12 +365,14 @@ def ensure_session_id() -> str:
         st.session_state["sid"] = sid
     return sid
 
+
 def new_request_id(prefix: str = "RQ") -> str:
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     rand = secrets.token_hex(4).upper()
     rid = f"{prefix}-{ts}-{rand}"
     st.session_state["request_id"] = rid
     return rid
+
 
 # =============================================================================
 # DB / CSV INIT
@@ -375,6 +382,7 @@ def _init_csv(path: str, header: List[str]) -> None:
         with open(path, "w", newline="", encoding="utf-8") as f:
             csv.writer(f).writerow(header)
 
+
 def _db_exec(sql: str, params: Tuple[Any, ...] = ()) -> None:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
@@ -382,11 +390,13 @@ def _db_exec(sql: str, params: Tuple[Any, ...] = ()) -> None:
     con.commit()
     con.close()
 
+
 def _init_db() -> None:
     con = sqlite3.connect(DB_PATH)
     cur = con.cursor()
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS auth_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
@@ -398,9 +408,11 @@ def _init_db() -> None:
             success INTEGER,
             hashed_attempt_prefix TEXT
         )
-    """)
+    """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS analyses (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
@@ -413,9 +425,11 @@ def _init_db() -> None:
             input_preview TEXT,
             input_sha256 TEXT
         )
-    """)
+    """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS errors (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
@@ -427,9 +441,11 @@ def _init_db() -> None:
             session_id TEXT,
             login_id TEXT
         )
-    """)
+    """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS ack_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
@@ -440,9 +456,11 @@ def _init_db() -> None:
             privacy_url TEXT,
             terms_url TEXT
         )
-    """)
+    """
+    )
 
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS refusal_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_utc TEXT,
@@ -453,10 +471,11 @@ def _init_db() -> None:
             input_len INTEGER,
             input_sha256 TEXT
         )
-    """)
+    """
+    )
 
-    # NEW: Feedback events (post-analysis)
-    cur.execute("""
+    cur.execute(
+        """
         CREATE TABLE IF NOT EXISTS feedback_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             timestamp_utc TEXT,
@@ -470,13 +489,16 @@ def _init_db() -> None:
             alignment INTEGER,
             comments TEXT
         )
-    """)
+    """
+    )
 
     con.commit()
     con.close()
 
+
 _init_db()
 init_tenant_tables()
+
 
 def _prune_table(table: str, ts_col: str, ttl_days: int) -> None:
     try:
@@ -490,6 +512,7 @@ def _prune_table(table: str, ts_col: str, ttl_days: int) -> None:
         con.close()
     except Exception:
         pass
+
 
 def _prune_csv(path: str, ttl_days: int) -> None:
     try:
@@ -519,12 +542,22 @@ def _prune_csv(path: str, ttl_days: int) -> None:
     except Exception:
         pass
 
-_init_csv(AUTH_CSV, ["timestamp_utc","event_type","login_id","session_id","request_id","credential_label","success","hashed_attempt_prefix"])
-_init_csv(ANALYSES_CSV, ["timestamp_utc","analysis_id","session_id","login_id","model","elapsed_seconds","input_chars","input_preview","input_sha256"])
-_init_csv(ERRORS_CSV, ["timestamp_utc","request_id","route","kind","http_status","detail","session_id","login_id"])
-_init_csv(ACK_CSV, ["timestamp_utc","ack_key","session_id","login_id","acknowledged","privacy_url","terms_url"])
-_init_csv(REFUSALS_CSV, ["created_utc","analysis_id","source","category","reason","input_len","input_sha256"])
-_init_csv(FEEDBACK_CSV, ["timestamp_utc","analysis_id","session_id","login_id","clarity","objectivity","usefulness","appropriateness","alignment","comments"])
+
+_init_csv(
+    AUTH_CSV,
+    ["timestamp_utc", "event_type", "login_id", "session_id", "request_id", "credential_label", "success", "hashed_attempt_prefix"],
+)
+_init_csv(
+    ANALYSES_CSV,
+    ["timestamp_utc", "analysis_id", "session_id", "login_id", "model", "elapsed_seconds", "input_chars", "input_preview", "input_sha256"],
+)
+_init_csv(ERRORS_CSV, ["timestamp_utc", "request_id", "route", "kind", "http_status", "detail", "session_id", "login_id"])
+_init_csv(ACK_CSV, ["timestamp_utc", "ack_key", "session_id", "login_id", "acknowledged", "privacy_url", "terms_url"])
+_init_csv(REFUSALS_CSV, ["created_utc", "analysis_id", "source", "category", "reason", "input_len", "input_sha256"])
+_init_csv(
+    FEEDBACK_CSV,
+    ["timestamp_utc", "analysis_id", "session_id", "login_id", "clarity", "objectivity", "usefulness", "appropriateness", "alignment", "comments"],
+)
 
 _prune_csv(AUTH_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ANALYSES_CSV, TTL_DAYS_DEFAULT)
@@ -543,7 +576,13 @@ _prune_table("feedback_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 # =============================================================================
 # LOGGING
 # =============================================================================
-def log_auth_event(event_type: str, success: bool, login_id: str = "", credential_label: str = "APP_PASSWORD", attempted_secret: str = "") -> None:
+def log_auth_event(
+    event_type: str,
+    success: bool,
+    login_id: str = "",
+    credential_label: str = "APP_PASSWORD",
+    attempted_secret: str = "",
+) -> None:
     ts = _now_utc_iso()
     sid = ensure_session_id()
     rid = st.session_state.get("request_id") or new_request_id()
@@ -567,6 +606,7 @@ def log_auth_event(event_type: str, success: bool, login_id: str = "", credentia
     except Exception:
         pass
 
+
 def save_feedback(
     analysis_id: str,
     clarity: int,
@@ -588,9 +628,7 @@ def save_feedback(
     # CSV
     try:
         with open(FEEDBACK_CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow(
-                [ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt]
-            )
+            csv.writer(f).writerow([ts, aid, sid, login_id, clarity, objectivity, usefulness, appropriateness, alignment, cmt])
     except Exception:
         pass
 
@@ -600,13 +638,26 @@ def save_feedback(
             """INSERT INTO feedback_events
                (timestamp_utc,analysis_id,session_id,login_id,clarity,objectivity,usefulness,appropriateness,alignment,comments)
                VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (ts, aid, sid, login_id, int(clarity), int(objectivity), int(usefulness), int(appropriateness), int(alignment), cmt),
+            (
+                ts,
+                aid,
+                sid,
+                login_id,
+                int(clarity),
+                int(objectivity),
+                int(usefulness),
+                int(appropriateness),
+                int(alignment),
+                cmt,
+            ),
         )
     except Exception:
         pass
 
+
 def _is_locked() -> bool:
     return time.time() < st.session_state.get("_locked_until", 0.0)
+
 
 def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq_map = st.session_state.setdefault("_rate_map", {})
@@ -623,6 +674,7 @@ def rate_limiter(key: str, limit: int, window_sec: int) -> bool:
     dq.append(now)
     return True
 
+
 def _note_failed_login(attempted_secret: str = "") -> None:
     now = time.time()
     dq = st.session_state.setdefault("_fail_times", deque())
@@ -637,6 +689,7 @@ def _note_failed_login(attempted_secret: str = "") -> None:
         st.session_state["_locked_until"] = now + LOCKOUT_DURATION_SEC
         log_auth_event("login_lockout", False, login_id=(st.session_state.get("login_id", "") or ""))
 
+
 # =============================================================================
 # ACKNOWLEDGMENT GATE
 # =============================================================================
@@ -645,6 +698,7 @@ def _get_ack_key() -> str:
     if login_id:
         return f"login:{login_id.lower()}"
     return f"sid:{ensure_session_id()}"
+
 
 def _has_ack(ack_key: str) -> bool:
     try:
@@ -656,6 +710,7 @@ def _has_ack(ack_key: str) -> bool:
         return ok
     except Exception:
         return False
+
 
 def require_acknowledgment() -> None:
     if st.session_state.get("ack_ok"):
@@ -702,6 +757,7 @@ def require_acknowledgment() -> None:
 
     st.stop()
 
+
 # =============================================================================
 # DOCUMENT EXTRACTION
 # =============================================================================
@@ -731,6 +787,7 @@ def extract_document_text(uploaded_file) -> str:
     if filename.endswith(".docx"):
         try:
             import docx
+
             doc = docx.Document(io.BytesIO(file_bytes))
             txt = "\n".join(p.text for p in doc.paragraphs if p.text)
             return txt.strip()
@@ -740,6 +797,7 @@ def extract_document_text(uploaded_file) -> str:
     if filename.endswith(".pdf"):
         try:
             from pypdf import PdfReader
+
             reader = PdfReader(io.BytesIO(file_bytes))
             pages = [(p.extract_text() or "") for p in reader.pages]
             return "\n".join(pages).strip()
@@ -747,6 +805,7 @@ def extract_document_text(uploaded_file) -> str:
             return ""
 
     return ""
+
 
 # =============================================================================
 # HARD SAFETY STOP (backup only; refusal_router is primary)
@@ -763,6 +822,7 @@ def local_safety_stop(user_text: str) -> Optional[str]:
     if re.search(r"\b(i\s*(plan|intend|will|want)\s*to\s*(attack|shoot|bomb|kill|harm))\b", t):
         return "This text indicates potential real-world harm planning. Analysis has been stopped."
     return None
+
 
 # =============================================================================
 # SESSION STATE DEFAULTS
@@ -788,7 +848,6 @@ def show_login() -> None:
         unsafe_allow_html=True,
     )
 
-    # ✅ DEFINE mode (this is what you accidentally removed)
     mode = st.radio(
         label="",
         options=["User", "Admin"],
@@ -800,10 +859,7 @@ def show_login() -> None:
 
     if mode == "User":
         with st.form("login_form_user"):
-            login_id = st.text_input(
-                "Institutional User ID",
-                value=st.session_state.get("login_id", "")
-            )
+            login_id = st.text_input("Institutional User ID", value=st.session_state.get("login_id", ""))
             pwd = st.text_input("Password", type="password")
             submit = st.form_submit_button("Enter")
 
@@ -880,6 +936,7 @@ def show_login() -> None:
                 st.error("Invalid admin credentials.")
                 st.stop()
 
+
 if not st.session_state.get("authed", False):
     show_login()
     st.stop()
@@ -910,6 +967,15 @@ with st.sidebar:
 # - Users: Analyze only
 # - Admins: Analyze + Admin
 # =============================================================================
+def reset_canvas() -> None:
+    """Reset analyze canvas + per-analysis state."""
+    st.session_state["doc_uploader_key"] = st.session_state.get("doc_uploader_key", 0) + 1
+    st.session_state["user_input_box"] = ""
+    st.session_state["last_report"] = ""
+    st.session_state["report_ready"] = False
+    st.session_state["veritas_analysis_id"] = ""
+
+
 if st.session_state.get("is_admin", False):
     tabs = st.tabs(["Analyze", "Admin"])
     tab_analyze, tab_admin = tabs[0], tabs[1]
@@ -941,22 +1007,16 @@ with tab_analyze:
             f"Upload document (Max {int(MAX_UPLOAD_MB)}MB) — PDF, DOCX, TXT, MD, CSV",
             type=list(DOC_ALLOWED_EXTENSIONS),
             accept_multiple_files=False,
+            key=f"doc_uploader_{st.session_state.get('doc_uploader_key', 0)}",
         )
 
         c1, c2 = st.columns([2, 1])
 
         with c1:
-            submitted = st.form_submit_button(
-                "Engage Veritas",
-                use_container_width=True,
-            )
+            submitted = st.form_submit_button("Engage Veritas", use_container_width=True)
 
         with c2:
-            st.form_submit_button(
-                "Reset Canvas",
-                use_container_width=True,
-                on_click=reset_canvas,
-            )
+            st.form_submit_button("Reset Canvas", use_container_width=True, on_click=reset_canvas)
 
     if submitted:
         new_request_id()
@@ -965,9 +1025,7 @@ with tab_analyze:
         if doc is not None:
             extracted_text = extract_document_text(doc)[:MAX_EXTRACT_CHARS]
 
-        final_input = (
-            user_text + ("\n\n" + extracted_text if extracted_text else "")
-        ).strip()
+        final_input = (user_text + ("\n\n" + extracted_text if extracted_text else "")).strip()
 
         if not final_input:
             st.warning("Please paste text or upload a document to analyze.")
@@ -1030,7 +1088,6 @@ with tab_analyze:
                     appropriateness = st.slider("Institutional Appropriateness", 1, 5, 3)
                     alignment = st.slider("Alignment with Your Assessment", 1, 5, 3)
                     comments = st.text_area("Additional Comments (Optional)", height=120)
-
                     feedback_submit = st.form_submit_button("Submit Feedback")
 
                 if feedback_submit:
@@ -1052,199 +1109,212 @@ with tab_analyze:
 # =============================================================================
 if tab_admin is not None:
     with tab_admin:
-    st.header("Admin Dashboard")
+        st.header("Admin Dashboard")
 
-    st.subheader("Diagnostics")
-    st.write(f"APP_MODE: `{APP_MODE or '(unset)'}`")
-    st.write(f"Model: `{MODEL_NAME}`")
-    st.write(f"Temperature: `{TEMPERATURE}`")
-    st.write(f"DB Path: `{DB_PATH}`")
-    st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
+        st.subheader("Diagnostics")
+        st.write(f"APP_MODE: `{APP_MODE or '(unset)'}`")
+        st.write(f"Model: `{MODEL_NAME}`")
+        st.write(f"Temperature: `{TEMPERATURE}`")
+        st.write(f"DB Path: `{DB_PATH}`")
+        st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
 
-    st.subheader("Refusal Telemetry")
-    def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
-        try:
-            con = sqlite3.connect(DB_PATH, timeout=30)
-            cur = con.cursor()
-            cur.execute(
-                """SELECT created_utc, analysis_id, source, category, reason, input_len
-                   FROM refusal_events
-                   ORDER BY id DESC
-                   LIMIT ?""",
-                (limit,),
-            )
-            rows = cur.fetchall()
-            con.close()
-            return rows
-        except Exception:
+        st.subheader("Refusal Telemetry")
+
+        def fetch_recent_refusals(limit: int = 500) -> List[Tuple[Any, ...]]:
             try:
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT created_utc, analysis_id, source, category, reason, input_len
+                       FROM refusal_events
+                       ORDER BY id DESC
+                       LIMIT ?""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
                 con.close()
+                return rows
             except Exception:
-                pass
-            return []
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                return []
 
-    rows = fetch_recent_refusals(limit=500)
-    if not rows:
-        st.info("No refusal events logged yet.")
-    else:
-        df = pd.DataFrame(rows, columns=["created_utc", "analysis_id", "source", "category", "reason", "input_len"])
-        st.dataframe(df, use_container_width=True)
-        st.download_button(
-            "Download Refusal Log (CSV)",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name="veritas_refusal_log.csv",
-            mime="text/csv",
-        )
-
-    st.subheader("Tenant Management")
-
-    with st.form("create_tenant_form"):
-        tenant_id = st.text_input("Tenant ID")
-        tier = st.selectbox("Tier", ["Starter", "Professional", "Enterprise"])
-        annual_limit = st.number_input("Annual Analysis Limit", min_value=1, value=100)
-        create = st.form_submit_button("Create Tenant & Issue Key")
-
-        if create:
-            if not tenant_id:
-                st.error("Tenant ID is required.")
-                st.stop()
-
-            raw_key = admin_create_tenant(
-                tenant_id=tenant_id.strip(),
-                tier=tier,
-                monthly_limit=int(annual_limit),  # underlying function may still use this param name
+        rows = fetch_recent_refusals(limit=500)
+        if not rows:
+            st.info("No refusal events logged yet.")
+        else:
+            df = pd.DataFrame(rows, columns=["created_utc", "analysis_id", "source", "category", "reason", "input_len"])
+            st.dataframe(df, use_container_width=True)
+            st.download_button(
+                "Download Refusal Log (CSV)",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_refusal_log.csv",
+                mime="text/csv",
             )
 
-            st.success("Tenant created. Copy the key now — it will not be shown again.")
-            st.code(raw_key)
+        st.subheader("Tenant Management")
 
-    st.divider()
+        with st.form("create_tenant_form"):
+            tenant_id = st.text_input("Tenant ID")
+            tier = st.selectbox("Tier", ["Starter", "Professional", "Enterprise"])
+            annual_limit = st.number_input("Annual Analysis Limit", min_value=1, value=100)
+            create = st.form_submit_button("Create Tenant & Issue Key")
 
-    with st.form("suspend_tenant_form"):
-        suspend_id = st.text_input("Tenant ID to Suspend")
-        suspend = st.form_submit_button("Suspend Tenant")
+            if create:
+                if not tenant_id:
+                    st.error("Tenant ID is required.")
+                    st.stop()
 
-        if suspend:
-            if not suspend_id:
-                st.error("Tenant ID is required.")
-                st.stop()
-            suspend_tenant(suspend_id.strip())
-            st.success(f"Tenant '{suspend_id.strip()}' has been suspended.")
+                raw_key = admin_create_tenant(
+                    tenant_id=tenant_id.strip(),
+                    tier=tier,
+                    monthly_limit=int(annual_limit),  # underlying function may still use this param name
+                )
 
-    st.divider()
+                st.success("Tenant created. Copy the key now — it will not be shown again.")
+                st.code(raw_key)
 
-    with st.form("rotate_key_form"):
-        rotate_tenant_id = st.text_input("Tenant ID")
-        old_key_id = st.text_input("Current Key ID")
-        rotate = st.form_submit_button("Rotate Tenant Key")
+        st.divider()
 
-        if rotate:
-            if not rotate_tenant_id or not old_key_id:
-                st.error("Tenant ID and Key ID are required.")
-                st.stop()
-            new_key = rotate_key(rotate_tenant_id.strip(), old_key_id.strip())
-            st.success("Key rotated. Copy the new key now — it will not be shown again.")
-            st.code(new_key)
+        with st.form("suspend_tenant_form"):
+            suspend_id = st.text_input("Tenant ID to Suspend")
+            suspend = st.form_submit_button("Suspend Tenant")
 
-    st.divider()
-    st.subheader("Tenant Reporting")
+            if suspend:
+                if not suspend_id:
+                    st.error("Tenant ID is required.")
+                    st.stop()
+                suspend_tenant(suspend_id.strip())
+                st.success(f"Tenant '{suspend_id.strip()}' has been suspended.")
 
-    period = current_period_yyyy()
-    st.caption(f"Usage period (UTC): {period}")
+        st.divider()
 
-    rows = admin_usage_snapshot(period_yyyy=period, limit=500)
-    if rows:
-        df = pd.DataFrame(rows, columns=["tenant_id", "tier", "annual_limit", "status", "analysis_count"])
-        st.dataframe(df, use_container_width=True)
-        st.download_button(
-            "Download Tenant Usage Snapshot (CSV)",
-            data=df.to_csv(index=False).encode("utf-8"),
-            file_name=f"tenant_usage_snapshot_{period}.csv",
-            mime="text/csv",
-        )
-    else:
-        st.info("No tenants found.")
+        with st.form("rotate_key_form"):
+            rotate_tenant_id = st.text_input("Tenant ID")
+            old_key_id = st.text_input("Current Key ID")
+            rotate = st.form_submit_button("Rotate Tenant Key")
 
-    st.divider()
+            if rotate:
+                if not rotate_tenant_id or not old_key_id:
+                    st.error("Tenant ID and Key ID are required.")
+                    st.stop()
+                new_key = rotate_key(rotate_tenant_id.strip(), old_key_id.strip())
+                st.success("Key rotated. Copy the new key now — it will not be shown again.")
+                st.code(new_key)
 
-    st.markdown("### Tenant Lookup")
-    lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
+        st.divider()
+        st.subheader("Tenant Reporting")
 
-    if st.button("Lookup Tenant", key="tenant_lookup_btn"):
-        t = admin_get_tenant((lookup_id or "").strip())
-        if not t:
-            st.error("No tenant found with that Tenant ID.")
-            st.stop()
+        period = current_period_yyyy()
+        st.caption(f"Usage period (UTC): {period}")
 
-        tenant_id_val = t.get("tenant_id")
-        used = admin_get_usage(tenant_id_val, period)
-        limit_val = int(t.get("annual_analysis_limit") or 0)
-
-        st.success("Tenant found.")
-        st.write({
-            "tenant_id": tenant_id_val,
-            "tier": t.get("tier"),
-            "annual_limit": limit_val,
-            "status": t.get("status"),
-            "usage_this_year": used,
-            "created_utc": t.get("created_utc"),
-            "updated_utc": t.get("updated_utc"),
-        })
-
-        keys = admin_list_tenant_keys(tenant_id_val, limit=50)
-        if keys:
-            kdf = pd.DataFrame(keys, columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"])
-            st.markdown("#### Tenant Keys")
-            st.dataframe(kdf, use_container_width=True)
+        rows = admin_usage_snapshot(period_yyyy=period, limit=500)
+        if rows:
+            df = pd.DataFrame(rows, columns=["tenant_id", "tier", "annual_limit", "status", "analysis_count"])
+            st.dataframe(df, use_container_width=True)
             st.download_button(
-                "Download Tenant Keys (CSV)",
-                data=kdf.to_csv(index=False).encode("utf-8"),
-                file_name=f"tenant_keys_{tenant_id_val}.csv",
+                "Download Tenant Usage Snapshot (CSV)",
+                data=df.to_csv(index=False).encode("utf-8"),
+                file_name=f"tenant_usage_snapshot_{period}.csv",
                 mime="text/csv",
             )
         else:
-            st.info("No keys found for this tenant.")
+            st.info("No tenants found.")
 
-    # OPTIONAL: Feedback export (quick access for trial reporting)
-    st.divider()
-    st.subheader("Trial Feedback (Export)")
+        st.divider()
 
-    def fetch_recent_feedback(limit: int = 1000) -> List[Tuple[Any, ...]]:
-        try:
-            con = sqlite3.connect(DB_PATH, timeout=30)
-            cur = con.cursor()
-            cur.execute(
-                """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness, appropriateness, alignment, comments
-                   FROM feedback_events
-                   ORDER BY id DESC
-                   LIMIT ?""",
-                (limit,),
+        st.markdown("### Tenant Lookup")
+        lookup_id = st.text_input("Lookup Tenant ID", key="tenant_lookup_id")
+
+        if st.button("Lookup Tenant", key="tenant_lookup_btn"):
+            t = admin_get_tenant((lookup_id or "").strip())
+            if not t:
+                st.error("No tenant found with that Tenant ID.")
+                st.stop()
+
+            tenant_id_val = t.get("tenant_id")
+            used = admin_get_usage(tenant_id_val, period)
+            limit_val = int(t.get("annual_analysis_limit") or 0)
+
+            st.success("Tenant found.")
+            st.write(
+                {
+                    "tenant_id": tenant_id_val,
+                    "tier": t.get("tier"),
+                    "annual_limit": limit_val,
+                    "status": t.get("status"),
+                    "usage_this_year": used,
+                    "created_utc": t.get("created_utc"),
+                    "updated_utc": t.get("updated_utc"),
+                }
             )
-            rows = cur.fetchall()
-            con.close()
-            return rows
-        except Exception:
-            try:
-                con.close()
-            except Exception:
-                pass
-            return []
 
-    frows = fetch_recent_feedback(limit=1000)
-    if not frows:
-        st.info("No feedback submitted yet.")
-    else:
-        fdf = pd.DataFrame(
-            frows,
-            columns=["timestamp_utc","analysis_id","login_id","clarity","objectivity","usefulness","appropriateness","alignment","comments"]
-        )
-        st.dataframe(fdf, use_container_width=True)
-        st.download_button(
-            "Download Feedback Log (CSV)",
-            data=fdf.to_csv(index=False).encode("utf-8"),
-            file_name="veritas_feedback_log.csv",
-            mime="text/csv",
-        )
+            keys = admin_list_tenant_keys(tenant_id_val, limit=50)
+            if keys:
+                kdf = pd.DataFrame(keys, columns=["key_id", "status", "created_utc", "revoked_utc", "rotated_from_key_id"])
+                st.markdown("#### Tenant Keys")
+                st.dataframe(kdf, use_container_width=True)
+                st.download_button(
+                    "Download Tenant Keys (CSV)",
+                    data=kdf.to_csv(index=False).encode("utf-8"),
+                    file_name=f"tenant_keys_{tenant_id_val}.csv",
+                    mime="text/csv",
+                )
+            else:
+                st.info("No keys found for this tenant.")
+
+        st.divider()
+        st.subheader("Trial Feedback (Export)")
+
+        def fetch_recent_feedback(limit: int = 1000) -> List[Tuple[Any, ...]]:
+            try:
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness,
+                              appropriateness, alignment, comments
+                       FROM feedback_events
+                       ORDER BY id DESC
+                       LIMIT ?""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                con.close()
+                return rows
+            except Exception:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                return []
+
+        frows = fetch_recent_feedback(limit=1000)
+        if not frows:
+            st.info("No feedback submitted yet.")
+        else:
+            fdf = pd.DataFrame(
+                frows,
+                columns=[
+                    "timestamp_utc",
+                    "analysis_id",
+                    "login_id",
+                    "clarity",
+                    "objectivity",
+                    "usefulness",
+                    "appropriateness",
+                    "alignment",
+                    "comments",
+                ],
+            )
+            st.dataframe(fdf, use_container_width=True)
+            st.download_button(
+                "Download Feedback Log (CSV)",
+                data=fdf.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_feedback_log.csv",
+                mime="text/csv",
+            )
 
 # =============================================================================
 # FOOTER
@@ -1253,21 +1323,3 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
