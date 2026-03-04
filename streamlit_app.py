@@ -63,7 +63,7 @@ if APP_MODE != "internal_console" and BYPASS != "1":
     st.stop()
 
 # Refusal Router (required companion file)
-from refusal_router import check_refusal, render_refusal
+from refusal_router import check_refusal, render_refusal  # noqa: E402
 
 # =============================================================================
 # CONFIG
@@ -158,7 +158,7 @@ TTL_DAYS_DEFAULT = int(_get_setting("LOG_TTL_DAYS", "365"))
 # =============================================================================
 # TENANT / B2B IMPORTS (AFTER DB_PATH IS FORCED)
 # =============================================================================
-from tenant_store import (
+from tenant_store import (  # noqa: E402
     init_tenant_tables,
     current_period_yyyy,
     admin_create_tenant,
@@ -960,6 +960,55 @@ def log_bug_report(
     return bug_id
 
 
+def _update_bug_status_in_csv(bug_id: str, new_status: str) -> bool:
+    """
+    Updates status in bug_reports.csv for the given bug_id.
+    Returns True if a row was updated, else False.
+    """
+    try:
+        if not os.path.exists(BUGS_CSV):
+            return False
+
+        with open(BUGS_CSV, "r", newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+
+        if not rows:
+            return False
+
+        header = rows[0]
+        data = rows[1:]
+
+        # Find indices safely (supports future reordering)
+        try:
+            idx_bug = header.index("bug_id")
+            idx_status = header.index("status")
+        except ValueError:
+            # Fallback to known positions if header changed unexpectedly
+            idx_bug = 1
+            idx_status = len(header) - 1
+
+        updated = False
+        for r in data:
+            if len(r) <= max(idx_bug, idx_status):
+                continue
+            if (r[idx_bug] or "").strip() == bug_id:
+                r[idx_status] = (new_status or "").strip()
+                updated = True
+                break
+
+        if not updated:
+            return False
+
+        with open(BUGS_CSV, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(header)
+            w.writerows(data)
+
+        return True
+    except Exception:
+        return False
+
+
 def _is_locked() -> bool:
     return time.time() < st.session_state.get("_locked_until", 0.0)
 
@@ -1600,16 +1649,137 @@ if tab_admin is not None:
                 if not bid:
                     st.error("Bug ID is required.")
                     st.stop()
+
+                # 1) Update SQLite
                 try:
                     _db_exec(
                         "UPDATE bug_reports SET status=?, internal_notes=? WHERE id=?",
                         (new_status, (new_notes or "").strip(), bid),
                     )
-                    st.success("Bug updated.")
-                    _safe_rerun()
                 except Exception:
                     st.error("Failed to update bug. Verify Bug ID exists and DB is writable.")
                     st.stop()
+
+                # 2) Update CSV tracker status (so it matches)
+                csv_ok = _update_bug_status_in_csv(bid, new_status)
+                if not csv_ok:
+                    st.warning("Updated SQLite, but could not update bug_reports.csv (row not found or file missing).")
+
+                st.success("Bug updated.")
+                _safe_rerun()
+
+        # ---------------------------------------------------------------------
+        # ANALYSES (EXPORT) — moved under Bug Reports
+        # ---------------------------------------------------------------------
+        st.divider()
+        st.subheader("Analyses (Export)")
+
+        def fetch_recent_analyses(limit: int = 500) -> List[Tuple[Any, ...]]:
+            try:
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT timestamp_utc, analysis_id, login_id, model, elapsed_seconds,
+                              input_chars, input_preview, input_sha256, input_text, output_text
+                       FROM analyses
+                       ORDER BY id DESC
+                       LIMIT ?""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                con.close()
+                return rows
+            except Exception:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                return []
+
+        arows = fetch_recent_analyses(limit=500)
+        if not arows:
+            st.info("No analyses logged yet.")
+        else:
+            adf = pd.DataFrame(
+                arows,
+                columns=[
+                    "timestamp_utc",
+                    "analysis_id",
+                    "login_id",
+                    "model",
+                    "elapsed_seconds",
+                    "input_chars",
+                    "input_preview",
+                    "input_sha256",
+                    "input_text",
+                    "output_text",
+                ],
+            )
+            st.dataframe(adf, use_container_width=True)
+            st.download_button(
+                "Download Analyses Log (CSV)",
+                data=adf.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_analyses_log.csv",
+                mime="text/csv",
+            )
+
+        # ---------------------------------------------------------------------
+        # TRIAL FEEDBACK (EXPORT) — moved under Bug Reports
+        # ---------------------------------------------------------------------
+        st.divider()
+        st.subheader("Trial Feedback (Export)")
+
+        def fetch_recent_feedback(limit: int = 1000) -> List[Tuple[Any, ...]]:
+            try:
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness,
+                              appropriateness, alignment, comments, input_sha256, input_text,
+                              CASE WHEN input_encrypted IS NOT NULL AND input_encrypted != '' THEN 1 ELSE 0 END AS has_encrypted_copy
+                       FROM feedback_events
+                       ORDER BY id DESC
+                       LIMIT ?""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                con.close()
+                return rows
+            except Exception:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                return []
+
+        frows = fetch_recent_feedback(limit=1000)
+        if not frows:
+            st.info("No feedback submitted yet.")
+        else:
+            fdf = pd.DataFrame(
+                frows,
+                columns=[
+                    "timestamp_utc",
+                    "analysis_id",
+                    "login_id",
+                    "clarity",
+                    "objectivity",
+                    "usefulness",
+                    "appropriateness",
+                    "alignment",
+                    "comments",
+                    "input_sha256",
+                    "input_text",
+                    "has_encrypted_copy",
+                ],
+            )
+            st.dataframe(fdf, use_container_width=True)
+            st.download_button(
+                "Download Feedback Log (CSV)",
+                data=fdf.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_feedback_log.csv",
+                mime="text/csv",
+            )
 
         # ---------------------------------------------------------------------
         # TENANT MANAGEMENT (unchanged)
@@ -1724,113 +1894,6 @@ if tab_admin is not None:
                 )
             else:
                 st.info("No keys found for this tenant.")
-
-        st.divider()
-        st.subheader("Analyses (Export)")
-
-        def fetch_recent_analyses(limit: int = 500) -> List[Tuple[Any, ...]]:
-            try:
-                con = sqlite3.connect(DB_PATH, timeout=30)
-                cur = con.cursor()
-                cur.execute(
-                    """SELECT timestamp_utc, analysis_id, login_id, model, elapsed_seconds,
-                              input_chars, input_preview, input_sha256, input_text, output_text
-                       FROM analyses
-                       ORDER BY id DESC
-                       LIMIT ?""",
-                    (limit,),
-                )
-                rows = cur.fetchall()
-                con.close()
-                return rows
-            except Exception:
-                try:
-                    con.close()
-                except Exception:
-                    pass
-                return []
-
-        arows = fetch_recent_analyses(limit=500)
-        if not arows:
-            st.info("No analyses logged yet.")
-        else:
-            adf = pd.DataFrame(
-                arows,
-                columns=[
-                    "timestamp_utc",
-                    "analysis_id",
-                    "login_id",
-                    "model",
-                    "elapsed_seconds",
-                    "input_chars",
-                    "input_preview",
-                    "input_sha256",
-                    "input_text",
-                    "output_text",
-                ],
-            )
-            st.dataframe(adf, use_container_width=True)
-            st.download_button(
-                "Download Analyses Log (CSV)",
-                data=adf.to_csv(index=False).encode("utf-8"),
-                file_name="veritas_analyses_log.csv",
-                mime="text/csv",
-            )
-
-        st.divider()
-        st.subheader("Trial Feedback (Export)")
-
-        def fetch_recent_feedback(limit: int = 1000) -> List[Tuple[Any, ...]]:
-            try:
-                con = sqlite3.connect(DB_PATH, timeout=30)
-                cur = con.cursor()
-                cur.execute(
-                    """SELECT timestamp_utc, analysis_id, login_id, clarity, objectivity, usefulness,
-                              appropriateness, alignment, comments, input_sha256, input_text,
-                              CASE WHEN input_encrypted IS NOT NULL AND input_encrypted != '' THEN 1 ELSE 0 END AS has_encrypted_copy
-                       FROM feedback_events
-                       ORDER BY id DESC
-                       LIMIT ?""",
-                    (limit,),
-                )
-                rows = cur.fetchall()
-                con.close()
-                return rows
-            except Exception:
-                try:
-                    con.close()
-                except Exception:
-                    pass
-                return []
-
-        frows = fetch_recent_feedback(limit=1000)
-        if not frows:
-            st.info("No feedback submitted yet.")
-        else:
-            fdf = pd.DataFrame(
-                frows,
-                columns=[
-                    "timestamp_utc",
-                    "analysis_id",
-                    "login_id",
-                    "clarity",
-                    "objectivity",
-                    "usefulness",
-                    "appropriateness",
-                    "alignment",
-                    "comments",
-                    "input_sha256",
-                    "input_text",
-                    "has_encrypted_copy",
-                ],
-            )
-            st.dataframe(fdf, use_container_width=True)
-            st.download_button(
-                "Download Feedback Log (CSV)",
-                data=fdf.to_csv(index=False).encode("utf-8"),
-                file_name="veritas_feedback_log.csv",
-                mime="text/csv",
-            )
 
 # =============================================================================
 # FOOTER
