@@ -11,6 +11,7 @@
 # - Analysis logging (CSV + SQLite) INCLUDING full input text + output text
 # - PDF/DOCX/TXT/MD/CSV text extraction
 # - Post-analysis feedback form (CSV + SQLite) tied to Analysis ID (stores full input text too)
+# - Bug reporting tab (CSV + SQLite) with optional screenshot upload
 #
 # Dependencies:
 #   streamlit, openai, pandas, python-docx, pypdf
@@ -132,6 +133,15 @@ AUTH_CSV = str(DATA_DIR / "auth_events.csv")
 ACK_CSV = str(DATA_DIR / "ack_events.csv")
 REFUSALS_CSV = str(DATA_DIR / "refusal_telemetry.csv")
 FEEDBACK_CSV = str(DATA_DIR / "feedback_events.csv")
+
+# --- Bug reporting (CSV + SQLite) ---
+BUGS_CSV = str(DATA_DIR / "bug_reports.csv")
+BUGS_UPLOAD_DIR = UPLOAD_DIR / "bugs"
+BUGS_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
+MAX_BUG_TITLE_CHARS = int(_get_setting("MAX_BUG_TITLE_CHARS", "140"))
+MAX_BUG_TEXT_CHARS = int(_get_setting("MAX_BUG_TEXT_CHARS", "4000"))
+MAX_BUG_ATTACHMENT_MB = float(_get_setting("MAX_BUG_ATTACHMENT_MB", "5"))
 
 # Rate limiting + lockout
 RATE_LIMIT_LOGIN = int(_get_setting("RATE_LIMIT_LOGIN", "5"))
@@ -455,6 +465,31 @@ def _init_db() -> None:
         """
     )
 
+    # ✅ bug reports (CSV + SQLite)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS bug_reports (
+            id TEXT PRIMARY KEY,
+            timestamp_utc TEXT,
+            analysis_id TEXT,
+            session_id TEXT,
+            login_id TEXT,
+            is_admin INTEGER,
+            title TEXT,
+            category TEXT,
+            severity TEXT,
+            steps_to_reproduce TEXT,
+            expected_behavior TEXT,
+            actual_behavior TEXT,
+            page_context TEXT,
+            user_agent TEXT,
+            attachment_path TEXT,
+            status TEXT,
+            internal_notes TEXT
+        )
+        """
+    )
+
     con.commit()
     con.close()
 
@@ -468,6 +503,10 @@ _db_add_column_if_missing("analyses", "output_text", "TEXT")
 _db_add_column_if_missing("feedback_events", "input_sha256", "TEXT")
 _db_add_column_if_missing("feedback_events", "input_text", "TEXT")
 _db_add_column_if_missing("feedback_events", "input_encrypted", "TEXT")
+
+_db_add_column_if_missing("bug_reports", "status", "TEXT")
+_db_add_column_if_missing("bug_reports", "internal_notes", "TEXT")
+_db_add_column_if_missing("bug_reports", "attachment_path", "TEXT")
 
 init_tenant_tables()
 
@@ -555,6 +594,27 @@ _init_csv(
         "input_text",
     ],
 )
+_init_csv(
+    BUGS_CSV,
+    [
+        "timestamp_utc",
+        "bug_id",
+        "analysis_id",
+        "session_id",
+        "login_id",
+        "is_admin",
+        "title",
+        "category",
+        "severity",
+        "steps_to_reproduce",
+        "expected_behavior",
+        "actual_behavior",
+        "page_context",
+        "user_agent",
+        "attachment_path",
+        "status",
+    ],
+)
 
 _prune_csv(AUTH_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ANALYSES_CSV, TTL_DAYS_DEFAULT)
@@ -562,6 +622,7 @@ _prune_csv(ERRORS_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(ACK_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(REFUSALS_CSV, TTL_DAYS_DEFAULT)
 _prune_csv(FEEDBACK_CSV, TTL_DAYS_DEFAULT)
+_prune_csv(BUGS_CSV, TTL_DAYS_DEFAULT)
 
 _prune_table("auth_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("analyses", "timestamp_utc", TTL_DAYS_DEFAULT)
@@ -569,6 +630,7 @@ _prune_table("errors", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("ack_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("refusal_events", "created_utc", TTL_DAYS_DEFAULT)
 _prune_table("feedback_events", "timestamp_utc", TTL_DAYS_DEFAULT)
+_prune_table("bug_reports", "timestamp_utc", TTL_DAYS_DEFAULT)
 
 # =============================================================================
 # LOGGING
@@ -734,6 +796,168 @@ def save_feedback(
         )
     except Exception:
         pass
+
+
+def _get_user_agent_best_effort() -> str:
+    """
+    Best-effort user agent capture.
+    Streamlit doesn't guarantee access in all deployments, so fail-closed to "".
+    """
+    try:
+        ctx = getattr(st, "context", None)
+        if ctx and getattr(ctx, "headers", None):
+            ua = (ctx.headers.get("User-Agent") or ctx.headers.get("user-agent") or "").strip()
+            return ua[:400]
+    except Exception:
+        pass
+    return ""
+
+
+def _save_bug_attachment(file_obj) -> str:
+    """
+    Saves attachment to disk (STATIC_DIR/uploads/bugs).
+    Returns saved path as string or "".
+    """
+    if file_obj is None:
+        return ""
+
+    try:
+        raw = file_obj.getvalue()
+    except Exception:
+        try:
+            raw = file_obj.read()
+        except Exception:
+            return ""
+
+    if not raw:
+        return ""
+
+    max_bytes = int(MAX_BUG_ATTACHMENT_MB * 1024 * 1024)
+    if len(raw) > max_bytes:
+        raise ValueError(f"Attachment exceeds {MAX_BUG_ATTACHMENT_MB:.1f}MB.")
+
+    orig_name = (getattr(file_obj, "name", "") or "attachment").strip()
+    ext = ""
+    if "." in orig_name:
+        ext = "." + orig_name.rsplit(".", 1)[-1].lower()
+
+    # allow common screenshot formats only
+    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        raise ValueError("Attachment must be PNG, JPG, JPEG, or WEBP.")
+
+    fname = f"BUG-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(4).upper()}{ext}"
+    out_path = BUGS_UPLOAD_DIR / fname
+    with open(out_path, "wb") as f:
+        f.write(raw)
+
+    return str(out_path)
+
+
+def log_bug_report(
+    title: str,
+    category: str,
+    severity: str,
+    steps_to_reproduce: str,
+    expected_behavior: str,
+    actual_behavior: str,
+    analysis_id: str = "",
+    page_context: str = "Report a Bug",
+    attachment_file=None,
+) -> str:
+    """
+    Writes bug report to bug_reports.csv + SQLite.
+    Does NOT store full analysis input text. Optionally links analysis_id.
+    Returns bug_id.
+    """
+    ts = _now_utc_iso()
+    sid = ensure_session_id()
+    login_id = (st.session_state.get("login_id") or "")[:120]
+    is_admin = 1 if st.session_state.get("is_admin", False) else 0
+
+    t = (title or "").strip()
+    if len(t) > MAX_BUG_TITLE_CHARS:
+        t = t[:MAX_BUG_TITLE_CHARS] + "…"
+
+    def _cap(x: str) -> str:
+        x = (x or "").strip()
+        if len(x) > MAX_BUG_TEXT_CHARS:
+            return x[:MAX_BUG_TEXT_CHARS] + "…"
+        return x
+
+    steps = _cap(steps_to_reproduce)
+    exp = _cap(expected_behavior)
+    act = _cap(actual_behavior)
+
+    aid = (analysis_id or "").strip()[:40]
+    ua = _get_user_agent_best_effort()
+
+    attachment_path = ""
+    try:
+        attachment_path = _save_bug_attachment(attachment_file) if attachment_file is not None else ""
+    except Exception as e:
+        # Fail-closed on attachment but still allow bug submission
+        attachment_path = f"ATTACHMENT_ERROR: {str(e)[:180]}"
+
+    bug_id = f"BUG-{uuid.uuid4().hex[:12].upper()}"
+    status = "Open"
+
+    # CSV
+    try:
+        with open(BUGS_CSV, "a", newline="", encoding="utf-8") as f:
+            csv.writer(f).writerow(
+                [
+                    ts,
+                    bug_id,
+                    aid,
+                    sid,
+                    login_id,
+                    is_admin,
+                    t,
+                    (category or "")[:40],
+                    (severity or "")[:20],
+                    steps,
+                    exp,
+                    act,
+                    (page_context or "")[:80],
+                    ua,
+                    attachment_path,
+                    status,
+                ]
+            )
+    except Exception:
+        pass
+
+    # SQLite
+    try:
+        _db_exec(
+            """INSERT INTO bug_reports
+               (id,timestamp_utc,analysis_id,session_id,login_id,is_admin,title,category,severity,
+                steps_to_reproduce,expected_behavior,actual_behavior,page_context,user_agent,attachment_path,status,internal_notes)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                bug_id,
+                ts,
+                aid,
+                sid,
+                login_id,
+                is_admin,
+                t,
+                (category or "")[:40],
+                (severity or "")[:20],
+                steps,
+                exp,
+                act,
+                (page_context or "")[:80],
+                ua,
+                attachment_path,
+                status,
+                "",
+            ),
+        )
+    except Exception:
+        pass
+
+    return bug_id
 
 
 def _is_locked() -> bool:
@@ -1061,11 +1285,11 @@ def reset_canvas() -> None:
 
 
 if st.session_state.get("is_admin", False):
-    tabs = st.tabs(["Analyze", "Admin"])
-    tab_analyze, tab_admin = tabs[0], tabs[1]
+    tabs = st.tabs(["Analyze", "Report a Bug", "Admin"])
+    tab_analyze, tab_bug, tab_admin = tabs[0], tabs[1], tabs[2]
 else:
-    tabs = st.tabs(["Analyze"])
-    tab_analyze = tabs[0]
+    tabs = st.tabs(["Analyze", "Report a Bug"])
+    tab_analyze, tab_bug = tabs[0], tabs[1]
     tab_admin = None
 
 # =============================================================================
@@ -1201,6 +1425,69 @@ with tab_analyze:
                     st.session_state["feedback_last_submitted_analysis_id"] = st.session_state["veritas_analysis_id"]
                     st.success("Thank you. Your feedback has been recorded.")
                     _safe_rerun()
+
+# =============================================================================
+# REPORT A BUG TAB
+# =============================================================================
+with tab_bug:
+    st.subheader("Report a Bug")
+    st.caption("Use this form to report issues. Do not paste sensitive data.")
+
+    prefill_aid = (st.session_state.get("veritas_analysis_id") or "").strip()
+
+    with st.form("bug_form", clear_on_submit=True):
+        analysis_id = st.text_input(
+            "Veritas Analysis ID (optional)",
+            value=prefill_aid,
+            help="If this bug relates to a specific analysis, keep this filled in.",
+        )
+
+        title = st.text_input("Bug Title", max_chars=MAX_BUG_TITLE_CHARS)
+
+        c1, c2 = st.columns(2)
+        with c1:
+            category = st.selectbox(
+                "Category",
+                ["UI", "Upload/Parsing", "Analysis", "Performance", "Login/Access", "Other"],
+                index=0,
+            )
+        with c2:
+            severity = st.selectbox(
+                "Severity",
+                ["Low", "Medium", "High", "Critical"],
+                index=1,
+            )
+
+        steps = st.text_area("Steps to Reproduce", height=140, placeholder="1) ...\n2) ...\n3) ...")
+        expected = st.text_area("Expected Behavior", height=90)
+        actual = st.text_area("Actual Behavior", height=90)
+
+        attachment = st.file_uploader(
+            f"Optional Screenshot (PNG/JPG/WEBP, up to {MAX_BUG_ATTACHMENT_MB:.0f}MB)",
+            type=["png", "jpg", "jpeg", "webp"],
+            accept_multiple_files=False,
+        )
+
+        submitted_bug = st.form_submit_button("Submit Bug Report", use_container_width=True)
+
+    if submitted_bug:
+        if not (title or "").strip():
+            st.error("Bug Title is required.")
+            st.stop()
+
+        bug_id = log_bug_report(
+            title=title,
+            category=category,
+            severity=severity,
+            steps_to_reproduce=steps,
+            expected_behavior=expected,
+            actual_behavior=actual,
+            analysis_id=analysis_id,
+            page_context="Report a Bug",
+            attachment_file=attachment,
+        )
+
+        st.success(f"Bug submitted. Tracking ID: `{bug_id}`")
 
 # =============================================================================
 # ADMIN TAB
