@@ -1504,6 +1504,117 @@ if tab_admin is not None:
         st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
         st.write(f"Encrypted feedback input copy: `{'ON' if STORE_ENCRYPTED_INPUT_FOR_FEEDBACK else 'OFF'}`")
 
+        # ---------------------------------------------------------------------
+        # BUG REPORTS (INBOX / EXPORT / STATUS UPDATES)
+        # ---------------------------------------------------------------------
+        st.divider()
+        st.subheader("Bug Reports (Inbox / Export)")
+
+        def fetch_recent_bugs(limit: int = 1000) -> List[Tuple[Any, ...]]:
+            try:
+                con = sqlite3.connect(DB_PATH, timeout=30)
+                cur = con.cursor()
+                cur.execute(
+                    """SELECT timestamp_utc, id, analysis_id, login_id, is_admin,
+                              title, category, severity, status,
+                              steps_to_reproduce, expected_behavior, actual_behavior,
+                              page_context, user_agent, attachment_path, internal_notes
+                       FROM bug_reports
+                       ORDER BY timestamp_utc DESC
+                       LIMIT ?""",
+                    (limit,),
+                )
+                rows = cur.fetchall()
+                con.close()
+                return rows
+            except Exception:
+                try:
+                    con.close()
+                except Exception:
+                    pass
+                return []
+
+        brows = fetch_recent_bugs(limit=1000)
+        if not brows:
+            st.info("No bug reports logged yet.")
+        else:
+            bdf = pd.DataFrame(
+                brows,
+                columns=[
+                    "timestamp_utc",
+                    "bug_id",
+                    "analysis_id",
+                    "login_id",
+                    "is_admin",
+                    "title",
+                    "category",
+                    "severity",
+                    "status",
+                    "steps_to_reproduce",
+                    "expected_behavior",
+                    "actual_behavior",
+                    "page_context",
+                    "user_agent",
+                    "attachment_path",
+                    "internal_notes",
+                ],
+            )
+
+            f1, f2, f3 = st.columns(3)
+            with f1:
+                sev_vals = sorted([v for v in bdf["severity"].dropna().unique().tolist() if str(v).strip()])
+                sev_filter = st.selectbox("Severity", ["(All)"] + sev_vals, index=0)
+            with f2:
+                status_vals = sorted([v for v in bdf["status"].dropna().unique().tolist() if str(v).strip()])
+                status_filter = st.selectbox("Status", ["(All)"] + status_vals, index=0)
+            with f3:
+                cat_vals = sorted([v for v in bdf["category"].dropna().unique().tolist() if str(v).strip()])
+                cat_filter = st.selectbox("Category", ["(All)"] + cat_vals, index=0)
+
+            view = bdf
+            if sev_filter != "(All)":
+                view = view[view["severity"] == sev_filter]
+            if status_filter != "(All)":
+                view = view[view["status"] == status_filter]
+            if cat_filter != "(All)":
+                view = view[view["category"] == cat_filter]
+
+            st.dataframe(view, use_container_width=True)
+
+            st.download_button(
+                "Download Bug Reports (CSV)",
+                data=view.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_bug_reports.csv",
+                mime="text/csv",
+            )
+
+            st.markdown("#### Update Bug Status / Internal Notes")
+            with st.form("bug_update_form", clear_on_submit=True):
+                bug_id_in = st.text_input("Bug ID (e.g., BUG-ABC123...)")
+                new_status = st.selectbox("New Status", ["Open", "In Review", "Blocked", "Resolved", "Won't Fix"])
+                new_notes = st.text_area("Internal Notes (optional)", height=120)
+                upd = st.form_submit_button("Update Bug", use_container_width=True)
+
+            if upd:
+                bid = (bug_id_in or "").strip()
+                if not bid:
+                    st.error("Bug ID is required.")
+                    st.stop()
+                try:
+                    _db_exec(
+                        "UPDATE bug_reports SET status=?, internal_notes=? WHERE id=?",
+                        (new_status, (new_notes or "").strip(), bid),
+                    )
+                    st.success("Bug updated.")
+                    _safe_rerun()
+                except Exception:
+                    st.error("Failed to update bug. Verify Bug ID exists and DB is writable.")
+                    st.stop()
+
+        # ---------------------------------------------------------------------
+        # TENANT MANAGEMENT (unchanged)
+        # ---------------------------------------------------------------------
+        st.divider()
         st.subheader("Tenant Management")
 
         with st.form("create_tenant_form"):
