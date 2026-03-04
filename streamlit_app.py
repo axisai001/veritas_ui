@@ -12,6 +12,7 @@
 # - PDF/DOCX/TXT/MD/CSV text extraction
 # - Post-analysis feedback form (CSV + SQLite) tied to Analysis ID (stores full input text too)
 # - Bug reporting tab (CSV + SQLite) with optional screenshot upload
+# - ✅ Institutional accounts (DB-backed): per-institution ID + password (hashed), created/reset/disabled via Admin UI
 #
 # Dependencies:
 #   streamlit, openai, pandas, python-docx, pypdf
@@ -105,6 +106,7 @@ def get_openai_client() -> OpenAI:
 
 
 # Auth (set via Streamlit secrets or environment variables)
+# NOTE: APP_PASSWORD is retained for backward compatibility, but institutional login is now DB-backed.
 APP_PASSWORD = (_get_setting("APP_PASSWORD", "")).strip()
 ADMIN_PASSWORD = (_get_setting("ADMIN_PASSWORD", "")).strip()
 
@@ -287,6 +289,25 @@ def new_request_id(prefix: str = "RQ") -> str:
     return rid
 
 
+# --- Institutional password hashing (one-way) ---
+def _hash_password(password: str, salt: Optional[str] = None) -> str:
+    """
+    Returns 'salt$sha256' (one-way). Do not store plaintext passwords.
+    """
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.sha256((password + salt).encode("utf-8", errors="ignore")).hexdigest()
+    return f"{salt}${digest}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        salt, digest = (stored_hash or "").split("$", 1)
+    except Exception:
+        return False
+    check = hashlib.sha256((password + salt).encode("utf-8", errors="ignore")).hexdigest()
+    return secrets.compare_digest(check, digest)
+
+
 # =============================================================================
 # OPTIONAL ENCRYPTION HELPERS (for feedback encrypted copy)
 # =============================================================================
@@ -338,6 +359,24 @@ def _db_exec(sql: str, params: Tuple[Any, ...] = ()) -> None:
     cur.execute(sql, params)
     con.commit()
     con.close()
+
+
+def _db_fetchone(sql: str, params: Tuple[Any, ...] = ()) -> Optional[Tuple[Any, ...]]:
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute(sql, params)
+    row = cur.fetchone()
+    con.close()
+    return row
+
+
+def _db_fetchall(sql: str, params: Tuple[Any, ...] = ()) -> List[Tuple[Any, ...]]:
+    con = sqlite3.connect(DB_PATH)
+    cur = con.cursor()
+    cur.execute(sql, params)
+    rows = cur.fetchall()
+    con.close()
+    return rows
 
 
 def _db_add_column_if_missing(table: str, col: str, coltype: str) -> None:
@@ -490,6 +529,23 @@ def _init_db() -> None:
         """
     )
 
+    # ✅ institutional accounts (DB-backed)
+    cur.execute(
+        """
+        CREATE TABLE IF NOT EXISTS institution_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            institution_name TEXT NOT NULL,
+            institution_id TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            created_utc TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1,
+            trial_start TEXT,
+            trial_end TEXT,
+            notes TEXT
+        )
+        """
+    )
+
     con.commit()
     con.close()
 
@@ -507,6 +563,11 @@ _db_add_column_if_missing("feedback_events", "input_encrypted", "TEXT")
 _db_add_column_if_missing("bug_reports", "status", "TEXT")
 _db_add_column_if_missing("bug_reports", "internal_notes", "TEXT")
 _db_add_column_if_missing("bug_reports", "attachment_path", "TEXT")
+
+# Institutional table migrations (in case you later expand schema)
+_db_add_column_if_missing("institution_users", "trial_start", "TEXT")
+_db_add_column_if_missing("institution_users", "trial_end", "TEXT")
+_db_add_column_if_missing("institution_users", "notes", "TEXT")
 
 init_tenant_tables()
 
@@ -631,6 +692,98 @@ _prune_table("ack_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("refusal_events", "created_utc", TTL_DAYS_DEFAULT)
 _prune_table("feedback_events", "timestamp_utc", TTL_DAYS_DEFAULT)
 _prune_table("bug_reports", "timestamp_utc", TTL_DAYS_DEFAULT)
+_prune_table("institution_users", "created_utc", TTL_DAYS_DEFAULT)
+
+# =============================================================================
+# INSTITUTION ACCOUNT OPS
+# =============================================================================
+def admin_create_institution_user(
+    institution_name: str,
+    trial_start: str = "",
+    trial_end: str = "",
+    notes: str = "",
+) -> Tuple[str, str]:
+    """
+    Creates a new institutional login.
+    Returns (institution_id, plain_password) -- shown ONCE.
+    """
+    inst_id = f"inst_{secrets.token_hex(4).upper()}"
+    plain_pwd = secrets.token_urlsafe(12)
+    pwd_hash = _hash_password(plain_pwd)
+    created = _now_utc_iso()
+
+    _db_exec(
+        """INSERT INTO institution_users
+           (institution_name, institution_id, password_hash, created_utc, active, trial_start, trial_end, notes)
+           VALUES (?,?,?,?,1,?,?,?)""",
+        (
+            (institution_name or "").strip()[:180],
+            inst_id,
+            pwd_hash,
+            created,
+            (trial_start or "").strip()[:40],
+            (trial_end or "").strip()[:40],
+            (notes or "").strip()[:500],
+        ),
+    )
+    return inst_id, plain_pwd
+
+
+def admin_reset_institution_password(institution_id: str) -> Optional[str]:
+    new_pwd = secrets.token_urlsafe(12)
+    new_hash = _hash_password(new_pwd)
+    bid = (institution_id or "").strip()
+
+    row = _db_fetchone("SELECT 1 FROM institution_users WHERE institution_id=? LIMIT 1", (bid,))
+    if not row:
+        return None
+
+    _db_exec("UPDATE institution_users SET password_hash=? WHERE institution_id=?", (new_hash, bid))
+    return new_pwd
+
+
+def admin_set_institution_active(institution_id: str, active: bool) -> bool:
+    bid = (institution_id or "").strip()
+    row = _db_fetchone("SELECT 1 FROM institution_users WHERE institution_id=? LIMIT 1", (bid,))
+    if not row:
+        return False
+    _db_exec("UPDATE institution_users SET active=? WHERE institution_id=?", (1 if active else 0, bid))
+    return True
+
+
+def get_institution_user_for_login(institution_id: str) -> Optional[Tuple[str, int, str, str]]:
+    """
+    Returns (password_hash, active, trial_start, trial_end) or None
+    """
+    bid = (institution_id or "").strip()
+    row = _db_fetchone(
+        """SELECT password_hash, active, trial_start, trial_end
+           FROM institution_users
+           WHERE institution_id=? LIMIT 1""",
+        (bid,),
+    )
+    if not row:
+        return None
+    return (row[0] or "", int(row[1] or 0), (row[2] or "")[:40], (row[3] or "")[:40])
+
+
+def _trial_expired(trial_end: str) -> bool:
+    """
+    trial_end is expected ISO8601 (recommended):
+      2026-04-15T23:59:59+00:00
+    We fail-open if unparsable to avoid accidental lockouts.
+    """
+    te = (trial_end or "").strip()
+    if not te:
+        return False
+    try:
+        end_dt = datetime.fromisoformat(te)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) > end_dt
+    except Exception:
+        return False
+
 
 # =============================================================================
 # LOGGING
@@ -1223,10 +1376,6 @@ def show_login() -> None:
             submit = st.form_submit_button("Enter")
 
         if submit:
-            if not APP_PASSWORD:
-                st.error("APP_PASSWORD is not configured on this instance.")
-                st.stop()
-
             if _is_locked():
                 remaining = int(st.session_state.get("_locked_until", 0.0) - time.time())
                 mins, secs = max(0, remaining // 60), max(0, remaining % 60)
@@ -1239,20 +1388,35 @@ def show_login() -> None:
 
             login_id_clean = (login_id or "").strip()
             if not login_id_clean:
-                st.error("User ID is required.")
+                st.error("Institutional User ID is required.")
                 st.stop()
 
-            if hmac.compare_digest(_norm(pwd), _norm(APP_PASSWORD)):
+            rec = get_institution_user_for_login(login_id_clean)
+            if not rec:
+                _note_failed_login(attempted_secret=pwd)
+                st.error("Invalid credentials.")
+                st.stop()
+
+            stored_hash, active, trial_start, trial_end = rec
+            if active != 1:
+                st.error("This institutional account is disabled.")
+                st.stop()
+
+            if _trial_expired(trial_end):
+                st.error("This trial account has expired.")
+                st.stop()
+
+            if _verify_password(_norm(pwd), stored_hash):
                 st.session_state["authed"] = True
                 st.session_state["is_admin"] = False
                 st.session_state["login_id"] = login_id_clean
                 st.session_state["_fail_times"] = deque()
                 st.session_state["_locked_until"] = 0.0
-                log_auth_event("login_success", True, login_id=login_id_clean, credential_label="APP_PASSWORD")
+                log_auth_event("login_success", True, login_id=login_id_clean, credential_label="INSTITUTION_USERS_DB")
                 _safe_rerun()
             else:
                 _note_failed_login(attempted_secret=pwd)
-                st.error("Incorrect password.")
+                st.error("Invalid credentials.")
                 st.stop()
 
     else:
@@ -1315,7 +1479,8 @@ with st.sidebar:
     )
 
     if st.button("Logout"):
-        log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label="APP_PASSWORD")
+        cred = "ADMIN_PASSWORD" if st.session_state.get("is_admin", False) else "INSTITUTION_USERS_DB"
+        log_auth_event("logout", True, login_id=st.session_state.get("login_id", ""), credential_label=cred)
         sid = st.session_state.get("sid")
         st.session_state.clear()
         st.session_state["sid"] = sid
@@ -1552,6 +1717,93 @@ if tab_admin is not None:
         st.write(f"DB Path: `{DB_PATH}`")
         st.write(f"Trial Feedback Mode: `{'ON' if INSTITUTIONAL_TRIAL_MODE else 'OFF'}`")
         st.write(f"Encrypted feedback input copy: `{'ON' if STORE_ENCRYPTED_INPUT_FOR_FEEDBACK else 'OFF'}`")
+
+        # ---------------------------------------------------------------------
+        # INSTITUTION ACCOUNTS (CREATE / RESET / ENABLE-DISABLE / EXPORT)
+        # ---------------------------------------------------------------------
+        st.divider()
+        st.subheader("Institution Accounts (Login IDs & Passwords)")
+
+        with st.form("inst_create_form", clear_on_submit=True):
+            inst_name = st.text_input("Institution Name")
+            c1, c2 = st.columns(2)
+            with c1:
+                trial_start = st.text_input("Trial Start (optional, ISO e.g., 2026-04-01T00:00:00+00:00)")
+            with c2:
+                trial_end = st.text_input("Trial End (optional, ISO e.g., 2026-04-15T23:59:59+00:00)")
+            notes = st.text_area("Notes (optional)", height=90)
+            create_inst = st.form_submit_button("Generate Institution Credentials", use_container_width=True)
+
+        if create_inst:
+            if not (inst_name or "").strip():
+                st.error("Institution Name is required.")
+                st.stop()
+
+            inst_id, inst_pwd = admin_create_institution_user(
+                institution_name=inst_name,
+                trial_start=trial_start,
+                trial_end=trial_end,
+                notes=notes,
+            )
+            st.success("Institution account created. Copy credentials now (password shown only once).")
+            st.code(f"Institution ID: {inst_id}\nPassword: {inst_pwd}")
+
+        st.markdown("#### Reset / Disable / Enable")
+
+        with st.form("inst_manage_form", clear_on_submit=True):
+            manage_id = st.text_input("Institution ID (e.g., inst_ABC12345)")
+            action = st.selectbox("Action", ["Reset Password", "Disable Account", "Enable Account"])
+            manage_submit = st.form_submit_button("Apply", use_container_width=True)
+
+        if manage_submit:
+            mid = (manage_id or "").strip()
+            if not mid:
+                st.error("Institution ID is required.")
+                st.stop()
+
+            if action == "Reset Password":
+                new_pwd = admin_reset_institution_password(mid)
+                if not new_pwd:
+                    st.error("Institution ID not found.")
+                    st.stop()
+                st.success("Password reset. Copy new password now (shown only once).")
+                st.code(f"Institution ID: {mid}\nNew Password: {new_pwd}")
+
+            elif action == "Disable Account":
+                ok = admin_set_institution_active(mid, False)
+                if not ok:
+                    st.error("Institution ID not found.")
+                    st.stop()
+                st.success("Account disabled.")
+
+            else:
+                ok = admin_set_institution_active(mid, True)
+                if not ok:
+                    st.error("Institution ID not found.")
+                    st.stop()
+                st.success("Account enabled.")
+
+        st.markdown("#### Institution Accounts (Export)")
+        rows = _db_fetchall(
+            """SELECT institution_name, institution_id, active, created_utc, trial_start, trial_end, notes
+               FROM institution_users
+               ORDER BY created_utc DESC
+               LIMIT 2000"""
+        )
+        if not rows:
+            st.info("No institution accounts created yet.")
+        else:
+            idf = pd.DataFrame(
+                rows,
+                columns=["institution_name", "institution_id", "active", "created_utc", "trial_start", "trial_end", "notes"],
+            )
+            st.dataframe(idf, use_container_width=True)
+            st.download_button(
+                "Download Institution Accounts (CSV)",
+                data=idf.to_csv(index=False).encode("utf-8"),
+                file_name="veritas_institution_accounts.csv",
+                mime="text/csv",
+            )
 
         # ---------------------------------------------------------------------
         # BUG REPORTS (INBOX / EXPORT / STATUS UPDATES)
