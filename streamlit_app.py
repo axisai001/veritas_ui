@@ -1534,9 +1534,9 @@ with tab_analyze:
 
         c1, c2 = st.columns([2, 1])
         with c1:
-            submitted = st.form_submit_button("Start New Analysis", use_container_width=True)
+            submitted = st.form_submit_button("Engage Veritas", use_container_width=True)
         with c2:
-            st.form_submit_button("Reset Canvas", use_container_width=True, on_click=reset_canvas)
+            st.form_submit_button("Start New Analysis", use_container_width=True, on_click=reset_canvas)
 
     if submitted:
         new_request_id()
@@ -2154,4 +2154,5 @@ st.markdown(
     "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
