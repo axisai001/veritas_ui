@@ -2151,8 +2151,9 @@ if tab_admin is not None:
 # FOOTER
 # =============================================================================
 st.markdown(
-    "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
+    "<div style='margin-top:1.25rem;opacity:.75;font-size:.9rem;'>Copyright © 2026 AI Excellence &amp; Strategic Intelligence Solutions, LLC.</div>",
     unsafe_allow_html=True,
 )
+
 
 
